@@ -5,19 +5,27 @@ const fs = require('fs')
 const path = require('path')
 const net = require('net')
 const { execFile } = require('child_process')
+const AppCfg = require('./store/settings.cjs')
 
-// OpenRM은 레포 밖 서비스 → 대상 레포를 env로 가리킨다 (CRM이 여러 고객을 보듯, 추후 다중 레포 확장 가능)
-// REPO_PATH 미설정 시 이 앱 자신의 상위 디렉토리로 폴백(데모 모드 — 항상 실존하는 git 저장소).
-const REPO = process.env.REPO_PATH || path.resolve(__dirname, '..')
-const WORKFLOW_DIR = path.join(REPO, '.docs', 'workflow')
+// OpenRM은 레포 밖 서비스 → 대상 레포 경로가 필요하다. 우선순위: Setup 페이지가 쓰는
+// AppConfig.rootPath(실사용 소스) → REPO_PATH 환경변수(하위호환) → 이 앱 자신의 상위 디렉토리(데모 폴백).
+// ⚠️ 매번 새로 계산해야 함 — 예전엔 여기서 한 번 얼려(const) 부팅 시점 값만 썼는데, 그러면 Setup에서
+//    프로젝트 루트를 입력해도 worktrees.cjs/architecture.cjs 등 C.REPO를 쓰는 모든 곳이 재시작 전까진
+//    (또는 REPO_PATH 미설정이면 영영) openRM 자신의 소스 디렉토리를 대상으로 삼는 실제 버그였다.
+function resolveRepo() {
+	const cfg = AppCfg.getAppConfig()
+	if (cfg.rootPath && String(cfg.rootPath).trim()) return String(cfg.rootPath).trim()
+	return process.env.REPO_PATH || path.resolve(__dirname, '..')
+}
 const DEMO_STATE_PATH = path.join(__dirname, '..', 'demo', 'state.json')
 
 function resolveStatePath() {
 	if (process.env.CONTROL_STATE && fs.existsSync(process.env.CONTROL_STATE)) return process.env.CONTROL_STATE
 	let best = null
+	const workflowDir = path.join(resolveRepo(), '.docs', 'workflow')
 	try {
-		for (const feat of fs.readdirSync(WORKFLOW_DIR)) {
-			const p = path.join(WORKFLOW_DIR, feat, 'state.json')
+		for (const feat of fs.readdirSync(workflowDir)) {
+			const p = path.join(workflowDir, feat, 'state.json')
 			if (fs.existsSync(p)) {
 				const m = fs.statSync(p).mtimeMs
 				if (!best || m > best.m) best = { p, m }
@@ -42,7 +50,7 @@ function stateMtimeISO() {
 
 function exec(cmd, args, timeoutMs = 4000) {
 	return new Promise((resolve) => {
-		execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20, cwd: REPO }, (err, stdout) =>
+		execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20, cwd: resolveRepo() }, (err, stdout) =>
 			resolve(err ? null : String(stdout || ''))
 		)
 	})
@@ -153,7 +161,7 @@ function normalize(raw) {
 		statePath: STATE_PATH,
 		demoMode: STATE_PATH === DEMO_STATE_PATH,
 		stateMtime: stateMtimeISO(),
-		repo: REPO,
+		repo: resolveRepo(),
 		builtAt: new Date().toISOString(),
 	}
 }
@@ -162,7 +170,7 @@ let STATE_PATH = resolveStatePath()
 
 function readModel() {
 	STATE_PATH = STATE_PATH && fs.existsSync(STATE_PATH) ? STATE_PATH : resolveStatePath()
-	if (!STATE_PATH) return { error: `state.json not found under ${WORKFLOW_DIR}/*/`, agents: [], backlogs: {} }
+	if (!STATE_PATH) return { error: `state.json not found under ${path.join(resolveRepo(), '.docs', 'workflow')}/*/`, agents: [], backlogs: {} }
 	try {
 		return normalize(JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')))
 	} catch (e) {
@@ -229,6 +237,10 @@ module.exports = {
 	get STATE_PATH() {
 		return STATE_PATH
 	},
-	REPO,
-	WORKFLOW_DIR,
+	get REPO() {
+		return resolveRepo()
+	},
+	get WORKFLOW_DIR() {
+		return path.join(resolveRepo(), '.docs', 'workflow')
+	},
 }

@@ -4,7 +4,6 @@ import SetupGate from './SetupGate'
 
 export default function DebugSetupGate() {
 	const [devServerUrl, setDevServerUrl] = useState('http://localhost:3000')
-	const [webviewPort, setWebviewPort] = useState('')
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const syncConnector = useSetupStore((s) => s.syncConnector)
@@ -16,7 +15,7 @@ export default function DebugSetupGate() {
 		setBusy(true)
 		setError(null)
 		try {
-			await syncConnector('dev', { devServerUrl: devServerUrl.trim(), webviewPort: webviewPort.trim() })
+			await syncConnector('dev', { devServerUrl: devServerUrl.trim() })
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		} finally {
@@ -43,10 +42,6 @@ export default function DebugSetupGate() {
 			<div>
 				<div style={{ fontSize: 10.5, color: 'var(--t3)', marginBottom: 6 }}>개발 서버 주소</div>
 				<input className="fin m" placeholder="http://localhost:3000" value={devServerUrl} onChange={(e) => setDevServerUrl(e.target.value)} />
-			</div>
-			<div>
-				<div style={{ fontSize: 10.5, color: 'var(--t3)', marginBottom: 6 }}>웹뷰 포트 (선택)</div>
-				<input className="fin m" placeholder="예: 8081" value={webviewPort} onChange={(e) => setWebviewPort(e.target.value)} />
 			</div>
 		</SetupGate>
 	)

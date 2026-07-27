@@ -95,6 +95,26 @@ const GithubStats = require('./githubStats.cjs')
 const DeployStatus = require('./deployStatus.cjs')
 const Architecture = require('./architecture.cjs') // 아키텍처 페이지 백엔드 (Phase 5b, read-only). pg는 dbConnect 안에서 lazy require.
 
+// 프로젝트 루트를 정하면(개발실 게이트·설정 어디서든) 아키텍처의 API/Next 레이어를 흔한 컨벤션으로
+// 자동 스캔 — 사용자가 아키텍처 페이지에 따로 들어가 경로를 안 적어도 그래프가 채워지게. DB는 접속 정보가
+// 없어 자동화 불가(그대로 수동 연결). 존재하는 폴더가 하나도 없으면 조용히 스킵 — 실패해도 무해(read-only).
+async function autoScanArchitecture(rootPath) {
+  const apiCandidates = ['src/features', 'src/api', 'features', 'api']
+  const nextCandidates = [
+    { dir: 'src/app', router: 'app' },
+    { dir: 'app', router: 'app' },
+    { dir: 'src/pages', router: 'pages' },
+    { dir: 'pages', router: 'pages' },
+  ]
+  const isDir = (rel) => {
+    try { return fs.statSync(path.join(rootPath, rel)).isDirectory() } catch (_) { return false }
+  }
+  const apiHit = apiCandidates.find(isDir)
+  if (apiHit) await Architecture.apiScan({ root: apiHit }).catch(() => {})
+  const nextHit = nextCandidates.find((c) => isDir(c.dir))
+  if (nextHit) await Architecture.nextScan({ root: nextHit.dir, router: nextHit.router }).catch(() => {})
+}
+
 // Monitor 페이지 health 집계. 실 소스 있는 필드만 실제값, 없는 필드는 null(지어내지 않음).
 async function buildMonitorHealth() {
   const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
@@ -458,6 +478,7 @@ const server = http.createServer((req, res) => {
           else if (dest.secret) Secrets.set(dest.secret, String(v == null ? '' : v))
         }
         if (Object.keys(cfgPatch).length) AppCfg.updateAppConfig(cfgPatch)
+        if (cfgPatch.rootPath) autoScanArchitecture(cfgPatch.rootPath).catch(() => {}) // fire-and-forget, 응답을 막지 않음
         sendJSON(res, 200, { ...setupStatus(), skipped })
       })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
