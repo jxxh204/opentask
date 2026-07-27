@@ -6,6 +6,7 @@ const { execFile } = require('child_process')
 const C = require('./collector.cjs')
 const Active = require('./active.cjs')
 const Ticket = require('./ticket.cjs')
+const AppCfg = require('./store/settings.cjs')
 
 // PR의 실제 변경 파일만 verdict (gh files + 워크트리 내용). develop 기준 diff(에픽 전체)와 달리 정확.
 function verdictForFiles(files, repo) {
@@ -71,12 +72,7 @@ async function worktreeByBranch() {
 const PR_FIELDS =
 	'number,title,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,additions,deletions,changedFiles,url,updatedAt'
 
-// 내 PR을 모을 레포 (GitHub은 web/backend 2개 — admin은 backend와 동일 레포).
-// OPENRM_PR_REPOS="owner/repo,owner/repo2" 로 override 가능. name은 표시용 짧은 이름.
-const REPOS = (process.env.OPENRM_PR_REPOS
-	? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
-	: []
-).map((slug) => ({ slug, name: slug.split('/').pop() }))
+// 내 PR을 모을 레포 — Setup 페이지의 githubRepo(콤마로 여러 개 가능) 설정을 매번 새로 읽음(AppCfg.prRepos()).
 
 function mapPr(p, repoName, wtMap) {
 	return {
@@ -101,6 +97,7 @@ function mapPr(p, repoName, wtMap) {
 
 async function list(state = 'open') {
 	const st = ['open', 'merged', 'closed'].includes(state) ? state : 'open'
+	const REPOS = AppCfg.prRepos()
 	const wtMap = await worktreeByBranch() // C.REPO(web) 워크트리 — web PR만 코드검증 매칭
 	const perRepo = await Promise.all(
 		REPOS.map(async (repo) => {
@@ -134,6 +131,7 @@ async function list(state = 'open') {
 }
 
 async function detail(num, repoName) {
+	const REPOS = AppCfg.prRepos()
 	const repo = REPOS.find((r) => r.name === repoName) || REPOS[0]
 	const raw = await gh([
 		'pr',

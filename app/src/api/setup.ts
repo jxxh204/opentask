@@ -72,6 +72,18 @@ export function resolveFsPath(path: string) {
 	return api.get<FsResolveResult>(`/api/setup/fs/resolve?path=${encodeURIComponent(path)}`)
 }
 
+export interface FsListResult {
+	ok: boolean
+	path?: string
+	parent?: string | null
+	entries?: { name: string; path: string }[]
+	error?: string
+}
+
+export function listFs(path: string) {
+	return api.get<FsListResult>(`/api/setup/fs/list?path=${encodeURIComponent(path)}`)
+}
+
 export interface TmuxCheckResult {
 	available: boolean
 	version: string | null

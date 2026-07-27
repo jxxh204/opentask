@@ -20,6 +20,8 @@ export interface SetupState {
 	wtPath: string | null
 	branchPrefix: string
 	operatorName: string
+	githubRepo: string | null
+	devServerUrl: string | null
 	connectors: Record<string, ConnectorConfig>
 	env: EnvVar[]
 	hydrated: boolean
@@ -54,6 +56,8 @@ export const useSetupStore = create<SetupState>()(
 			wtPath: null,
 			branchPrefix: '',
 			operatorName: '',
+			githubRepo: null,
+			devServerUrl: null,
 			connectors: {},
 			env: [],
 			hydrated: false,
@@ -87,6 +91,8 @@ export const useSetupStore = create<SetupState>()(
 						rootPath: res.appConfig.rootPath,
 						wtPath: res.appConfig.wtPath,
 						branchPrefix: res.appConfig.branchPrefix ?? s.branchPrefix,
+						githubRepo: res.appConfig.githubRepo,
+						devServerUrl: res.appConfig.devServerUrl,
 						connectors: { ...s.connectors, [id]: { connected: true, fields } },
 					}))
 				} catch (e) {
@@ -104,6 +110,8 @@ export const useSetupStore = create<SetupState>()(
 						rootPath: status.appConfig.rootPath,
 						wtPath: status.appConfig.wtPath,
 						branchPrefix: status.appConfig.branchPrefix ?? '',
+						githubRepo: status.appConfig.githubRepo,
+						devServerUrl: status.appConfig.devServerUrl,
 						env: serverEnv.map((e) => ({ id: e.id, key: e.key, value: e.value, secret: !!e.secret, masked: !!e.secret })),
 						hydrated: true,
 					})
@@ -150,12 +158,12 @@ export const useSetupStore = create<SetupState>()(
 				}
 			},
 
-			reset: () => set({ rootPath: null, wtPath: null, branchPrefix: '', connectors: {} }),
+			reset: () => set({ rootPath: null, wtPath: null, branchPrefix: '', githubRepo: null, devServerUrl: null, connectors: {} }),
 			// keep operatorName/env across reset — they aren't gated onboarding fields
 		}),
 		{
 			name: 'openrm.setup',
-			partialize: (s) => ({ rootPath: s.rootPath, wtPath: s.wtPath, branchPrefix: s.branchPrefix, operatorName: s.operatorName, connectors: s.connectors }),
+			partialize: (s) => ({ rootPath: s.rootPath, wtPath: s.wtPath, branchPrefix: s.branchPrefix, operatorName: s.operatorName, githubRepo: s.githubRepo, devServerUrl: s.devServerUrl, connectors: s.connectors }),
 			// dispatch the legacy 'openrm:setup' event on every write so
 			// ActivityBar/ContextPanel-style listeners elsewhere stay in sync
 			// even if they haven't been migrated to the store hook yet.
@@ -170,6 +178,12 @@ export const useSetupStore = create<SetupState>()(
 
 export function isSetupConfigured(s: Pick<SetupState, 'rootPath' | 'wtPath'>) {
 	return !!s.rootPath && !!s.wtPath
+}
+export function isGithubConfigured(s: Pick<SetupState, 'githubRepo'>) {
+	return !!s.githubRepo
+}
+export function isDebugConfigured(s: Pick<SetupState, 'devServerUrl'>) {
+	return !!s.devServerUrl
 }
 
 useSetupStore.subscribe(() => {

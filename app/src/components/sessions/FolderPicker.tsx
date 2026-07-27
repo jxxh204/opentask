@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { resolveFsPath, type FsResolveResult } from '../../api/setup'
+import FolderBrowserModal from '../common/FolderBrowserModal'
 import styles from './FolderPicker.module.css'
 
 // Resolved design (see plan §6 / §"FolderPicker"): showDirectoryPicker() can
@@ -18,6 +19,7 @@ function mergeBasename(current: string, name: string): string {
 export default function FolderPicker({ label, value, onChange, kind }: { label: string; value: string; onChange(path: string): void; kind: 'root' | 'worktree' }) {
 	const [status, setStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
 	const [info, setInfo] = useState<FsResolveResult | null>(null)
+	const [browsing, setBrowsing] = useState(false)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	useEffect(() => {
@@ -71,8 +73,11 @@ export default function FolderPicker({ label, value, onChange, kind }: { label: 
 				<div className={styles.inputWrap}>
 					<input className="fin m" value={value} placeholder={kind === 'root' ? '~/projects/openrm' : '~/projects/.worktrees'} onChange={(e) => onChange(e.target.value)} />
 				</div>
+				<button type="button" className={styles.pickBtn} onClick={() => setBrowsing(true)}>
+					폴더 찾아보기
+				</button>
 				{pickerSupported && (
-					<button type="button" className={styles.pickBtn} onClick={pick}>
+					<button type="button" className={styles.pickBtn} onClick={pick} title="브라우저 기본 폴더 선택 (마지막 폴더명만 채워짐)">
 						폴더 선택
 					</button>
 				)}
@@ -83,6 +88,15 @@ export default function FolderPicker({ label, value, onChange, kind }: { label: 
 					<span>{statusText}</span>
 				</div>
 			)}
+			<FolderBrowserModal
+				open={browsing}
+				startPath={value || '~'}
+				onClose={() => setBrowsing(false)}
+				onSelect={(p) => {
+					onChange(p)
+					setBrowsing(false)
+				}}
+			/>
 		</div>
 	)
 }

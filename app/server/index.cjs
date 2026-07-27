@@ -125,7 +125,7 @@ async function buildMonitorConnectors() {
     ok: true,
     connectors: [
       { id: 'sentry', label: 'Sentry', connected: Sentry.configured() },
-      { id: 'pr-ci', label: 'PR·CI', connected: !!(process.env.OPENRM_PR_REPOS && process.env.OPENRM_PR_REPOS.trim()) },
+      { id: 'pr-ci', label: 'PR·CI', connected: AppCfg.prRepos().length > 0 },
       aws,
       { id: 'vitals', label: 'Web Vitals', connected: false }, // 백엔드 없음 — placeholder 미연결
       { id: 'bundle', label: 'Bundle', connected: false }, // 동일
@@ -186,6 +186,28 @@ function resolveFsPath(raw) {
     }
     return out
   })().catch(() => ({ exists: false, isDirectory: false, isGitRepo: false, gitRoot: null, existingWorktrees: [] }))
+}
+
+// 폴더 선택 모달용 서버측 디렉토리 브라우저 — showDirectoryPicker()는 브라우저 지원이 갈리고(Safari/Firefox 미지원)
+// basename만 반환해 실제 절대경로를 못 채워주므로, 어떤 브라우저에서도 동작하는 이 리스트 API가 기본 수단.
+function resolveFsList(raw) {
+  const os = require('os')
+  return (async () => {
+    let p = String(raw || '').trim() || '~'
+    if (p === '~' || p.startsWith('~/')) p = path.join(os.homedir(), p.slice(1))
+    try { p = path.resolve(p) } catch (_) { return { ok: false, error: '잘못된 경로' } }
+    let st
+    try { st = fs.statSync(p) } catch (_) { return { ok: false, error: '경로를 찾을 수 없습니다: ' + p } }
+    if (!st.isDirectory()) return { ok: false, error: '디렉토리가 아닙니다: ' + p }
+    let ents
+    try { ents = fs.readdirSync(p, { withFileTypes: true }) } catch (e) { return { ok: false, error: '읽기 실패: ' + String((e && e.message) || e) } }
+    const entries = ents
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => ({ name: e.name, path: path.join(p, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    const parent = path.dirname(p)
+    return { ok: true, path: p, parent: parent === p ? null : parent, entries }
+  })().catch((e) => ({ ok: false, error: String((e && e.message) || e) }))
 }
 
 // 실제 브랜치 목록 (로컬+origin, 중복 제거) — 그룹 base 선택용. deploy-/release/hotfix/develop/main 우선.
@@ -461,6 +483,10 @@ const server = http.createServer((req, res) => {
   if (url === '/api/setup/fs/resolve' && req.method === 'GET') {
     const raw = new URL(req.url, 'http://x').searchParams.get('path') || ''
     return resolveFsPath(raw).then((r) => sendJSON(res, 200, r))
+  }
+  if (url === '/api/setup/fs/list' && req.method === 'GET') {
+    const raw = new URL(req.url, 'http://x').searchParams.get('path') || ''
+    return resolveFsList(raw).then((r) => sendJSON(res, r.ok ? 200 : 400, r))
   }
   if (url === '/api/setup/tmux' && req.method === 'GET') {
     return Term.checkAvailable().then((r) => sendJSON(res, 200, r))

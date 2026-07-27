@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FIXTURE_GRAPH, getArchitectureConfig, getArchitectureGraph, connectDb, scanApi, scanNext, type ArchGraph } from '../api/architecture'
+import { getArchitectureConfig, getArchitectureGraph, connectDb, scanApi, scanNext, type ArchGraph } from '../api/architecture'
 import DbColumn from '../components/architecture/DbColumn'
 import ApiColumn from '../components/architecture/ApiColumn'
 import RouteColumn from '../components/architecture/RouteColumn'
@@ -8,6 +8,8 @@ import ConfigBar from '../components/architecture/ConfigBar'
 import { bezierPath, type Edge } from '../components/architecture/edgeMath'
 import styles from './ArchitecturePage.module.css'
 
+const EMPTY_GRAPH: ArchGraph = { dbGroups: [], apiNodes: [], routeNodes: [] }
+
 export default function ArchitecturePage() {
 	const [mode, setMode] = useState<'view' | 'config'>('view')
 	const [hi, setHi] = useState<Record<string, boolean> | null>(null)
@@ -15,13 +17,13 @@ export default function ArchitecturePage() {
 	const canvasRef = useRef<HTMLDivElement>(null)
 	const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
+	const [configLoaded, setConfigLoaded] = useState(false)
 	const [db, setDb] = useState({ url: '', schema: '', connected: false })
 	const [api, setApi] = useState({ root: '', base: '', connected: false })
 	const [next, setNext] = useState<{ root: string; port: string; router: 'app' | 'pages'; connected: boolean }>({ root: '', port: '', router: 'app', connected: false })
 	const [busy, setBusy] = useState<{ db?: boolean; api?: boolean; next?: boolean }>({})
 	const [errors, setErrors] = useState<{ db?: string; api?: string; next?: string }>({})
-	const [graph, setGraph] = useState<ArchGraph | null>(null)
-	const [usingFixture, setUsingFixture] = useState(false)
+	const [graph, setGraph] = useState<ArchGraph>(EMPTY_GRAPH)
 
 	async function reload() {
 		const [cfg, g] = await Promise.all([getArchitectureConfig().catch(() => null), getArchitectureGraph().catch(() => null)])
@@ -30,13 +32,8 @@ export default function ArchitecturePage() {
 			setApi((s) => ({ ...s, root: cfg.api.root || s.root, base: cfg.api.base || s.base, connected: cfg.api.connected }))
 			setNext((s) => ({ ...s, root: cfg.next.root || s.root, port: cfg.next.port != null ? String(cfg.next.port) : s.port, router: cfg.next.router, connected: cfg.next.connected }))
 		}
-		if (g && !g.empty) {
-			setGraph(g)
-			setUsingFixture(false)
-		} else {
-			setGraph(FIXTURE_GRAPH)
-			setUsingFixture(true)
-		}
+		if (g && !g.empty) setGraph(g)
+		setConfigLoaded(true)
 	}
 
 	useEffect(() => {
@@ -83,7 +80,7 @@ export default function ArchitecturePage() {
 		}
 	}
 
-	const { dbGroups, apiNodes, routeNodes } = graph ?? FIXTURE_GRAPH
+	const { dbGroups, apiNodes, routeNodes } = graph
 	const dbKindById = useMemo(() => {
 		const m: Record<string, 'table' | 'fn'> = {}
 		dbGroups.forEach((g) => g.nodes.forEach((n) => (m[n.id] = n.kind)))
@@ -166,6 +163,41 @@ export default function ArchitecturePage() {
 		setEdges([])
 	}
 
+	const anyConnected = db.connected || api.connected || next.connected
+
+	if (!configLoaded) return null
+
+	if (!anyConnected) {
+		return (
+			<div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+				<div className={styles.header}>
+					<div style={{ minWidth: 0 }}>
+						<div className={styles.titleRow}>
+							<span style={{ fontSize: 20 }}>🗂️</span>
+							<h1 className={styles.title}>아키텍처</h1>
+						</div>
+						<p className={styles.subtitle}>DB · API · Next.js 중 최소 하나를 연결하면 의존성 그래프를 볼 수 있어요</p>
+					</div>
+				</div>
+				<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center' }}>
+					<ConfigBar
+						db={db}
+						api={api}
+						next={next}
+						busy={busy}
+						errors={errors}
+						onDbChange={(p) => setDb((s) => ({ ...s, ...p }))}
+						onApiChange={(p) => setApi((s) => ({ ...s, ...p }))}
+						onNextChange={(p) => setNext((s) => ({ ...s, ...p }))}
+						onConnectDb={onConnectDb}
+						onConnectApi={onConnectApi}
+						onConnectNext={onConnectNext}
+					/>
+				</div>
+			</div>
+		)
+	}
+
 	return (
 		<div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 			<div className={styles.header}>
@@ -176,9 +208,6 @@ export default function ArchitecturePage() {
 					</div>
 					<p className={styles.subtitle}>
 						DB (테이블 · 함수) <span style={{ color: 'var(--line2)' }}>→</span> API (도메인 queries/actions) <span style={{ color: 'var(--line2)' }}>→</span> Next.js (라우트) · <b style={{ color: 'var(--t2)' }}>보기</b>=의존성 추적 · <b style={{ color: 'var(--t2)' }}>설정</b>=레이어 직접 연결
-						{usingFixture && (
-							<span style={{ color: 'var(--amber)' }}> · 예시 데이터 — 설정에서 연결하면 실제 그래프로 교체됩니다</span>
-						)}
 					</p>
 				</div>
 				<div className={styles.segmented}>

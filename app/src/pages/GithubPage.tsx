@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getGithubStats, type GithubStats } from '../api/github'
+import { useSetupStore, isGithubConfigured } from '../store/useSetupStore'
+import GithubRepoGate from '../components/common/GithubRepoGate'
 import StatTile from '../components/github/StatTile'
 import ContributionHeatmap from '../components/github/ContributionHeatmap'
 import WeeklyBarChart from '../components/github/WeeklyBarChart'
@@ -11,11 +13,18 @@ import styles from './GithubPage.module.css'
 const RANGES = [30, 90, 365] as const
 
 export default function GithubPage() {
+	const configured = useSetupStore(isGithubConfigured)
+	const hydrateSetup = useSetupStore((s) => s.hydrate)
 	const [range, setRange] = useState<(typeof RANGES)[number]>(90)
 	const [stats, setStats] = useState<GithubStats | null>(null)
 	const [error, setError] = useState<string | null>(null)
 
 	useEffect(() => {
+		hydrateSetup()
+	}, [hydrateSetup])
+
+	useEffect(() => {
+		if (!configured) return
 		let cancelled = false
 		setError(null)
 		getGithubStats(range)
@@ -28,7 +37,9 @@ export default function GithubPage() {
 		return () => {
 			cancelled = true
 		}
-	}, [range])
+	}, [range, configured])
+
+	if (!configured) return <GithubRepoGate title="GitHub 레포를 연결하세요" subtitle="PR·커밋·리드타임 등 작업 통계를 추적할 레포입니다" />
 
 	return (
 		<div className={`scroll-y ${styles.page}`} style={{ height: '100%' }}>

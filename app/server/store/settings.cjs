@@ -51,4 +51,18 @@ function updateAppConfig(patch) {
 	return next
 }
 
-module.exports = { get, set, getAppConfig, updateAppConfig }
+// PR/이슈 모니터(monitor.cjs)·GitHub 통계(githubStats.cjs)·내 PR 목록(prs.cjs)이 대상으로 삼는 레포 목록.
+// 하나의 소스로 통일 — Setup 페이지의 githubRepo 필드가 "owner/repo" 또는 콤마로 여러 개("owner/repo1,owner/repo2")
+// 담당. 과거 OPENRM_PR_REPOS 환경변수는 AppConfig가 비어있을 때만 폴백(하위호환, 미설정 배포 지원).
+// ⚠️ 호출부는 이 함수를 매번 새로 불러야 함(모듈 로드 시 한 번만 얼려두면 UI에서 설정해도 재시작 전까진 반영 안 됨).
+function prRepos() {
+	const cfg = getAppConfig()
+	const raw = (cfg.githubRepo && String(cfg.githubRepo).trim()) || (Array.isArray(cfg.githubRepos) && cfg.githubRepos.length ? cfg.githubRepos.join(',') : '') || process.env.OPENRM_PR_REPOS || ''
+	return raw
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.map((slug) => ({ slug, name: slug.split('/').pop() }))
+}
+
+module.exports = { get, set, getAppConfig, updateAppConfig, prRepos }

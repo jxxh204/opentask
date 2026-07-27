@@ -1,11 +1,12 @@
 // githubStats.cjs — GitHub 페이지용 집계 (Phase 5.1). 읽기 전용.
-// prs.cjs의 sh/gh 패턴과 REPOS(OPENRM_PR_REPOS) 규약을 그대로 재사용(그 모듈이 export하지 않아 동일 규약으로 복제).
+// prs.cjs의 sh/gh 패턴 재사용. 레포 목록은 AppCfg.prRepos()(Setup 페이지 githubRepo)를 매번 새로 읽음.
 // 커밋: 로컬 클론이 있으면 git log(빠름·rate-limit 없음), 없으면 gh api commits로 폴백.
 //   ⚠️ gh api 폴백은 per_page=100 '한 페이지'로 캡한다(대형 레포에서 --paginate는 느리고 rate-limit 위험).
 //      즉 gh-api 소스 레포의 커밋 통계는 '최근 최대 100커밋' 근사임(소스 표시로 명시).
 'use strict'
 const { execFile } = require('child_process')
 const C = require('./collector.cjs')
+const AppCfg = require('./store/settings.cjs')
 
 function sh(cmd, args, timeout = 20000) {
 	return new Promise((resolve) => execFile(cmd, args, { cwd: C.REPO, timeout, maxBuffer: 16 << 20 }, (e, out) => resolve(e ? '' : String(out || ''))))
@@ -13,10 +14,8 @@ function sh(cmd, args, timeout = 20000) {
 const gh = (args, t) => sh('gh', args, t)
 const git = (args, repo, t) => sh('git', ['-C', repo, ...args], t)
 
-const REPOS = (process.env.OPENRM_PR_REPOS ? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean) : []).map((slug) => ({ slug, name: slug.split('/').pop() }))
-
 function repos() {
-	return REPOS.map((r) => ({ name: r.name, slug: r.slug }))
+	return AppCfg.prRepos().map((r) => ({ name: r.name, slug: r.slug }))
 }
 
 // C.REPO(로컬 메인 클론)의 origin이 slug와 일치하면 그걸 로컬 클론으로 사용, 아니면 null → gh api 폴백.
@@ -47,6 +46,7 @@ async function buildStats(days) {
 	const sinceISO = new Date(sinceMs).toISOString()
 	const sinceDate = sinceISO.slice(0, 10)
 	const errors = []
+	const REPOS = AppCfg.prRepos()
 
 	const per = await Promise.all(
 		REPOS.map(async (repo) => {
@@ -169,4 +169,4 @@ async function getStats({ rangeDays = 30 } = {}) {
 	return d
 }
 
-module.exports = { getStats, repos, REPOS }
+module.exports = { getStats, repos }

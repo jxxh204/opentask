@@ -13,11 +13,8 @@ const Sentry = require('./sentry.cjs')
 const Prompts = require('./prompts.cjs')
 const Ticket = require('./ticket.cjs')
 const AgentJobs = require('./store/agentJobs.cjs')
-
-const REPOS = (process.env.OPENRM_PR_REPOS
-	? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
-	: []
-).map((slug) => ({ slug, name: slug.split('/').pop() }))
+const AppCfg = require('./store/settings.cjs')
+// Setup 페이지의 githubRepo 설정을 매번 새로 읽음 — poll() 안에서 호출(모듈 로드 시 얼리지 않음).
 
 const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20 }, (e, o) => r(e ? '' : String(o || ''))))
 const ticketOf = Ticket.ticketOf
@@ -68,6 +65,7 @@ async function poll(first = false) {
 	if (polling) return
 	polling = true
 	const now = Date.now()
+	const REPOS = AppCfg.prRepos()
 	try {
 		// PR(open+merged) → 티켓→PR 인덱스 (이슈 finding에 PR 링크용) + CI/리뷰 finding 출처
 		const [open, merged] = await Promise.all([Prs.list('open'), Prs.list('merged').catch(() => ({ prs: [] }))])
@@ -319,7 +317,7 @@ async function fetchAlerts() {
 // 🗣️ 실제 GitHub PR 리뷰(변경요청 등)에 이의/질문 — 리뷰 본문+라인 코멘트를 gh api로 가져와
 // 헤드리스 claude가 코드를 재확인해 답변한다. mrm 대시보드 안에서만 표시(GitHub에 게시 X).
 function slugForRepoName(name) {
-	return (REPOS.find((r) => r.name === name) || {}).slug || name
+	return (AppCfg.prRepos().find((r) => r.name === name) || {}).slug || name
 }
 async function fetchReviewText(slug, number) {
 	const [reviewsRaw, commentsRaw] = await Promise.all([gh(['api', `repos/${slug}/pulls/${number}/reviews`]), gh(['api', `repos/${slug}/pulls/${number}/comments`])])

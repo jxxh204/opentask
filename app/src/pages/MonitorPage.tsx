@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getMonitorState, getMonitorHealth, getMonitorConnectors, type MonitorState, type MonitorHealth, type ConnectorCard as ConnectorCardData } from '../api/monitor'
+import { useSetupStore, isGithubConfigured } from '../store/useSetupStore'
+import GithubRepoGate from '../components/common/GithubRepoGate'
 import HealthStrip from '../components/monitor/HealthStrip'
 import ConnectorCard from '../components/monitor/ConnectorCard'
 import AlertsFeed from '../components/monitor/AlertsFeed'
@@ -10,12 +12,19 @@ import styles from './MonitorPage.module.css'
 const POLL_MS = 30000
 
 export default function MonitorPage() {
+	const configured = useSetupStore(isGithubConfigured)
+	const hydrateSetup = useSetupStore((s) => s.hydrate)
 	const [state, setState] = useState<MonitorState | null>(null)
 	const [health, setHealth] = useState<MonitorHealth | null>(null)
 	const [connectors, setConnectors] = useState<ConnectorCardData[] | null>(null)
 	const [error, setError] = useState<string | null>(null)
 
 	useEffect(() => {
+		hydrateSetup()
+	}, [hydrateSetup])
+
+	useEffect(() => {
+		if (!configured) return
 		let cancelled = false
 		function load() {
 			Promise.all([getMonitorState(), getMonitorHealth(), getMonitorConnectors()])
@@ -36,9 +45,11 @@ export default function MonitorPage() {
 			cancelled = true
 			clearInterval(timer)
 		}
-	}, [])
+	}, [configured])
 
 	const actionable = state?.findings.filter((f) => f.status !== 'resolved').slice(0, 6) ?? []
+
+	if (!configured) return <GithubRepoGate title="GitHub 레포를 연결하세요" subtitle="PR·CI·이슈 findings를 추적할 레포입니다" />
 
 	return (
 		<div className={`scroll-y ${styles.page}`} style={{ height: '100%' }}>
