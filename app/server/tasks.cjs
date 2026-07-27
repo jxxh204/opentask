@@ -14,9 +14,9 @@ const Prompts = require('./prompts.cjs')
 const NT = require('./notiontitles.cjs')
 const Ticket = require('./ticket.cjs')
 
-const REG_FILE = process.env.MRM_TASKS_FILE || path.join(__dirname, '..', '.mrm-tasks.json')
-const REPOS = (process.env.MRM_PR_REPOS
-	? process.env.MRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
+const REG_FILE = process.env.OPENRM_TASKS_FILE || path.join(__dirname, '..', '.openrm-tasks.json')
+const REPOS = (process.env.OPENRM_PR_REPOS
+	? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
 	: []
 ).map((slug) => ({ slug, name: slug.split('/').pop() }))
 
@@ -243,8 +243,8 @@ async function buildInner() {
 	for (const key of Object.keys(tasks)) {
 		const t = tasks[key]
 		const rgd = reg[key] || (t.ticket && reg[t.ticket]) || {}
-		t.devServer = rgd.devServer || null // 마티가 카드에서 지정한 배포 dev 서버(dev1~6)
-		t.memo = rgd.memo || null // 마티가 카드에 적은 메모
+		t.devServer = rgd.devServer || null // 운영자가 카드에서 지정한 배포 dev 서버(dev1~6)
+		t.memo = rgd.memo || null // 운영자가 카드에 적은 메모
 		t.tc = rgd.tc || null // 이 업무의 TC(Notion DB) URL — QA 완료 시 등록, E2E 버튼 활성 판단
 		t.devModel = rgd.devModel || null // ▶진행 시 쓸 모델 override (간단한 작업은 sonnet/haiku)
 		t.order = typeof rgd.order === 'number' ? rgd.order : null // 그룹 내 수동 순서 (드래그 재정렬)
@@ -252,7 +252,7 @@ async function buildInner() {
 		t.classReason = rgd.classReason || null
 		t.classConfidence = typeof rgd.classConfidence === 'number' ? rgd.classConfidence : null
 		t.classPlan = rgd.classPlan || null // ops일 때 워크트리 없이 처리하는 방법
-		t.classManual = !!rgd.classManual // 마티가 모달로 확정했는지
+		t.classManual = !!rgd.classManual // 운영자가 모달로 확정했는지
 		t.opsResult = rgd.opsResult || null // 비개발 처리 결과 {summary, artifacts, needsHuman, ask, at}
 		t.opsRunning = !!rgd.opsRunning // 비개발 처리 진행 중
 		t.prReviews = rgd.prReviews || null // { 'repo#num': {reviewing, review, reviewedAt, improving, improved} }
@@ -271,7 +271,7 @@ async function buildInner() {
 // GitHub PR/이슈 URL → 그 PR로 업무 생성 (워크트리·머지여부 무관하게 PR만 있어도 추가).
 async function addPrFromUrl({ owner, repoName, kind, number, title }) {
 	const slug = `${owner}/${repoName}`
-	const repoShort = repoName.replace(new RegExp('^' + (process.env.MRM_REPO_PREFIX || '') + '(?=.)'), '')
+	const repoShort = repoName.replace(new RegExp('^' + (process.env.OPENRM_REPO_PREFIX || '') + '(?=.)'), '')
 	let pr = null
 	if (kind === 'pull') {
 		const r = await ghX(['pr', 'view', String(number), '-R', slug, '--json', 'number,title,headRefName,url,state,isDraft,statusCheckRollup,author'])
@@ -347,7 +347,7 @@ async function createFromLink({ url, text, ticket, title }) {
 
 // 🧵 스레드 읽어서 일감 만들기 — headless claude(-p)가 Slack MCP로 스레드+링크된 Notion/Figma를
 // 읽고 {제목·티켓·요약·notion·figma} JSON을 뽑아 업무 레지스트리에 채운다. (느림: 보통 30~120초)
-const CLAUDE_BIN = process.env.MRM_CLAUDE_BIN || 'claude'
+const CLAUDE_BIN = process.env.OPENRM_CLAUDE_BIN || 'claude'
 
 // 제목(한글) → 짧은 영어 브랜치 슬러그. 영어 위주면 그대로, 아니면 claude로 번역(실패 시 영어 단어 추출 폴백).
 async function translateToEnglishSlug(text) {
@@ -551,7 +551,7 @@ function listJobs() {
 
 // ── 실패한 추출/백로그 잡 — 입력 보존 + 재시도 (다시 입력 안 해도 되게) ──
 // 30초 recent 창을 지나면 사라지므로 별도 파일에 영속(재시작에도 유지).
-const FAILS_FILE = process.env.MRM_JOBFAILS_FILE || path.join(__dirname, '..', '.mrm-jobfails.json')
+const FAILS_FILE = process.env.OPENRM_JOBFAILS_FILE || path.join(__dirname, '..', '.openrm-jobfails.json')
 function loadFails() {
 	try {
 		return JSON.parse(fs.readFileSync(FAILS_FILE, 'utf8'))
@@ -645,7 +645,7 @@ function startEnrich({ url }) {
 }
 
 // ─── 업무 분류: 코드 변경(dev) vs 코드 변경 아님(ops) ─────────────────────────
-// 마티 요청: 업무 등록 시 코드/비개발을 판단해 라우팅하고, 애매하면(unsure) UI에서 모달로 물어본다.
+// 운영자 요청: 업무 등록 시 코드/비개발을 판단해 라우팅하고, 애매하면(unsure) UI에서 모달로 물어본다.
 const CLASS_VALUES = ['dev', 'ops', 'unsure']
 const CLASSIFY_PROMPT = ({ title, summary, linkKinds }) =>
 	Prompts.render('task.classify', { title: title || '(없음)', summary: summary || '(없음)', linkKinds: linkKinds || '없음' })
@@ -725,7 +725,7 @@ function startClassify({ key }) {
 	return { ok: true, jobId }
 }
 
-// 마티가 모달에서 직접 지정(개발/비개발 확정). 자동 판정 override.
+// 운영자가 모달에서 직접 지정(개발/비개발 확정). 자동 판정 override.
 function setTaskClass({ key, class: cls, plan }) {
 	if (!key) return { ok: false, error: 'key 필수' }
 	if (!['dev', 'ops'].includes(String(cls))) return { ok: false, error: 'dev/ops 만 지정 가능' }
@@ -733,7 +733,7 @@ function setTaskClass({ key, class: cls, plan }) {
 	const e = reg[key] || (reg[key] = {})
 	e.class = String(cls)
 	e.classConfidence = 1
-	e.classReason = '마티 지정'
+	e.classReason = Settings.operatorName() + ' 지정'
 	e.classPlan = cls === 'ops' ? (plan ? String(plan).slice(0, 300) : e.classPlan || null) : null
 	e.classedAt = Date.now()
 	e.classManual = true
@@ -877,13 +877,13 @@ function enrichStatus(jobId) {
 }
 
 // ── 📋 백로그 자동 생성 (티켓 없는 업무 → Notion 일감 카드 생성 → 티켓 회수) ──
-// 고정 데이터(마티 지정): DB·작업자·상태·서비스·플랫폼·아이콘·본문 템플릿. env로 override 가능.
+// 고정 데이터(운영자 지정): DB·작업자·상태·서비스·플랫폼·아이콘·본문 템플릿. env로 override 가능.
 const BACKLOG = {
-	db: process.env.MRM_BACKLOG_DB || '',
-	assignee: process.env.MRM_BACKLOG_ASSIGNEE || '',
-	status: process.env.MRM_BACKLOG_STATUS || '할일',
-	service: process.env.MRM_BACKLOG_SERVICE || '',
-	platform: process.env.MRM_BACKLOG_PLATFORM || '',
+	db: process.env.OPENRM_BACKLOG_DB || '',
+	assignee: process.env.OPENRM_BACKLOG_ASSIGNEE || '',
+	status: process.env.OPENRM_BACKLOG_STATUS || '할일',
+	service: process.env.OPENRM_BACKLOG_SERVICE || '',
+	platform: process.env.OPENRM_BACKLOG_PLATFORM || '',
 }
 const BACKLOG_TEMPLATE = ['## 작업내용', '', '### 내용', '{내용}', '', '### 참고', '{참고}', '', '---', '', '### Todo', '- [ ] ', '', '### Test Case', ''].join('\n')
 function backlogPrompt({ title, summary, links, priority, estimate }) {
@@ -912,8 +912,8 @@ function backlogStageFor(tool) {
 	if (/notion/i.test(n)) return { p: 56, l: 'Notion 작업 중…' }
 	return { p: 50, l: (n.split('__').pop() || '도구') + ' 실행 중…' }
 }
-// 리뷰어(마티) 설득 + DX 지시 — 코드만 던지지 말고 리뷰가 쉬운 브리핑으로 마무리하게. (프론트 REVIEW_DIRECTIVE와 동기화)
-const REVIEW_DIRECTIVE = `[리뷰 방식] 마티가 이 변경을 직접 리뷰해. 코드만 넘기지 말고 리뷰어를 '설득'하는 브리핑으로 마무리해줘 — 특히 DX(리뷰 경험)를 최우선으로: ① 무엇을·왜(각 결정의 근거를 먼저 밝혀 의도를 역추적 안 하게) ② 고려했다 기각한 대안과 이유 ③ 먼저 봐야 할 파일:라인을 우선순위/읽는 순서까지 콕 집기 ④ 리스크·사이드이펙트·엣지케이스·하위호환 우려를 먼저 자백 ⑤ 실제로 한 검증(빌드/타입/테스트/수동)만, 안 한 건 안 했다고. 변경은 작고 목적이 분명한 단위로, 확신 없으면 단정 말고 근거와 함께.`
+// 리뷰어(운영자) 설득 + DX 지시 — 코드만 던지지 말고 리뷰가 쉬운 브리핑으로 마무리하게. (프론트 REVIEW_DIRECTIVE와 동기화)
+const REVIEW_DIRECTIVE = `[리뷰 방식] ${Settings.operatorName()}가 이 변경을 직접 리뷰해. 코드만 넘기지 말고 리뷰어를 '설득'하는 브리핑으로 마무리해줘 — 특히 DX(리뷰 경험)를 최우선으로: ① 무엇을·왜(각 결정의 근거를 먼저 밝혀 의도를 역추적 안 하게) ② 고려했다 기각한 대안과 이유 ③ 먼저 봐야 할 파일:라인을 우선순위/읽는 순서까지 콕 집기 ④ 리스크·사이드이펙트·엣지케이스·하위호환 우려를 먼저 자백 ⑤ 실제로 한 검증(빌드/타입/테스트/수동)만, 안 한 건 안 했다고. 변경은 작고 목적이 분명한 단위로, 확신 없으면 단정 말고 근거와 함께.`
 
 function backlogSeed(ticket, title, links) {
 	const refs = [...(links.slack || []).map((u) => 'Slack ' + u), ...(links.notion || []).map((u) => 'Notion ' + u), ...(links.figma || []).map((u) => 'Figma ' + u)]
@@ -1067,7 +1067,7 @@ async function retargetTaskPRs(key, base) {
 }
 
 // ── 그룹 체인 — 카드 순서대로 각 PR base를 "앞 카드 브랜치"로 사슬 연결(stacked PR). 첫 카드는 그룹 base(없으면 develop).
-const CHAIN_ROOT_DEFAULT = process.env.MRM_NEW_TASK_BASE || 'develop'
+const CHAIN_ROOT_DEFAULT = process.env.OPENRM_NEW_TASK_BASE || 'develop'
 // 이 작업의 head 브랜치(다음 카드의 base가 됨) — 열린 PR 브랜치 우선, 없으면 워크트리 브랜치
 function taskHeadBranch(t) {
 	const pr = (t.prs || []).find((p) => p.state === 'OPEN' && p.branch)
@@ -1236,7 +1236,7 @@ function reorderGroup({ group, keys }) {
 	})
 	return { ok: true }
 }
-// 업무에 메모 — 마티가 카드에 자유 메모. 비우면 삭제. 캐시만 패치(즉시).
+// 업무에 메모 — 운영자가 카드에 자유 메모. 비우면 삭제. 캐시만 패치(즉시).
 function setMemo({ key, memo }) {
 	if (!key) return { ok: false, error: 'key 필수' }
 	const v = memo != null ? String(memo).slice(0, 2000) : ''
@@ -1281,7 +1281,7 @@ function setTaskModel({ key, model }) {
 	})
 	return { ok: true, devModel: e.devModel || null }
 }
-// 업무에 배포 dev 서버(dev1~6) 지정 — 마티가 카드 셀렉트로 직접 입력. 비우면 해제. 캐시만 패치(즉시).
+// 업무에 배포 dev 서버(dev1~6) 지정 — 운영자가 카드 셀렉트로 직접 입력. 비우면 해제. 캐시만 패치(즉시).
 function setDevServer({ key, devServer }) {
 	if (!key) return { ok: false, error: 'key 필수' }
 	const v = devServer ? String(devServer).trim() : ''
@@ -1548,7 +1548,7 @@ async function startPrImprove({ key, repo, number }) {
 
 // ── 📥 PR에 올라온 (남의) 리뷰 반영 → 코드 반영 + 커밋 + 푸시(내 PR만) ──
 // 자체 리뷰(🔎)와 달리, 리뷰어(사람·봇)가 GitHub PR에 남긴 리뷰 본문 + 라인 코멘트를 gh api로 가져와 적용한다.
-// GitHub 스레드에 답글/​resolve는 하지 않음 — 새 커밋만 올라감(마티 선택: 반영+푸시).
+// GitHub 스레드에 답글/​resolve는 하지 않음 — 새 커밋만 올라감(운영자 선택: 반영+푸시).
 // 리뷰 피드백은 3곳에 흩어진다: ①formal 리뷰(reviews) ②라인 코멘트(pulls/comments) ③대화 코멘트(issues/comments).
 // gh 실패(타임아웃·rate limit·네트워크)를 '없음'으로 오판하지 않도록 ghX(에러 회수)로 조회하고 error를 구분해 돌려준다.
 const NOISE_BOT = /^(notion-workspace|github-actions|dependabot|codecov|vercel|netlify|coderabbitai)(\[bot\])?$/i
@@ -1609,7 +1609,7 @@ function buildApplyComment(a, reviewers) {
 		body = l.join('\n')
 	}
 	const foot = a.pushed ? '변경을 커밋·푸시했습니다.' : '코드 변경은 없었습니다.'
-	return (mention + body + `\n\n---\n<sub>🤖 MRM 리뷰 반영 (자동) · ${foot}</sub>`).slice(0, 6000)
+	return (mention + body + `\n\n---\n<sub>🤖 OpenRM 리뷰 반영 (자동) · ${foot}</sub>`).slice(0, 6000)
 }
 // PR에 답변 코멘트 게시 (무조건) — 대화 코멘트라 리뷰가 어디 달렸든 항상 게시됨
 async function postApplyComment(slug, number, applied, reviewers) {

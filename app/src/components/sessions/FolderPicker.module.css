@@ -1,0 +1,45 @@
+.row {
+	display: flex;
+	gap: 8px;
+}
+
+.inputWrap {
+	flex: 1;
+	position: relative;
+}
+
+.statusChip {
+	margin-top: 6px;
+	font-size: 10.5px;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+.statusValid {
+	color: var(--green);
+}
+.statusInvalid {
+	color: var(--amber);
+}
+.statusChecking {
+	color: var(--t3);
+}
+
+.pickBtn {
+	height: 38px;
+	padding: 0 14px;
+	border-radius: 9px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	cursor: pointer;
+	color: var(--ink);
+	font-size: 12px;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+.pickBtn:hover {
+	border-color: var(--violet);
+}

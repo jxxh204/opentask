@@ -1,0 +1,120 @@
+.page {
+	max-width: 1120px;
+	margin: 0 auto;
+	padding: 26px 30px 70px;
+}
+
+.header {
+	display: flex;
+	align-items: flex-end;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+
+.titleRow {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+}
+
+.title {
+	font-size: 20px;
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	color: var(--ink);
+}
+
+.subtitle {
+	font-size: 12.5px;
+	color: var(--t3);
+	padding-bottom: 2px;
+}
+
+.pollBadge {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding-bottom: 2px;
+}
+
+.sourcesHead {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 24px 0 12px;
+}
+
+.sourcesLabel {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--t2);
+}
+
+.sourcesRule {
+	flex: 1;
+	height: 1px;
+	background: var(--line);
+}
+
+.connectorGrid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 12px;
+}
+
+.feedGrid {
+	display: grid;
+	grid-template-columns: 1.3fr 1fr;
+	gap: 14px;
+	margin-top: 14px;
+}
+
+.panel {
+	background: var(--card);
+	border: 1px solid var(--line2);
+	border-radius: 14px;
+	padding: 18px 20px;
+}
+
+.panelTitle {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+	margin-bottom: 14px;
+}
+
+.panelHint {
+	font-size: 11.5px;
+	color: var(--t3);
+	line-height: 1.5;
+	margin-bottom: 14px;
+	margin-top: -8px;
+}
+
+.actionList {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.rulesLink {
+	font-size: 10.5px;
+	color: var(--t3);
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--line);
+}
+
+.loadingState {
+	color: var(--t3);
+	font-size: 12.5px;
+	padding: 40px 0;
+	text-align: center;
+}
+
+.emptyActions {
+	font-size: 11.5px;
+	color: var(--t3);
+	padding: 8px 0;
+}

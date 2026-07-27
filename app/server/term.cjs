@@ -1,20 +1,20 @@
-// term.cjs — MRM이 직접 호스팅하는 진짜 터미널. tmux 세션(영속) + node-pty 브리지(WS는 index.cjs).
-// 세션은 'mrm-' 접두로 격리 — MRM이 만든 것만 list/kill 한다(임의 tmux 세션 보호).
+// term.cjs — OpenRM이 직접 호스팅하는 진짜 터미널. tmux 세션(영속) + node-pty 브리지(WS는 index.cjs).
+// 세션은 'orm-' 접두로 격리 — OpenRM이 만든 것만 list/kill 한다(임의 tmux 세션 보호).
 'use strict'
 const fs = require('fs')
 const path = require('path')
 const { execFile } = require('child_process')
 const Worktrees = require('./worktrees.cjs') // dev 시작 시 node_modules/env 보장용 (worktrees→collector, 순환 없음)
 
-const PREFIX = 'mrm-'
+const PREFIX = 'orm-'
 // 필드 구분자 — 멀티문자 토큰. tmux 3.6a가 \x1f 등 제어문자(<0x20)를 format 출력에서 삭제하므로
 // 세션명·cwd·명령에 절대 안 나오는 토큰 사용. (재부팅 후 /usr/local/bin/tmux 3.6a로 바뀌며 \x1f가 깨졌던 버그)
-const US = '|:mrm:|'
+const US = '|:orm:|'
 
-// ── 세션 스냅샷 (재부팅 대비 MRM 자체 복원) ──
-// MRM이 띄운 세션을 cwd·kind·포트와 함께 디스크에 기록. kill하면 제거.
+// ── 세션 스냅샷 (재부팅 대비 OpenRM 자체 복원) ──
+// OpenRM이 띄운 세션을 cwd·kind·포트와 함께 디스크에 기록. kill하면 제거.
 // 재부팅으로 세션이 다 죽어도 스냅샷은 남아 → restorable()이 "복원 가능"으로 노출.
-const SNAP_FILE = process.env.MRM_SESSIONS_FILE || path.join(__dirname, '..', '.mrm-sessions.json')
+const SNAP_FILE = process.env.OPENRM_SESSIONS_FILE || path.join(__dirname, '..', '.openrm-sessions.json')
 function loadSnap() {
   try {
     return JSON.parse(fs.readFileSync(SNAP_FILE, 'utf8'))
@@ -27,7 +27,7 @@ function saveSnap(s) {
     fs.writeFileSync(SNAP_FILE, JSON.stringify(s, null, 2))
   } catch (_) {}
 }
-// cmux가 세션을 'mrm-X_<10자리ts>_<n>_<cwd>_...'로 리네임 → 안정적 베이스(앞부분)만 추출.
+// cmux가 세션을 'orm-X_<10자리ts>_<n>_<cwd>_...'로 리네임 → 안정적 베이스(앞부분)만 추출.
 // 이름에 . / 가 섞여 tmux new-session 라운드트립이 깨지므로, 항상 베이스로 매칭/attach 한다.
 function baseName(n) {
   return String(n || '').split(/_\d{9,}_/)[0]
@@ -68,6 +68,16 @@ function tmux(args, timeout = 5000) {
   )
 }
 
+// tmux 설치 여부 확인 — 온보딩의 필수 스텝. 개발실 오케스트레이션·개발실/디버깅의 실터미널이
+// 전부 tmux에 의존하므로, 없으면 여기서 조기에 안내한다(오류를 나중에 개별 기능에서 겪지 않도록).
+function checkAvailable() {
+  return tmux(['-V'], 3000).then((r) => ({
+    available: r.ok,
+    version: r.ok ? r.out.trim() : null,
+    error: r.ok ? null : (r.err || '실행 파일을 찾을 수 없음').trim(),
+  }))
+}
+
 function slug(s) {
   return String(s || '')
     .trim()
@@ -76,7 +86,7 @@ function slug(s) {
     .slice(0, 40) || 'sh'
 }
 
-// MRM 소유 세션 목록 + 메타(cwd·현재 프로세스·attach 여부)
+// OpenRM 소유 세션 목록 + 메타(cwd·현재 프로세스·attach 여부)
 async function list() {
   // session_id($N)도 — 리네임된 이름엔 . 가 있어 -t 이름 타겟이 깨지므로 id로 죽인다.
   const r = await tmux(['list-sessions', '-F', ['#{session_id}', '#{session_name}', '#{session_created}', '#{session_attached}', '#{pane_current_path}', '#{pane_current_command}'].join(US)])
@@ -138,7 +148,7 @@ async function create({ cwd, command, label, seed, model }) {
 }
 
 // 재부팅/종료로 사라진(스냅샷엔 있지만 현재 안 떠있는) 세션 목록.
-// claude(cmux) 실행 시 세션명이 'mrm-X_<ts>_..._<ver>'로 바뀌므로 prefix로 살아있음 판정.
+// claude(cmux) 실행 시 세션명이 'orm-X_<ts>_..._<ver>'로 바뀌므로 prefix로 살아있음 판정.
 function liveMatches(snapName, liveNames) {
   return liveNames.some((ln) => ln === snapName || ln.startsWith(snapName + '_'))
 }
@@ -293,9 +303,9 @@ async function listLive() {
   return Promise.all(sessions.map(async (s) => ({ ...s, status: await status(s.name).catch(() => null) })))
 }
 
-// 종료 (mrm- 접두만 허용)
+// 종료 (orm- 접두만 허용)
 async function kill(name) {
-  if (!name || !name.startsWith(PREFIX)) return { ok: false, error: 'MRM 세션만 종료 가능' }
+  if (!name || !name.startsWith(PREFIX)) return { ok: false, error: 'OpenRM 세션만 종료 가능' }
   // cmux 리네임/중첩으로 같은 베이스의 세션이 여러 개일 수 있어 — 베이스 매칭으로 전부 종료(쓰레기 정리).
   const b = baseName(name)
   const live = await list()
@@ -371,4 +381,4 @@ async function send({ name, message, enter = true }) {
   return { ok: true, sent: true }
 }
 
-module.exports = { list, listLive, status, create, kill, send, exists, startDevServer, stopDevServer, devSessionForPort, restartDevSession, freePort, restorable, restore, forget, baseName, PREFIX }
+module.exports = { list, listLive, status, create, kill, send, exists, startDevServer, stopDevServer, devSessionForPort, restartDevSession, freePort, restorable, restore, forget, baseName, PREFIX, checkAvailable }

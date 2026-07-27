@@ -6,7 +6,7 @@ const path = require('path')
 const net = require('net')
 const { execFile } = require('child_process')
 
-// MRM은 레포 밖 서비스 → 대상 레포를 env로 가리킨다 (CRM이 여러 고객을 보듯, 추후 다중 레포 확장 가능)
+// OpenRM은 레포 밖 서비스 → 대상 레포를 env로 가리킨다 (CRM이 여러 고객을 보듯, 추후 다중 레포 확장 가능)
 // REPO_PATH 미설정 시 이 앱 자신의 상위 디렉토리로 폴백(데모 모드 — 항상 실존하는 git 저장소).
 const REPO = process.env.REPO_PATH || path.resolve(__dirname, '..')
 const WORKFLOW_DIR = path.join(REPO, '.docs', 'workflow')

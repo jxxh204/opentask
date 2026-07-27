@@ -13,7 +13,7 @@ function exec(cmd, args, timeoutMs = 4000) {
   })
 }
 
-// 허용 세션 = state.json에 등록된 에이전트(에픽워크플로우) + term.cjs가 실제로 띄운 mrm-* tmux 세션(디버깅 dbg-에이전트 등).
+// 허용 세션 = state.json에 등록된 에이전트(에픽워크플로우) + term.cjs가 실제로 띄운 orm-* tmux 세션(디버깅 dbg-에이전트 등).
 // 두 소스 다 이 앱이 만든 세션만 노출하므로 임의 세션/명령 차단이라는 목적은 그대로 유지된다.
 async function knownSessions() {
   const m = C.readModel()

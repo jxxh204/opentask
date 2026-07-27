@@ -1,5 +1,5 @@
 // active.cjs — "지금 개발중인 곳"을 git으로 추적하고, 변경 파일마다 API 정확성 + 테스트 유무를 검증.
-// MRM을 "전체 사전" → "현재 작업 도구"로 만드는 핵심 뷰.
+// OpenRM을 "전체 사전" → "현재 작업 도구"로 만드는 핵심 뷰.
 'use strict'
 const fs = require('fs')
 const path = require('path')

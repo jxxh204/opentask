@@ -12,18 +12,23 @@
     "preview": "vite preview",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@types/cytoscape": "^3.21.9",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "cytoscape": "^3.34.0",
+    "better-sqlite3": "^11.3.0",
     "node-pty": "^1.1.0",
+    "playwright": "^1.47.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

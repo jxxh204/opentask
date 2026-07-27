@@ -1,0 +1,138 @@
+.topbar {
+	flex: none;
+	height: 56px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 22px;
+	border-bottom: 1px solid var(--line);
+}
+
+.title {
+	font-size: 16px;
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	color: var(--ink);
+}
+
+.counts {
+	font-size: 11px;
+	color: var(--t3);
+}
+
+.composerWrap {
+	flex: none;
+	padding: 16px 22px 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.board {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 16px 22px 60px;
+}
+
+.boardInner {
+	max-width: 900px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.addFolderBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	height: 46px;
+	border-radius: 13px;
+	background: transparent;
+	border: 1px dashed var(--line2);
+	cursor: pointer;
+	color: var(--t3);
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.addFolderBtn:hover {
+	border-color: var(--violet);
+	color: var(--violet);
+}
+
+.gateWrap {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 30px;
+}
+
+.gateCard {
+	width: 560px;
+	max-width: 100%;
+	border: 1px solid var(--line2);
+	border-radius: 16px;
+	background: var(--card);
+	padding: 28px 30px;
+}
+
+.gateHead {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+}
+
+.gateIcon {
+	width: 34px;
+	height: 34px;
+	border-radius: 10px;
+	background: var(--vtint);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.gateTitle {
+	font-size: 16px;
+	font-weight: 800;
+	color: var(--ink);
+}
+
+.gateSub {
+	font-size: 12px;
+	color: var(--t3);
+	margin-top: 3px;
+}
+
+.gateFields {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 20px;
+}
+
+.gateFieldLabel {
+	font-size: 10.5px;
+	color: var(--t3);
+	margin-bottom: 6px;
+}
+
+.gateGoBtn {
+	height: 40px;
+	padding: 0 18px;
+	border-radius: 10px;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 700;
+	border: 1px solid var(--line2);
+	background: var(--card2);
+	color: var(--t3);
+}
+.gateGoBtnReady {
+	background: var(--violet);
+	border-color: var(--violet);
+	color: #fff;
+}

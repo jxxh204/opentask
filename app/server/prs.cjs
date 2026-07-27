@@ -72,9 +72,9 @@ const PR_FIELDS =
 	'number,title,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,additions,deletions,changedFiles,url,updatedAt'
 
 // 내 PR을 모을 레포 (GitHub은 web/backend 2개 — admin은 backend와 동일 레포).
-// MRM_PR_REPOS="owner/repo,owner/repo2" 로 override 가능. name은 표시용 짧은 이름.
-const REPOS = (process.env.MRM_PR_REPOS
-	? process.env.MRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
+// OPENRM_PR_REPOS="owner/repo,owner/repo2" 로 override 가능. name은 표시용 짧은 이름.
+const REPOS = (process.env.OPENRM_PR_REPOS
+	? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
 	: []
 ).map((slug) => ({ slug, name: slug.split('/').pop() }))
 

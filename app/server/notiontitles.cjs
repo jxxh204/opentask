@@ -4,7 +4,7 @@
 'use strict'
 const fs = require('fs')
 const path = require('path')
-const FILE = process.env.MRM_NOTION_TITLES || path.join(__dirname, '..', '.mrm-notion-titles.json')
+const FILE = process.env.OPENRM_NOTION_TITLES || path.join(__dirname, '..', '.openrm-notion-titles.json')
 
 function load() {
 	try {

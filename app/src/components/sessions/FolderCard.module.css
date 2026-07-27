@@ -1,0 +1,71 @@
+.card {
+	border-radius: 13px;
+	overflow: hidden;
+	transition: border-color 0.12s, background 0.12s;
+}
+
+.head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	cursor: pointer;
+	background: var(--card2);
+}
+
+.chevron {
+	flex: none;
+	color: var(--t3);
+	transition: transform 0.15s;
+}
+.chevronOpen {
+	transform: rotate(90deg);
+}
+
+.nameInput {
+	font-size: 13.5px;
+	font-weight: 800;
+	color: var(--ink);
+	width: 200px;
+	background: transparent;
+	border: none;
+	outline: none;
+}
+.nameInput:focus {
+	background: #1b1b20;
+	border-radius: 6px;
+}
+
+.count {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--violet);
+	background: var(--vtint);
+	border-radius: 6px;
+	padding: 2px 8px;
+}
+
+.base {
+	font-size: 10px;
+	color: var(--t3);
+}
+
+.body {
+	padding: 0 8px 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-height: 46px;
+}
+
+.emptyDrop {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 42px;
+	margin-top: 6px;
+	border: 1px dashed var(--line2);
+	border-radius: 9px;
+	font-size: 11px;
+	color: var(--t3);
+}

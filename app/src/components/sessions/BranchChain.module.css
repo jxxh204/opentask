@@ -1,0 +1,86 @@
+.wrap {
+	position: relative;
+	padding-left: 24px;
+}
+
+.rail {
+	position: absolute;
+	left: 6px;
+	top: 10px;
+	bottom: 22px;
+	width: 2px;
+}
+
+.node {
+	position: relative;
+	margin-bottom: 9px;
+}
+
+.nodeDot {
+	position: absolute;
+	left: -24px;
+	top: 11px;
+	width: 13px;
+	height: 13px;
+	border-radius: 50%;
+	background: var(--card);
+	border: 2px solid var(--t3);
+}
+
+.forkTick {
+	position: absolute;
+	left: -18px;
+	top: 17px;
+	width: 14px;
+	height: 2px;
+	background: var(--line2);
+}
+
+.card {
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: 9px;
+	padding: 9px 12px;
+}
+
+.cardHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.name {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--ink);
+}
+
+.rel {
+	font-size: 9px;
+	color: var(--t3);
+	margin-left: auto;
+}
+
+.links {
+	display: flex;
+	gap: 5px;
+	margin-top: 8px;
+}
+
+.linkChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 21px;
+	padding: 0 8px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	font-size: 10px;
+	color: var(--t2);
+}
+
+.groupBase {
+	font-size: 10px;
+	color: var(--t3);
+}

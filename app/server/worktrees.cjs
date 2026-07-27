@@ -7,7 +7,7 @@ const fs = require('fs')
 const C = require('./collector.cjs')
 const Ticket = require('./ticket.cjs')
 
-const BASE = process.env.MRM_BASE_BRANCH || 'origin/main'
+const BASE = process.env.OPENRM_BASE_BRANCH || 'origin/main'
 const SEP = ''
 
 function git(args, repo, timeoutMs = 7000) {
@@ -89,7 +89,7 @@ async function create({ ticket, base, desc, dir: dirOverride, branch: explicitBr
 	const wtPath = path.join(parent, dir)
 	if (fs.existsSync(wtPath)) return { ok: false, error: `이미 존재하는 폴더: ${dir} (기존 워크트리에서 시작하세요)` }
 
-	const baseRef = (base && String(base).trim()) || process.env.MRM_NEW_TASK_BASE || 'develop'
+	const baseRef = (base && String(base).trim()) || process.env.OPENRM_NEW_TASK_BASE || 'develop'
 	const localExists = (await gitX(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch], C.REPO)).ok
 	let r
 	if (localExists) {
@@ -133,7 +133,7 @@ async function remove(wtPath, branch) {
 // gitignore된 env 파일을 워크트리로 복사 (없으면 next.config rewrites가 undefined로 dev 서버가 깨짐).
 // 멱등 — 대상에 이미 있으면 건드리지 않음(수정본 보존). 워크트리 생성·재사용·dev 시작 때 항상 호출.
 function copyEnvFiles(wtPath) {
-	const ENV_FILES = (process.env.MRM_WORKTREE_COPY || '.env.local,.env.development.local,.env.test.local,.env.production.local,.env.sentry-build-plugin').split(',').map((s) => s.trim()).filter(Boolean)
+	const ENV_FILES = (process.env.OPENRM_WORKTREE_COPY || '.env.local,.env.development.local,.env.test.local,.env.production.local,.env.sentry-build-plugin').split(',').map((s) => s.trim()).filter(Boolean)
 	const copied = []
 	for (const f of ENV_FILES) {
 		const srcF = path.join(C.REPO, f)
@@ -204,7 +204,7 @@ async function createDeployBranch({ num, base } = {}) {
 	const m = String(num || '').match(/\d+/)
 	if (!m) return { ok: false, error: '배포 번호(숫자)를 입력하세요. 예: 286' }
 	const branch = 'deploy-' + m[0]
-	const baseRef = (base && String(base).trim()) || process.env.MRM_DEPLOY_BASE || 'develop'
+	const baseRef = (base && String(base).trim()) || process.env.OPENRM_DEPLOY_BASE || 'develop'
 	const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', baseRef], C.REPO)).ok
 	if (!baseOk) return { ok: false, error: `base 브랜치를 찾을 수 없음: ${baseRef}` }
 	const exists = (await gitX(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch], C.REPO)).ok
@@ -233,7 +233,7 @@ async function buildGroupBranch({ group, base, branches } = {}) {
 	const g = String(group || '').trim()
 	if (!g) return { ok: false, error: '그룹 필수' }
 	const branch = 'group-' + groupSlug(g)
-	const baseRef = (base && String(base).trim()) || process.env.MRM_NEW_TASK_BASE || 'develop'
+	const baseRef = (base && String(base).trim()) || process.env.OPENRM_NEW_TASK_BASE || 'develop'
 	const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', baseRef], C.REPO)).ok
 	if (!baseOk) return { ok: false, error: `base 브랜치를 찾을 수 없음: ${baseRef}` }
 

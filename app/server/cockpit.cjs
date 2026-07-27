@@ -34,7 +34,7 @@ function touchedFromStatus(status, root) {
 // 워크트리/프로젝트가 사는 루트 (REPO의 상위) — dev 서버를 이 하위로 한정해 postgres/redis 등 인프라 잡음 제외
 const PROJ_ROOT = path.dirname(C.REPO)
 
-const BASE = process.env.MRM_BASE_BRANCH || 'origin/main'
+const BASE = process.env.OPENRM_BASE_BRANCH || 'origin/main'
 const ticketOf = Ticket.ticketOf
 
 function sh(cmd, args, timeout = 6000) {

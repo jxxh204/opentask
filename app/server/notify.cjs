@@ -24,7 +24,7 @@ function ticketOf(name) {
 }
 // 세션명 → 사람이 읽을 제목/부제 (종류·티켓·작업명·그룹)
 function friendly(name, byTicket) {
-	const n = String(name || '').replace(/^mrm-/, '')
+	const n = String(name || '').replace(/^orm-/, '')
 	if (/^orch-/.test(n)) {
 		const grp = n.replace(/^orch-/, '').replace(/-qa$/, '')
 		return { title: `🎼 ${grp} 지휘자`, sub: '오케스트레이터' }

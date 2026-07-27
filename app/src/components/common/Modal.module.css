@@ -1,0 +1,22 @@
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 90;
+	background: rgba(6, 7, 9, 0.64);
+	backdrop-filter: blur(3px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 32px;
+}
+
+.panel {
+	max-height: 86vh;
+	display: flex;
+	flex-direction: column;
+	background: var(--card);
+	border: 1px solid var(--line2);
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}

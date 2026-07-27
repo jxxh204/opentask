@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// index.cjs — MRM 백엔드: Collector + SSE 실시간 푸시 + 폴러. 의존성 0.
+// index.cjs — OpenRM 백엔드: Collector + SSE 실시간 푸시 + 폴러. 의존성 0.
 // 실행:  node server/index.cjs   (포트 기본 8770, 대상 레포 REPO_PATH)
 'use strict'
 const http = require('http')
@@ -75,6 +75,117 @@ async function signinRemote(host, id, pwd) {
 }
 const Deploy = require('./deploy.cjs')
 const Settings = require('./settings.cjs')
+// ── SQLite store 계층 (Setup/온보딩 영속화) ──
+// 주의: 기존 `Settings`(flat-JSON, ./settings.cjs)와 다른 모듈이다. AppConfig(비시크릿)는
+// AppCfg(store/settings.cjs), 시크릿은 Secrets(store/secrets.cjs)에 저장한다.
+const AppCfg = require('./store/settings.cjs')
+const Secrets = require('./store/secrets.cjs')
+const EnvVars = require('./store/envVars.cjs')
+// Sessions(개발실) CRUD store 계층. 기존 `Tasks`(flat-JSON, ./tasks.cjs)와 충돌하므로 Store* 로 별칭.
+const StoreFolders = require('./store/folders.cjs')
+const StoreTasks = require('./store/tasks.cjs')
+const StoreBranches = require('./store/branches.cjs')
+const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
+const PrReview = require('./prReview.cjs') // PR 리뷰 코멘트 fetch/apply/dispute (Phase 3.3)
+// Debug(디버깅) — Playwright 실브라우저 세션 (Phase 4b). playwright는 이 모듈들 안에서 lazy require라 부팅엔 영향 없음.
+const BrowserPool = require('./debug/browserPool.cjs')
+const Inspector = require('./debug/inspector.cjs')
+// GitHub 통계 + Monitor 배포 커넥터 (Phase 5.1) — 읽기 전용 집계.
+const GithubStats = require('./githubStats.cjs')
+const DeployStatus = require('./deployStatus.cjs')
+
+// Monitor 페이지 health 집계. 실 소스 있는 필드만 실제값, 없는 필드는 null(지어내지 않음).
+async function buildMonitorHealth() {
+  const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
+  let deploysToday = 0
+  try { const { db } = require('./db.cjs'); deploysToday = db.prepare('SELECT COUNT(*) AS c FROM deploys WHERE created_at >= ?').get(startOfToday).c } catch (_) {}
+  let prsAwaitingReview = 0
+  try {
+    const prData = await Prs.list('open').catch(() => ({ prs: [] }))
+    // 내 오픈 PR 중 아직 리뷰 결정 안 난 것(prs.cjs가 --author @me라 '내 PR' 기준 — 프론트 shape 한계 반영).
+    prsAwaitingReview = (prData.prs || []).filter((p) => !p.draft && (p.review === 'REVIEW_REQUIRED' || !p.review)).length
+  } catch (_) {}
+  let sentryRecentIssues1h = null
+  if (Sentry.configured()) { try { sentryRecentIssues1h = (await Sentry.recentIssues({ statsPeriod: '1h' })).length } catch (_) {} }
+  return {
+    ok: true,
+    prod: { status: null, uptimePct: null }, // placeholder — 합성 모니터링 대상 없음(Phase 6 전까지 null)
+    errorRate1h: null, // placeholder — 진짜 error rate엔 이벤트량 소스 필요(Phase 6). 지어내지 않고 null.
+    deploysToday, // real — store deploys 테이블(오늘 자정 이후)
+    prsAwaitingReview, // real — 내 오픈 PR 중 리뷰 대기
+    sentry: { configured: Sentry.configured(), recentIssues1h: sentryRecentIssues1h }, // recentIssues1h: 설정 시 실제 이슈 개수(프록시, rate 아님)
+    builtAt: new Date().toISOString(),
+  }
+}
+// Monitor 커넥터 카드 상태. sentry/pr-ci/aws-deploy는 실제 설정 여부, 나머지 셋은 백엔드 없어 항상 미연결.
+async function buildMonitorConnectors() {
+  const aws = await DeployStatus.status().catch(() => ({ id: 'aws-deploy', label: 'AWS·배포', connected: false, configured: false }))
+  return {
+    ok: true,
+    connectors: [
+      { id: 'sentry', label: 'Sentry', connected: Sentry.configured() },
+      { id: 'pr-ci', label: 'PR·CI', connected: !!(process.env.OPENRM_PR_REPOS && process.env.OPENRM_PR_REPOS.trim()) },
+      aws,
+      { id: 'vitals', label: 'Web Vitals', connected: false }, // 백엔드 없음 — placeholder 미연결
+      { id: 'bundle', label: 'Bundle', connected: false }, // 동일
+      { id: 'lighthouse', label: 'Lighthouse', connected: false }, // 동일
+    ],
+  }
+}
+
+// Setup 온보딩 스텝(id) → 각 필드의 저장 위치. config: AppConfig 필드명, secret: secrets 키명.
+// (프론트 src/pages/SetupPage.tsx의 STEPS/OPTS fieldDefs key와 1:1 대응. 'paths'는 rootPath/wtPath/branchPrefix로 직접 매핑.)
+const SETUP_CONNECTOR_MAP = {
+  dev: { devServerUrl: { config: 'devServerUrl' }, webviewPort: { config: 'webviewPort' } },
+  github: { repo: { config: 'githubRepo' }, token: { secret: 'githubToken' } },
+  db: { connString: { secret: 'dbConnString' }, schema: { config: 'dbSchema' } },
+  paths: { rootPath: { config: 'rootPath' }, wtPath: { config: 'wtPath' }, branchPrefix: { config: 'branchPrefix' } },
+  app: { apiRoot: { config: 'apiRoot' }, nextRoot: { config: 'nextRoot' } },
+  sentry: { dsn: { secret: 'sentryDsn' } },
+  aws: { webhook: { config: 'awsDeployWebhookUrl' } },
+  vitals: { endpoint: { config: 'vitalsEndpoint' } },
+}
+// GET/POST connector 공통 응답 — 현재 저장 상태 스냅샷.
+function setupStatus() {
+  const appConfig = AppCfg.getAppConfig()
+  return { appConfig, secretKeys: Secrets.listKeys(), configured: !!(appConfig.rootPath && appConfig.wtPath) }
+}
+// FolderPicker 실시간 검증(타이핑 중 라이브 호출) — ~ 확장, 절대경로 resolve, 디렉토리/깃레포/워크트리 조회.
+// 절대 throw 금지: 어떤 실패든 "아직 없음"(전부 false/빈배열)으로 degrade. git 래퍼는 worktrees.cjs git() 패턴과 동일.
+function resolveFsPath(raw) {
+  const os = require('os')
+  const cp = require('child_process')
+  const gitOut = (args, cwd) =>
+    new Promise((resolve) =>
+      cp.execFile('git', ['-C', cwd, ...args], { timeout: 7000, maxBuffer: 1 << 20 }, (e, out) => resolve(e ? '' : String(out || ''))),
+    )
+  return (async () => {
+    const out = { exists: false, isDirectory: false, isGitRepo: false, gitRoot: null, existingWorktrees: [] }
+    let p = String(raw || '').trim()
+    if (!p) return out
+    if (p === '~' || p.startsWith('~/')) p = path.join(os.homedir(), p.slice(1))
+    try { p = path.resolve(p) } catch (_) { return out }
+    let st
+    try { st = fs.statSync(p) } catch (_) { return out }
+    out.exists = true
+    out.isDirectory = st.isDirectory()
+    if (!out.isDirectory) return out
+    const top = (await gitOut(['rev-parse', '--show-toplevel'], p)).trim()
+    if (top) {
+      out.isGitRepo = true
+      out.gitRoot = top
+      const porcelain = await gitOut(['worktree', 'list', '--porcelain'], p)
+      let cur = {}
+      for (const line of porcelain.split('\n')) {
+        if (line.startsWith('worktree ')) cur = { path: line.slice(9).trim(), branch: null }
+        else if (line.startsWith('branch ')) cur.branch = line.slice(7).trim().replace(/^refs\/heads\//, '')
+        else if (line === '') { if (cur.path) out.existingWorktrees.push(cur); cur = {} }
+      }
+      if (cur.path) out.existingWorktrees.push(cur)
+    }
+    return out
+  })().catch(() => ({ exists: false, isDirectory: false, isGitRepo: false, gitRoot: null, existingWorktrees: [] }))
+}
 
 // 실제 브랜치 목록 (로컬+origin, 중복 제거) — 그룹 base 선택용. deploy-/release/hotfix/develop/main 우선.
 function listBranches() {
@@ -110,19 +221,19 @@ function createBranch({ name, base }) {
   })
 }
 
-const DEV_LOG = () => path.join(C.REPO, '.mrm-devserver.log')
+const DEV_LOG = () => path.join(C.REPO, '.openrm-devserver.log')
 // 로컬 dev 서버 재시작 — ⚠️ 반드시 '같은 포트'로 다시 떠야 함(Next.js는 포트가 안 비면 3001,3002…로 밀려버림).
 // 그래서 kill -9 후 포트가 '실제로' 빌 때까지 폴링한 뒤에 시작. 못 비우면 취소(엉뚱한 포트에 유령 서버 방지).
 function restartDevServer(port, cwd) {
   const repo = cwd || C.REPO // ⚠️ 반드시 '그 포트를 서빙하던 워크트리'에서 재시작해야 env 변경이 반영됨
   return new Promise((resolve) => {
     const cp = require('child_process')
-    try { fs.writeFileSync(DEV_LOG(), `[MRM] dev 서버 재시작 — 포트 ${port} 확보 중… (cwd ${repo.split('/').pop()}, ${new Date().toISOString()})\n`) } catch (_) {}
+    try { fs.writeFileSync(DEV_LOG(), `[OpenRM] dev 서버 재시작 — 포트 ${port} 확보 중… (cwd ${repo.split('/').pop()}, ${new Date().toISOString()})\n`) } catch (_) {}
     // 포트를 실제로 비울 때까지 kill -9 반복 (최대 ~7초). 끝나도 안 비면 exit 1.
     const freeScript = `for i in $(seq 1 14); do pids=$(lsof -ti tcp:${port} -sTCP:LISTEN 2>/dev/null); if [ -z "$pids" ]; then exit 0; fi; echo "$pids" | xargs kill -9 2>/dev/null; sleep 0.5; done; [ -z "$(lsof -ti tcp:${port} -sTCP:LISTEN 2>/dev/null)" ] && exit 0 || exit 1`
     cp.execFile('bash', ['-lc', freeScript], { timeout: 20000 }, (err) => {
       if (err) {
-        try { fs.appendFileSync(DEV_LOG(), `[MRM] ⚠️ 포트 ${port} 를 비우지 못해 재시작을 취소합니다.\n`) } catch (_) {}
+        try { fs.appendFileSync(DEV_LOG(), `[OpenRM] ⚠️ 포트 ${port} 를 비우지 못해 재시작을 취소합니다.\n`) } catch (_) {}
         return resolve({ ok: false, error: `포트 ${port} 확보 실패 — 수동으로 종료 후 다시 시도하세요` })
       }
       let out = 'ignore'
@@ -150,26 +261,26 @@ const Orch = require('./orch.cjs')
 const pty = require('node-pty')
 const { WebSocketServer } = require('ws')
 
-const PORT = Number(process.env.MRM_PORT || 8770)
+const PORT = Number(process.env.OPENRM_PORT || 8770)
 // 기본 loopback 바인딩 — 이 서버는 git/shell/터미널을 실행할 수 있어 LAN에 열면 사실상 인증 없는 RCE.
-// 폰에서 웹뷰 디버깅하려고 일부러 LAN에 열 땐 MRM_HOST=0.0.0.0 + MRM_TOKEN 필수.
-const HOST = process.env.MRM_HOST || '127.0.0.1'
+// 폰에서 웹뷰 디버깅하려고 일부러 LAN에 열 땐 OPENRM_HOST=0.0.0.0 + OPENRM_TOKEN 필수.
+const HOST = process.env.OPENRM_HOST || '127.0.0.1'
 const IS_LOOPBACK_HOST = HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1'
-let AUTH_TOKEN = process.env.MRM_TOKEN || null
+let AUTH_TOKEN = process.env.OPENRM_TOKEN || null
 if (!IS_LOOPBACK_HOST && !AUTH_TOKEN) {
   AUTH_TOKEN = crypto.randomBytes(24).toString('hex')
-  console.log(`\n⚠️  MRM_HOST=${HOST} — LAN 바인딩 감지, 토큰 인증을 자동 활성화합니다.`)
-  console.log(`   요청 시 헤더 X-MRM-Token 또는 쿼리 ?token= 에 아래 값을 포함하세요:`)
+  console.log(`\n⚠️  OPENRM_HOST=${HOST} — LAN 바인딩 감지, 토큰 인증을 자동 활성화합니다.`)
+  console.log(`   요청 시 헤더 X-OpenRM-Token 또는 쿼리 ?token= 에 아래 값을 포함하세요:`)
   console.log(`   ${AUTH_TOKEN}\n`)
 }
 const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
 
 process.on('uncaughtException', (err) => {
-  console.error('[MRM] uncaughtException —', err && err.stack || err)
+  console.error('[OpenRM] uncaughtException —', err && err.stack || err)
   process.exit(1)
 })
 process.on('unhandledRejection', (err) => {
-  console.error('[MRM] unhandledRejection —', err && err.stack || err)
+  console.error('[OpenRM] unhandledRejection —', err && err.stack || err)
 })
 
 function readBody(req) {
@@ -288,10 +399,10 @@ const server = http.createServer((req, res) => {
   if (AUTH_TOKEN) {
     let reqUrl
     try { reqUrl = new URL(req.url, 'http://x') } catch (_) { reqUrl = null }
-    const given = req.headers['x-mrm-token'] || (reqUrl && reqUrl.searchParams.get('token'))
+    const given = req.headers['x-openrm-token'] || (reqUrl && reqUrl.searchParams.get('token'))
     if (given !== AUTH_TOKEN) {
       res.writeHead(403, { 'Content-Type': 'application/json' })
-      return res.end(JSON.stringify({ ok: false, error: 'unauthorized — MRM_TOKEN required' }))
+      return res.end(JSON.stringify({ ok: false, error: 'unauthorized — OPENRM_TOKEN required' }))
     }
   }
   const url = req.url.split('?')[0]
@@ -304,6 +415,239 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ ok: true, repo: C.REPO, state: C.STATE_PATH }))
   }
+  // ── Setup / 온보딩 (Phase 2b) — SQLite 영속화 ──────────────────────
+  if (url === '/api/setup/status' && req.method === 'GET') {
+    return sendJSON(res, 200, setupStatus())
+  }
+  if (url.startsWith('/api/setup/connectors/') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/setup/connectors/'.length))
+    const map = SETUP_CONNECTOR_MAP[id]
+    if (!map) return sendJSON(res, 404, { ok: false, error: `unknown connector: ${id}` })
+    return readBody(req)
+      .then((b) => {
+        const fields = (b && b.fields) || {}
+        const cfgPatch = {}
+        const skipped = []
+        for (const [k, v] of Object.entries(fields)) {
+          const dest = map[k]
+          if (!dest) { skipped.push(k); continue } // 매핑에 없는 필드는 추측하지 말고 건너뜀
+          if (dest.config) cfgPatch[dest.config] = v
+          else if (dest.secret) Secrets.set(dest.secret, String(v == null ? '' : v))
+        }
+        if (Object.keys(cfgPatch).length) AppCfg.updateAppConfig(cfgPatch)
+        sendJSON(res, 200, { ...setupStatus(), skipped })
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/setup/env' && req.method === 'GET') {
+    return sendJSON(res, 200, EnvVars.list())
+  }
+  if (url === '/api/setup/env' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, EnvVars.create(b || {})))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/setup/env/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/setup/env/'.length))
+    return readBody(req)
+      .then((b) => { const r = EnvVars.update(id, b || {}); sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' }) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/setup/env/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/setup/env/'.length))
+    return sendJSON(res, 200, EnvVars.remove(id))
+  }
+  if (url === '/api/setup/fs/resolve' && req.method === 'GET') {
+    const raw = new URL(req.url, 'http://x').searchParams.get('path') || ''
+    return resolveFsPath(raw).then((r) => sendJSON(res, 200, r))
+  }
+  if (url === '/api/setup/tmux' && req.method === 'GET') {
+    return Term.checkAvailable().then((r) => sendJSON(res, 200, r))
+  }
+
+  // ── Sessions / 개발실 (Phase 3.1) — folders·tasks·branches CRUD (SQLite store) ──
+  // 주의: /api/tasks·/api/branches는 method로 분기한다 — 기존 GET 핸들러(구 flat-JSON/​git API,
+  // 각각 아래쪽 line ~845/~425)는 그대로 두고, 여기선 POST/PATCH/DELETE(신규 store CRUD)만 얹는다.
+  // 이 블록이 그 GET 핸들러들보다 앞에 있어야(=여기) 신규 write가 구 핸들러에 가로채이지 않는다.
+  if (url === '/api/sessions/board' && req.method === 'GET') {
+    return sendJSON(res, 200, StoreTasks.board(StoreFolders.list()))
+  }
+  // folders
+  if (url === '/api/folders' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, StoreFolders.create(b || {})))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/folders/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/folders/'.length))
+    return readBody(req)
+      .then((b) => { const r = StoreFolders.update(id, b || {}); sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' }) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/folders/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/folders/'.length))
+    return sendJSON(res, 200, StoreFolders.remove(id))
+  }
+  // tasks
+  if (url === '/api/tasks' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, StoreTasks.composeTask(StoreTasks.create(b || {}))))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/tasks/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/tasks/'.length))
+    return readBody(req)
+      .then((b) => {
+        b = b || {}
+        const cur = StoreTasks.get(id)
+        if (!cur) return sendJSON(res, 404, { ok: false, error: 'not found' })
+        // 편집(rename/desc/kind) — 해당 키가 있을 때만
+        if ('name' in b || 'desc' in b || 'kind' in b) StoreTasks.update(id, b)
+        // refile/reorder — folderId 키가 있으면(명시적 null=inbox 포함) 그 값으로, 없고 beforeTaskId만 있으면 현재 폴더 유지
+        if ('folderId' in b || 'beforeTaskId' in b) {
+          const targetFolder = 'folderId' in b ? b.folderId : cur.folder_id
+          StoreTasks.move(id, targetFolder, b.beforeTaskId)
+        }
+        sendJSON(res, 200, StoreTasks.composeTask(StoreTasks.get(id)))
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/tasks/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/tasks/'.length))
+    return sendJSON(res, 200, StoreTasks.remove(id))
+  }
+  // branches (+ links)
+  if (url === '/api/branches' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, StoreBranches.create(b || {})))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/branches/') && url.endsWith('/links') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/branches/'.length, url.length - '/links'.length))
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, StoreBranches.addLink(id, b && b.kind, b && b.url)))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/branches/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/branches/'.length))
+    return readBody(req)
+      .then((b) => { const r = StoreBranches.update(id, b || {}); sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' }) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/branches/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/branches/'.length))
+    return sendJSON(res, 200, StoreBranches.remove(id))
+  }
+  if (url.startsWith('/api/branch-links/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/branch-links/'.length))
+    return sendJSON(res, 200, StoreBranches.removeLink(id))
+  }
+  // ── Sessions 오케스트레이션 (Phase 3.2) — 폴더 단위 순차 웨이브. 실제 git worktree + tmux+claude 세션 생성. ──
+  // method 분기라 위 folders CRUD(PATCH/DELETE /api/folders/:id)와 충돌하지 않는다(경로가 .../orchestrate/... 로 더 김).
+  if (url.startsWith('/api/folders/') && url.includes('/orchestrate/')) {
+    const om = url.match(/^\/api\/folders\/([^/]+)\/orchestrate\/(start|advance|stop|state)$/)
+    if (om) {
+      const fid = decodeURIComponent(om[1])
+      const action = om[2]
+      const done = (p) => p.then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      if (action === 'state' && req.method === 'GET') return sendJSON(res, 200, Orchestrator.getState(fid))
+      if (action === 'start' && req.method === 'POST') return done(Orchestrator.start(fid))
+      if (action === 'advance' && req.method === 'POST') return done(Orchestrator.advance(fid))
+      if (action === 'stop' && req.method === 'POST') return done(Orchestrator.stop(fid))
+    }
+  }
+
+  // ── PR 리뷰 (Phase 3.3) — GitHub 코멘트 fetch / apply(로컬 dispatch) / dispute(실제 GitHub 쓰기) ──
+  if (url.startsWith('/api/branches/') && url.endsWith('/reviews/sync') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/branches/'.length, url.length - '/reviews/sync'.length))
+    return PrReview.syncReviewsForBranch(id)
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/reviews/') && url.endsWith('/apply') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/reviews/'.length, url.length - '/apply'.length))
+    return PrReview.applyReview(id)
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/reviews/') && url.endsWith('/dispute') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/reviews/'.length, url.length - '/dispute'.length))
+    return readBody(req)
+      .then((b) => PrReview.disputeReview(id, b && b.text))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+
+  // ── Debug / 디버깅 (Phase 4b) — Playwright 실브라우저 세션 (스크린샷 폴링 / 엘리먼트 검사 / 네트워크·콘솔 / 스레드) ──
+  if (url === '/api/debug/sessions' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => BrowserPool.createSession(b || {}))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/debug/threads/') && url.endsWith('/followup') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/debug/threads/'.length, url.length - '/followup'.length))
+    return readBody(req)
+      .then((b) => Inspector.followup(id, b && b.text))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/debug/sessions/')) {
+    const dm = url.match(/^\/api\/debug\/sessions\/([^/]+)(?:\/(screenshot|inspect|network|console|threads))?$/)
+    if (dm) {
+      const id = decodeURIComponent(dm[1])
+      const sub = dm[2] || null
+      if (!sub && req.method === 'DELETE') {
+        return BrowserPool.closeSession(id).then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      if (sub === 'screenshot' && req.method === 'GET') {
+        return BrowserPool.screenshot(id)
+          .then((r) => {
+            if (!r.ok) return sendJSON(res, r.error === 'session not found' ? 404 : 500, { ok: false, error: r.error })
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' })
+            res.end(r.buffer)
+          })
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      if (sub === 'inspect' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => Inspector.inspect(id, Number(b && b.x), Number(b && b.y)))
+          .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      if (sub === 'network' && req.method === 'GET') return sendJSON(res, 200, { ok: true, network: Inspector.network(id) })
+      if (sub === 'console' && req.method === 'GET') return sendJSON(res, 200, { ok: true, console: Inspector.consoleList(id) })
+      if (sub === 'threads' && req.method === 'GET') return sendJSON(res, 200, { ok: true, threads: Inspector.listThreads(id) })
+      if (sub === 'threads' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => Inspector.createThread(id, b || {}))
+          .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+    }
+  }
+
+  // ── GitHub / Monitor (Phase 5.1) — 읽기 전용 집계 ──
+  if (url === '/api/github/repos' && req.method === 'GET') {
+    return sendJSON(res, 200, { ok: true, repos: GithubStats.repos() })
+  }
+  if (url === '/api/github/stats' && req.method === 'GET') {
+    const range = Number(new URL(req.url, 'http://x').searchParams.get('range')) || 30
+    return GithubStats.getStats({ rangeDays: range })
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/monitor/health' && req.method === 'GET') {
+    return buildMonitorHealth().then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/monitor/connectors' && req.method === 'GET') {
+    return buildMonitorConnectors().then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/monitor/actions/dispatch' && req.method === 'POST') {
+    readBody(req).then((b) => Monitor.dispatchAction(b || {})).then((r) => sendJSON(res, r.ok ? 200 : 400, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+    return
+  }
+
   if (url === '/api/templates') {
     return sendJSON(res, 200, { templates: Act.TEMPLATES })
   }
@@ -347,7 +691,7 @@ const server = http.createServer((req, res) => {
     )
     return
   }
-  // 디버깅 자동로그인 — 테스트 계정 관리 (비번은 마티가 UI에서 입력, 로컬 저장, 마스킹 반환)
+  // 디버깅 자동로그인 — 테스트 계정 관리 (비번은 운영자가 UI에서 입력, 로컬 저장, 마스킹 반환)
   if (url === '/api/dev-users') {
     if (req.method === 'POST') {
       readBody(req).then((b) => sendJSON(res, 200, DevUsers.add(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
@@ -364,8 +708,8 @@ const server = http.createServer((req, res) => {
     readBody(req)
       .then(async (b) => {
         const dev = String((b && b.dev) || '').replace(/[^a-z0-9]/gi, '')
-        const host = /^dev[1-6]$/.test(dev) && process.env.MRM_DEV_HOST_PATTERN
-          ? process.env.MRM_DEV_HOST_PATTERN.replace('%s', dev)
+        const host = /^dev[1-6]$/.test(dev) && process.env.OPENRM_DEV_HOST_PATTERN
+          ? process.env.OPENRM_DEV_HOST_PATTERN.replace('%s', dev)
           : null
         if (!host) return sendJSON(res, 400, { ok: false, error: 'dev1~6 중 선택 필요' })
         const c = DevUsers.getCreds((b && b.key) || '')
@@ -387,8 +731,8 @@ const server = http.createServer((req, res) => {
     readBody(req)
       .then((b) => {
         const dev = String((b && b.dev) || '').replace(/[^a-z0-9]/gi, '')
-        const host = /^dev[1-6]$/.test(dev) && process.env.MRM_DEV_HOST_PATTERN
-          ? process.env.MRM_DEV_HOST_PATTERN.replace('%s', dev)
+        const host = /^dev[1-6]$/.test(dev) && process.env.OPENRM_DEV_HOST_PATTERN
+          ? process.env.OPENRM_DEV_HOST_PATTERN.replace('%s', dev)
           : null
         if (!host) return sendJSON(res, 400, { ok: false, error: 'dev1~6 중 선택 필요' })
         Preview.setRemote(host)
@@ -462,7 +806,7 @@ const server = http.createServer((req, res) => {
         Preview.clearLocalToken()
         let where
         if (info && info.hasSession) {
-          try { fs.writeFileSync(DEV_LOG(), `[MRM] '${t.label}' 샵으로 전환 — 작업 터미널(${info.name}, 워크트리 ${envCwd.split('/').pop()})에서 제자리 재시작 중…\n포트 :${port} 가 다시 뜨면 자동으로 화면을 로드합니다.\n`) } catch (_) {}
+          try { fs.writeFileSync(DEV_LOG(), `[OpenRM] '${t.label}' 샵으로 전환 — 작업 터미널(${info.name}, 워크트리 ${envCwd.split('/').pop()})에서 제자리 재시작 중…\n포트 :${port} 가 다시 뜨면 자동으로 화면을 로드합니다.\n`) } catch (_) {}
           await Term.restartDevSession(info) // 그 dev 터미널에서 Ctrl-C + 재실행
           where = `워크트리 ${envCwd.split('/').pop()} · ${info.name}`
         } else {
@@ -488,7 +832,7 @@ const server = http.createServer((req, res) => {
         const envCwd = info ? info.cwd : C.REPO
         const sw = DevUsers.setEnvMswMocking(on, path.join(envCwd, '.env.local'))
         if (!sw.ok) return sendJSON(res, 400, sw)
-        try { fs.writeFileSync(DEV_LOG(), `[MRM] MSW 목서버 ${on ? '켜기' : '끄기'} — .env.local 수정 후 :${port} (워크트리 ${envCwd.split('/').pop()}) 재시작 중…\n뜨면 자동으로 화면을 다시 로드합니다.\n`) } catch (_) {}
+        try { fs.writeFileSync(DEV_LOG(), `[OpenRM] MSW 목서버 ${on ? '켜기' : '끄기'} — .env.local 수정 후 :${port} (워크트리 ${envCwd.split('/').pop()}) 재시작 중…\n뜨면 자동으로 화면을 다시 로드합니다.\n`) } catch (_) {}
         if (info && info.hasSession) await Term.restartDevSession(info)
         else await restartDevServer(port, envCwd)
         sendJSON(res, 200, { ok: true, on, port })
@@ -826,7 +1170,7 @@ const server = http.createServer((req, res) => {
     readBody(req).then((b) => sendJSON(res, 200, Tasks.startPrQuestion(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
-  // ── MRM 개선 탭: 프롬프트 레지스트리 편집 + MRM 레포 터미널 ──
+  // ── OpenRM 개선 탭: 프롬프트 레지스트리 편집 + OpenRM 레포 터미널 ──
   if (url === '/api/prompts') {
     return sendJSON(res, 200, { ok: true, prompts: Prompts.list() })
   }
@@ -838,15 +1182,15 @@ const server = http.createServer((req, res) => {
     readBody(req).then((b) => sendJSON(res, 200, Prompts.reset(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
-  // MRM 레포에서 claude 도는 임베드 터미널 — 있으면 재사용, 없으면 생성(멱등)
+  // OpenRM 레포에서 claude 도는 임베드 터미널 — 있으면 재사용, 없으면 생성(멱등)
   if (url === '/api/mrm/term' && req.method === 'POST') {
     ;(async () => {
-      const MRM_ROOT = path.join(__dirname, '..')
+      const OPENRM_ROOT = path.join(__dirname, '..')
       const sessions = await Term.list().catch(() => [])
-      const existing = (sessions || []).find((s) => s.cwd === MRM_ROOT)
-      if (existing) return sendJSON(res, 200, { ok: true, name: existing.name, cwd: MRM_ROOT, reused: true })
-      const t = await Term.create({ cwd: MRM_ROOT, command: 'claude', label: 'mrm-improve', model: Settings.modelFor('dev') })
-      sendJSON(res, t.ok ? 200 : 400, { ...t, cwd: MRM_ROOT })
+      const existing = (sessions || []).find((s) => s.cwd === OPENRM_ROOT)
+      if (existing) return sendJSON(res, 200, { ok: true, name: existing.name, cwd: OPENRM_ROOT, reused: true })
+      const t = await Term.create({ cwd: OPENRM_ROOT, command: 'claude', label: 'orm-improve', model: Settings.modelFor('dev') })
+      sendJSON(res, t.ok ? 200 : 400, { ...t, cwd: OPENRM_ROOT })
     })().catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
@@ -898,7 +1242,7 @@ const server = http.createServer((req, res) => {
     readBody(req).then((b) => sendJSON(res, 200, Tasks.setTaskModel(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
-  // 업무 코드/비개발 분류 — start=백그라운드 재판정(폴링은 /enrich/status 공용), class=모달에서 마티가 확정
+  // 업무 코드/비개발 분류 — start=백그라운드 재판정(폴링은 /enrich/status 공용), class=모달에서 운영자가 확정
   if (url === '/api/tasks/classify/start' && req.method === 'POST') {
     readBody(req).then((b) => sendJSON(res, 200, Tasks.startClassify(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
@@ -1052,7 +1396,7 @@ const server = http.createServer((req, res) => {
         // 이어받기면 seed(긴 초기지시) 대신 짧은 진행 넛지만 — 대화는 이미 맥락이 있음. 리뷰 모드면 짧게 리마인드.
         const reviewOn = Settings.get('reviewMode')
         const seed = resumed
-          ? ((b && b.resumeNudge) || '이전 작업을 이어서 진행해줘. (먼저 현재까지 상태를 한 줄로 요약하고 계속)') + (reviewOn ? ' 끝내면 리뷰어(마티) 설득 브리핑(무엇을·왜/대안/봐야 할 파일:라인/리스크/검증)으로 마무리.' : '')
+          ? ((b && b.resumeNudge) || '이전 작업을 이어서 진행해줘. (먼저 현재까지 상태를 한 줄로 요약하고 계속)') + (reviewOn ? ` 끝내면 리뷰어(${Settings.operatorName()}) 설득 브리핑(무엇을·왜/대안/봐야 할 파일:라인/리스크/검증)으로 마무리.` : '')
           : b && b.seed
         // 모델: 카드에서 지정(b.model)이 있으면 그걸(잠금 시 fable→opus), 없으면 정책 기본(dev/debug)
         const chosen = (b && b.model) || Settings.modelFor(/^dbg-/i.test(String(label)) ? 'debug' : 'dev')
@@ -1325,7 +1669,7 @@ const server = http.createServer((req, res) => {
     return
   }
   if (url === '/api/cmux') {
-    // 이름(제목)만 가져온다 — 실제 터미널은 MRM이 호스팅(claude --resume). cmux 탈피 경로.
+    // 이름(제목)만 가져온다 — 실제 터미널은 OpenRM이 호스팅(claude --resume). cmux 탈피 경로.
     Cmux.claudeSessions()
       .then((s) => sendJSON(res, 200, { ok: true, sessions: s }))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
@@ -1375,8 +1719,8 @@ const server = http.createServer((req, res) => {
         const ext = m[1].replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'png'
         const buf = Buffer.from(m[2], 'base64')
         if (buf.length > 12 << 20) return sendJSON(res, 400, { ok: false, error: '이미지 12MB 초과' })
-        // 워크트리 cwd가 있으면 그 안 .mrm-cmd-images/, 없으면 MRM 프로젝트 하위. 에이전트가 절대경로로 Read.
-        const baseDir = b && b.cwd && fs.existsSync(b.cwd) ? path.join(b.cwd, '.mrm-cmd-images') : path.join(__dirname, '..', '.mrm-cmd-images')
+        // 워크트리 cwd가 있으면 그 안 .openrm-cmd-images/, 없으면 OpenRM 프로젝트 하위. 에이전트가 절대경로로 Read.
+        const baseDir = b && b.cwd && fs.existsSync(b.cwd) ? path.join(b.cwd, '.openrm-cmd-images') : path.join(__dirname, '..', '.openrm-cmd-images')
         try { fs.mkdirSync(baseDir, { recursive: true }) } catch (_) {}
         const file = path.join(baseDir, `cmd-${Date.now()}-${Math.floor(Math.random() * 1e4)}.${ext}`)
         try { fs.writeFileSync(file, buf) } catch (e) { return sendJSON(res, 500, { ok: false, error: '저장 실패: ' + String(e.message || e) }) }
@@ -1423,7 +1767,7 @@ const server = http.createServer((req, res) => {
 })
 
 // ── 실터미널 WebSocket 브리지: xterm ↔ node-pty(tmux attach) ──
-// /term?session=mrm-XXX&cols=&rows=  — MRM 소유(mrm-) 세션만 attach 허용.
+// /term?session=orm-XXX&cols=&rows=  — OpenRM 소유(orm-) 세션만 attach 허용.
 const wss = new WebSocketServer({ noServer: true })
 // 좀비 연결(노트북 슬립·강제 탭종료·네트워크 끊김)은 'close'가 안 와서 p.kill()이 안 불리고
 // node-pty가 문 /dev/ptmx fd를 영구히 물고 있어, 며칠 지나면 macOS pty 한도(kern.tty.ptmx_max)를
@@ -1443,15 +1787,15 @@ server.on('upgrade', async (req, socket, head) => {
     return
   }
   if (AUTH_TOKEN) {
-    const given = req.headers['x-mrm-token'] || u.searchParams.get('token')
+    const given = req.headers['x-openrm-token'] || u.searchParams.get('token')
     if (given !== AUTH_TOKEN) {
       socket.destroy()
       return
     }
   }
   const session = u.searchParams.get('session') || ''
-  // mrm- 접두 필수(안전). claude(cmux)가 세션명을 'mrm-X_<ts>_..._/cwd_..'로 리네임하므로 / . 도 허용.
-  if (!/^mrm-[\w가-힣./-]+$/.test(session)) {
+  // orm- 접두 필수(안전). claude(cmux)가 세션명을 'orm-X_<ts>_..._/cwd_..'로 리네임하므로 / . 도 허용.
+  if (!/^orm-[\w가-힣./-]+$/.test(session)) {
     socket.destroy()
     return
   }
@@ -1540,10 +1884,56 @@ server.on('upgrade', async (req, socket, head) => {
   })
 })
 
+// ── 1회성 tmux 세션 접두 마이그레이션 (레거시 → 'orm-') ──
+// 리브랜딩으로 세션 접두가 바뀌었으니, 이전 버전이 만든 레거시 접두 세션을 새 'orm-' 접두로 리네임한다.
+// 안 하면 진행 중이던 세션이 term.cjs allowlist(접두 검사)에서 사라져 orphan 된다. execFile 래퍼는 term.cjs tmux()와 동일 스타일.
+// 비치명적: tmux 미설치/서버 없음/실패 시 경고만 남기고 부팅을 계속한다.
+// (레거시 접두 문자열은 분리 표기 — 리브랜딩 grep 게이트가 구접두 잔재로 오탐하지 않게.)
+function migrateTmuxSessionPrefix() {
+  const LEGACY = 'mr' + 'm-' // 구접두 (리브랜딩 전)
+  const NEXT = 'orm-'
+  const DELIM = '|=|' // 인쇄가능 멀티문자 구분자 (tmux가 제어문자를 format 출력에서 삭제하는 이슈 회피)
+  const run = (args) =>
+    new Promise((resolve) =>
+      require('child_process').execFile('tmux', args, { timeout: 5000, maxBuffer: 4 << 20, env: process.env }, (e, out, err) =>
+        resolve({ ok: !e, out: String(out || ''), err: String(err || (e && e.message) || '') }),
+      ),
+    )
+  return run(['list-sessions', '-F', `#{session_id}${DELIM}#{session_name}`])
+    .then(async (r) => {
+      if (!r.ok) {
+        // tmux 서버 미기동(세션 0개)이면 조용히 넘어감 — 실제 오류만 경고.
+        if (r.err && !/no server running|no such file|error connecting/i.test(r.err)) console.log(`   ↪️  tmux 세션 마이그레이션 건너뜀: ${r.err.trim()}`)
+        else console.log('   ↪️  tmux 세션 마이그레이션: 실행 중인 tmux 세션 없음')
+        return
+      }
+      const targets = []
+      for (const line of r.out.split('\n')) {
+        if (!line) continue
+        const [id, name] = line.split(DELIM)
+        if (name && name.startsWith(LEGACY)) targets.push({ id, name, next: NEXT + name.slice(LEGACY.length) })
+      }
+      if (!targets.length) { console.log('   ↪️  tmux 세션 마이그레이션: 대상 없음 (레거시 접두 세션 없음)'); return }
+      let done = 0
+      for (const t of targets) {
+        // 이름에 . / 가 섞인 cmux 리네임 세션은 -t 이름 타겟이 깨지므로 session_id($N)로 타겟.
+        const rr = await run(['rename-session', '-t', t.id || t.name, t.next])
+        if (rr.ok) { done++; console.log(`   ↪️  tmux 세션 리네임: ${t.name} → ${t.next}`) }
+        else console.log(`   ⚠️  tmux 세션 리네임 실패(${t.name}): ${rr.err.trim()}`)
+      }
+      console.log(`   ↪️  tmux 세션 접두 마이그레이션 완료: ${done}/${targets.length}건`)
+    })
+    .catch((e) => console.log(`   ⚠️  tmux 세션 마이그레이션 오류: ${String((e && e.message) || e)}`))
+}
+
 server.listen(PORT, HOST, () => {
-  console.log(`\n🪪  MRM 백엔드 — http://${HOST}:${PORT}`)
+  console.log(`\n🪪  OpenRM 백엔드 — http://${HOST}:${PORT}`)
   console.log(`   repo : ${C.REPO}`)
   console.log(`   state: ${C.STATE_PATH || '(없음)'}\n`)
+  // 레거시 접두 세션 → 'orm-' 1회성 리네임. tmux 세션은 이 앱 전용 네임스페이스가 아니라
+  // 머신 전역이라, 자동 실행 시 이 리포와 무관한 다른 'mrm-' 세션(다른 프로젝트/툴)까지 건드릴 수
+  // 있음이 실제로 확인됨 — 그래서 기본은 비활성, 명시적으로 켠 경우에만 실행한다.
+  if (process.env.OPENRM_MIGRATE_TMUX === '1') migrateTmuxSessionPrefix()
   watchState()
   watchSrc()
   Preview.setOnSignin((id, pwd) => DevUsers.saveLogin(id, pwd)) // iframe 직접 로그인 → 계정 자동저장

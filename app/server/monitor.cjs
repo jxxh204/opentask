@@ -1,4 +1,4 @@
-// monitor.cjs — MRM이 직접 돌리는 PR·이슈 모니터 (cmux "10분 모니터링" 세션 대체).
+// monitor.cjs — OpenRM이 직접 돌리는 PR·이슈 모니터 (cmux "10분 모니터링" 세션 대체).
 // 단순 이벤트 로그가 아니라 "특이사항(findings) 추적기": 미해결 항목을 상태로 관리하고
 // 같은 티켓의 PR을 링크하며, 해결됐다 재발하면 경보한다. 변화는 SSE로 토스트 푸시.
 //   finding 출처: GitHub 이슈(involves:@me) · PR CI 실패 · PR 변경요청(CHANGES_REQUESTED)
@@ -12,18 +12,19 @@ const C = require('./collector.cjs')
 const Sentry = require('./sentry.cjs')
 const Prompts = require('./prompts.cjs')
 const Ticket = require('./ticket.cjs')
+const AgentJobs = require('./store/agentJobs.cjs')
 
-const REPOS = (process.env.MRM_PR_REPOS
-	? process.env.MRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
+const REPOS = (process.env.OPENRM_PR_REPOS
+	? process.env.OPENRM_PR_REPOS.split(',').map((s) => s.trim()).filter(Boolean)
 	: []
 ).map((slug) => ({ slug, name: slug.split('/').pop() }))
 
 const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20 }, (e, o) => r(e ? '' : String(o || ''))))
 const ticketOf = Ticket.ticketOf
 // 이슈 검색 필터 (기본: 내가 연루된 것. 전체 팀 이슈는 'state:open', 내가 만든 것은 'author:@me')
-const ISSUE_SEARCH = process.env.MRM_MONITOR_ISSUE_SEARCH || 'involves:@me'
+const ISSUE_SEARCH = process.env.OPENRM_MONITOR_ISSUE_SEARCH || 'involves:@me'
 
-let intervalMs = Number(process.env.MRM_MONITOR_MS) || 180000 // 기본 3분
+let intervalMs = Number(process.env.OPENRM_MONITOR_MS) || 180000 // 기본 3분
 let timer = null
 let running = false
 let lastPoll = 0
@@ -202,16 +203,16 @@ function testEvent() {
 }
 
 // ── 🚨 장애 이슈 인박스 (모니터링 채널 → 저장 → 확인 → 업무 전환) ──
-// MRM(Node)은 Slack을 못 읽으므로, headless claude(-p)가 MRM_ALERT_CHANNEL(Slack 채널 ID)을 읽어
+// OpenRM(Node)은 Slack을 못 읽으므로, headless claude(-p)가 OPENRM_ALERT_CHANNEL(Slack 채널 ID)을 읽어
 // 미해결 알림 목록을 JSON으로 회수 → 트래커에 저장. 새 미해결 알림은 토스트로 알린다. 미설정이면 비활성.
-const ALERT_CHANNEL = process.env.MRM_ALERT_CHANNEL || ''
-const ALERTS_FILE = process.env.MRM_ALERTS_FILE || path.join(__dirname, '..', '.mrm-alerts.json')
-const ALERT_CLAUDE_BIN = process.env.MRM_CLAUDE_BIN || 'claude'
+const ALERT_CHANNEL = process.env.OPENRM_ALERT_CHANNEL || ''
+const ALERTS_FILE = process.env.OPENRM_ALERTS_FILE || path.join(__dirname, '..', '.openrm-alerts.json')
+const ALERT_CLAUDE_BIN = process.env.OPENRM_CLAUDE_BIN || 'claude'
 let alerts = {}
 let alertsFetchedAt = 0
 let alertsFetching = false
 let alertsTimer = null
-let alertsIntervalMs = Number(process.env.MRM_ALERTS_MS) || 0 // 0=수동, >0=자동
+let alertsIntervalMs = Number(process.env.OPENRM_ALERTS_MS) || 0 // 0=수동, >0=자동
 try {
 	alerts = JSON.parse(fs.readFileSync(ALERTS_FILE, 'utf8'))
 } catch (_) {
@@ -387,6 +388,55 @@ async function askReviewFinding({ key, question }) {
 		return { ok: false, error: String((err && err.message) || err) }
 	}
 }
+// 모니터 알림 → 액션: 임의 finding(Sentry/Vitals 등, PR 없어도 됨)을 사람 지시와 함께 headless claude로
+// "조사"시킨다 — askReviewFinding과 달리 실제 코드 수정은 하지 않고 원인·제안만 회수(반영은 사람이 별도 진행).
+async function dispatchAction({ key, instruction }) {
+	if (!instruction || !String(instruction).trim()) return { ok: false, error: '지시 내용을 입력하세요.' }
+	const f = findings[key]
+	if (!f) return { ok: false, error: '해당 항목을 찾을 수 없습니다(새로고침 후 재시도).' }
+	const job = AgentJobs.create({ kind: 'monitor-dispatch', cwd: C.REPO, refType: 'finding', refId: key, input: { instruction }, label: f.title })
+	const prompt = Prompts.render('monitor.dispatch', { kind: f.kind, title: f.title, repo: f.repo || '', detail: f.detail || '', url: f.url || '', instruction: String(instruction).trim() })
+	try {
+		const r = await new Promise((res) => {
+			const child = execFile(ALERT_CLAUDE_BIN, ['-p', prompt, '--output-format', 'json'], { cwd: C.REPO, timeout: 150000, maxBuffer: 16 << 20, env: process.env }, (e, o, er) =>
+				res({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') }),
+			)
+			try {
+				child.stdin.end()
+			} catch (_) {}
+		})
+		if (!r.ok) {
+			const result = { ok: false, error: '조사 실패: ' + ((r.err.split('\n').find((l) => l.trim()) || '').slice(0, 140) || 'claude 실행 실패') }
+			AgentJobs.markDone(job.id, result)
+			return result
+		}
+		let text = r.out
+		try {
+			const j = JSON.parse(r.out)
+			text = j.result || j.text || r.out
+		} catch (_) {}
+		let data = null
+		const m = String(text).match(/\{[\s\S]*\}/)
+		if (m) {
+			try {
+				data = JSON.parse(m[0])
+			} catch (_) {}
+		}
+		const result = {
+			ok: true,
+			summary: (data && data.summary) || String(text || '').slice(0, 1500),
+			rootCause: (data && data.rootCause) || null,
+			suggestion: (data && data.suggestion) || null,
+			confidence: (data && data.confidence) || null,
+		}
+		AgentJobs.markDone(job.id, result)
+		return { ok: true, key, jobId: job.id, result }
+	} catch (err) {
+		const result = { ok: false, error: String((err && err.message) || err) }
+		AgentJobs.markDone(job.id, result)
+		return result
+	}
+}
 function ackAlert({ id }) {
 	if (alerts[id]) {
 		alerts[id].acked = true
@@ -486,8 +536,8 @@ function ingestSlackEvent(ev) {
 // 대상 레포에서 claude를 띄우고 `/loop <N>m <skill>` 전송. tmux라 OpenRM 재시작에도 생존.
 // 루프 2종: ops(운영 장애 모니터링) · pr(PR 점검 모니터링) — 각각 독립 tmux 세션.
 const LOOPS = {
-	ops: { session: 'mrm-monitor', label: '운영', skill: process.env.MRM_MONITOR_SKILL || '/crm-ops-monitoring', defaultMin: 10 },
-	pr: { session: 'mrm-pr-monitor', label: 'PR', skill: process.env.MRM_PR_MONITOR_SKILL || '/crm-ops-monitoring --pr-only', defaultMin: 15 },
+	ops: { session: 'orm-monitor', label: '운영', skill: process.env.OPENRM_MONITOR_SKILL || '/crm-ops-monitoring', defaultMin: 10 },
+	pr: { session: 'orm-pr-monitor', label: 'PR', skill: process.env.OPENRM_PR_MONITOR_SKILL || '/crm-ops-monitoring --pr-only', defaultMin: 15 },
 }
 // 루프 간격은 "초" 단위로 관리 (PR 루프는 최소 30초까지). /loop 명령엔 30s / 15m 형태로.
 const loopSec = { ops: LOOPS.ops.defaultMin * 60, pr: 30 } // PR 루프 기본 30초
@@ -547,4 +597,4 @@ async function stopClaude(kind = 'ops') {
 	return { ok: true }
 }
 
-module.exports = { start, stop, poll, setIntervalMs, getState, subscribe, testEvent, claudeStatus, startClaude, stopClaude, fetchAlerts, ackAlert, markAlertConverted, removeAlert, alertsState, setAlertsInterval, ingestSlackEvent, ALERT_CHANNEL, askReviewFinding }
+module.exports = { start, stop, poll, setIntervalMs, getState, subscribe, testEvent, claudeStatus, startClaude, stopClaude, fetchAlerts, ackAlert, markAlertConverted, removeAlert, alertsState, setAlertsInterval, ingestSlackEvent, ALERT_CHANNEL, askReviewFinding, dispatchAction }

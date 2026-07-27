@@ -1,0 +1,129 @@
+.card {
+	border: 1px solid var(--line2);
+	border-radius: 11px;
+	padding: 12px 14px;
+}
+
+.head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.sevBadge {
+	font-size: 9.5px;
+	font-weight: 700;
+	border-radius: 5px;
+	padding: 2px 7px;
+}
+
+.who {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--ink);
+}
+
+.file {
+	font-size: 10px;
+	color: var(--t3);
+}
+
+.at {
+	font-size: 10px;
+	color: var(--t3);
+	margin-left: auto;
+}
+
+.stateLabel {
+	font-size: 10px;
+	font-weight: 700;
+}
+
+.body {
+	font-size: 12px;
+	line-height: 1.6;
+	color: var(--t2);
+	margin-top: 9px;
+}
+
+.replyBox {
+	margin-top: 9px;
+	padding: 9px 11px;
+	border-radius: 9px;
+	background: var(--vtint);
+	border-left: 2px solid var(--violet);
+}
+
+.replyLabel {
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--violet);
+	margin-bottom: 4px;
+}
+
+.replyText {
+	font-size: 11.5px;
+	line-height: 1.55;
+	color: var(--t2);
+}
+
+.disputeArea {
+	margin-top: 11px;
+}
+
+.disputeTextarea {
+	width: 100%;
+	height: 70px;
+	padding: 9px 11px;
+	border-radius: 9px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	color: var(--ink);
+	font-size: 11.5px;
+	line-height: 1.5;
+	resize: none;
+	outline: none;
+}
+
+.actions {
+	display: flex;
+	gap: 7px;
+	margin-top: 11px;
+}
+
+.applyBtn {
+	height: 30px;
+	padding: 0 13px;
+	border-radius: 8px;
+	background: var(--green);
+	border: none;
+	cursor: pointer;
+	color: #08240f;
+	font-size: 11.5px;
+	font-weight: 700;
+}
+
+.disputeBtn {
+	height: 30px;
+	padding: 0 13px;
+	border-radius: 8px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	cursor: pointer;
+	color: var(--t2);
+	font-size: 11.5px;
+	font-weight: 600;
+}
+
+.sendBtn {
+	height: 30px;
+	padding: 0 13px;
+	border-radius: 8px;
+	background: var(--violet);
+	border: none;
+	cursor: pointer;
+	color: #fff;
+	font-size: 11.5px;
+	font-weight: 700;
+}

@@ -1,0 +1,48 @@
+/* OpenRM design tokens — single reconciled source (PRD §6).
+   Prototype pages each used slightly different variable names for the same
+   role (e.g. 디버깅's --surf/--surf2/--btint vs 개발실's --card/--card2/--vtint,
+   아키텍처's --muted vs --t3) — this file is the one canonical set every
+   component imports. Per-page background is an intentional variation (see
+   each page's root element), not a competing token system. */
+
+:root {
+	color-scheme: dark;
+
+	/* app-wide default background; pages may override on their own root */
+	--bg: #0e0e11;
+
+	--card: #141417;
+	--card2: #17171b;
+	--card-hover: #1b1b20;
+
+	--ink: #ededf0;
+	--t2: #a5a5ac;
+	--t3: #6a6a72;
+
+	--line: #1c1c20;
+	--line2: #26262b;
+
+	/* semantic accents — PRD §2 color discipline:
+	   violet=agent/selection/chain(serial), blue=PR/link, green=progress/success/parallel,
+	   amber=waiting/caution, red=failure/delete */
+	--violet: #8b7cf0;
+	--vtint: rgba(139, 124, 240, 0.14);
+	--blue: #579dff;
+	--btint: rgba(87, 157, 255, 0.14);
+	--green: #3ecf8e;
+	--amber: #e0a436;
+	--red: #e0655c;
+
+	/* Architecture page node-kind colors — aliased onto the base 6 plus one new hue */
+	--arch-table: var(--violet);
+	--arch-fn: #28c0d4;
+	--arch-domain: var(--blue);
+	--arch-page: var(--green);
+	--arch-route: var(--amber);
+
+	--font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+	--font-sans: 'Pretendard', 'Pretendard Variable', -apple-system, 'Apple SD Gothic Neo', system-ui, sans-serif;
+
+	--radius-card: 14px;
+	--radius-chip: 8px;
+}

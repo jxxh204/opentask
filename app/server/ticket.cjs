@@ -1,6 +1,6 @@
-// ticket.cjs — 티켓 접두사(예: GBIZ, JIRA, PROJ) 중앙 설정. MRM_TICKET_PREFIX로 자기 프로젝트에 맞게 바꾼다.
+// ticket.cjs — 티켓 접두사(예: GBIZ, JIRA, PROJ) 중앙 설정. OPENRM_TICKET_PREFIX로 자기 프로젝트에 맞게 바꾼다.
 'use strict'
-const PREFIX = process.env.MRM_TICKET_PREFIX || 'PROJ'
+const PREFIX = process.env.OPENRM_TICKET_PREFIX || 'PROJ'
 const RE_SRC = `${PREFIX}-\\d+`
 
 function re(flags) {

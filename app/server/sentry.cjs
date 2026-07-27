@@ -1,5 +1,5 @@
 // sentry.cjs — Sentry를 '직접' 조회 (스레드/Slack 경유 X). 운영 서버 에러를 API로 상시 감시.
-// 토큰은 .mrm-settings.json(gitignore) 또는 env(SENTRY_AUTH_TOKEN·SENTRY_ORG). org 기본값 없음(설정 필요).
+// 토큰은 .openrm-settings.json(gitignore) 또는 env(SENTRY_AUTH_TOKEN·SENTRY_ORG). org 기본값 없음(설정 필요).
 'use strict'
 const https = require('https')
 const Settings = require('./settings.cjs')

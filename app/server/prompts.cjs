@@ -1,9 +1,9 @@
-// 편집 가능한 프롬프트 레지스트리 — MRM의 핵심 헤드리스 프롬프트를 런타임에 오버라이드.
-// template의 {토큰}을 render(key, vars)로 치환. 오버라이드는 .mrm-prompts.json(gitignored)에 저장.
+// 편집 가능한 프롬프트 레지스트리 — OpenRM의 핵심 헤드리스 프롬프트를 런타임에 오버라이드.
+// template의 {토큰}을 render(key, vars)로 치환. 오버라이드는 .openrm-prompts.json(gitignored)에 저장.
 // 여기 등록된 프롬프트는 실제 코드가 render()로 읽으므로 UI에서 고치면 즉시 동작이 바뀐다.
 const fs = require('fs')
 const path = require('path')
-const FILE = process.env.MRM_PROMPTS_FILE || path.join(__dirname, '..', '.mrm-prompts.json')
+const FILE = process.env.OPENRM_PROMPTS_FILE || path.join(__dirname, '..', '.openrm-prompts.json')
 
 const REGISTRY = {
 	'review.pr': {
@@ -135,6 +135,24 @@ const REGISTRY = {
 			'요약: {summary}',
 			'{planLine}',
 			'{linksBlock}',
+		].join('\n'),
+	},
+	'monitor.dispatch': {
+		group: '모니터',
+		label: '알림 → 조사 지시',
+		desc: '모니터 알림 → 액션 — 감지된 이슈(Sentry·Vitals 등)를 코드베이스에서 조사시켜 원인·제안을 JSON으로 회수 (실제 코드 수정은 하지 않음)',
+		vars: ['kind', 'title', 'repo', 'detail', 'url', 'instruction'],
+		template: [
+			'OpenRM 모니터가 아래 이슈를 감지했다.',
+			'[이슈] 종류:{kind} · 레포:{repo} · 제목:{title}',
+			'{detail}',
+			'{url}',
+			'[사람의 지시]',
+			'{instruction}',
+			'지시:',
+			'1) 이 저장소(현재 작업 디렉토리)에서 관련 코드를 grep/read로 실제 확인해 원인을 조사해라. 추측 남발 금지 — 근거를 찾은 만큼만 말해.',
+			'2) 코드를 실제로 고치지는 마라 — 이 작업은 조사·제안까지다. 무엇을 어떻게 고치면 되는지 파일:라인 수준으로 구체적으로 제안해라.',
+			'3) 설명·코드블록 없이 JSON만 출력: {"summary":"원인 및 결론 2~3문장(한국어)","rootCause":"파악된 원인 또는 \'불확실\'","suggestion":"구체적 수정 제안 또는 다음 조사 단계","confidence":"high|medium|low"}',
 		].join('\n'),
 	},
 	'monitor.alerts': {

@@ -1,7 +1,7 @@
-// MRM 설정 — 프론트/백엔드 공유. 현재는 리뷰어 설득 브리핑 모드 토글.
+// OpenRM 설정 — 프론트/백엔드 공유. 현재는 리뷰어 설득 브리핑 모드 토글.
 const fs = require('fs')
 const path = require('path')
-const FILE = process.env.MRM_SETTINGS_FILE || path.join(__dirname, '..', '.mrm-settings.json')
+const FILE = process.env.OPENRM_SETTINGS_FILE || path.join(__dirname, '..', '.openrm-settings.json')
 // 액션별 모델 자동 배분 — 작업 난이도↔티어(비용). 티어: Fable(설계·지휘, 최고가) > Opus(제품코드) > Sonnet(표준) > Haiku(추출·기계).
 // Fable-5는 굉장히 비싸므로 '설계/고복잡도'에만. 나머지는 검증된 저비용 티어로.
 const MODEL_POLICY = {
@@ -22,7 +22,9 @@ const MODEL_POLICY = {
 	translate: 'claude-haiku-4-5', // 브랜치명 번역(초경량 — haiku 적합)
 	ppt: 'claude-sonnet-4-6', // PPT 제작 — 발표 덱 초안 생성(구조화 JSON, 품질 필요 → sonnet)
 }
-const DEFAULTS = { reviewMode: true, modelPolicy: MODEL_POLICY, fableLock: false, agentNotify: true } // + Fable 킬스위치 + 에이전트 완료/질문 맥 알림
+// operatorName — 이 인스턴스의 운영자(리뷰어) 이름. 오픈소스 배포라 특정인에 하드코딩 금지 → 설정으로 노출.
+// 기본값 '운영자'는 프롬프트/피드에 그대로 넣어도 조사(가/에게)가 자연스럽게 붙는 일반 명사.
+const DEFAULTS = { reviewMode: true, modelPolicy: MODEL_POLICY, fableLock: false, agentNotify: true, operatorName: '운영자' } // + Fable 킬스위치 + 에이전트 완료/질문 맥 알림
 function modelFor(action) {
 	const s = load()
 	const p = s.modelPolicy || {}
@@ -41,6 +43,12 @@ function modelLabel(id) {
 	return id.replace(/^claude-/, '')
 }
 
+// 운영자 이름 게터 — 빈 값이면 기본값으로 안전하게 폴백(프롬프트 문법 깨짐 방지).
+function operatorName() {
+	const n = load().operatorName
+	return (n && String(n).trim()) || DEFAULTS.operatorName
+}
+
 function load() {
 	try {
 		return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }
@@ -55,4 +63,4 @@ function save(patch) {
 	} catch (_) {}
 	return next
 }
-module.exports = { load, save, get: (k) => load()[k], modelFor, modelLabel, MODEL_POLICY }
+module.exports = { load, save, get: (k) => load()[k], operatorName, modelFor, modelLabel, MODEL_POLICY }

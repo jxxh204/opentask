@@ -1,0 +1,70 @@
+.rail {
+	width: 52px;
+	flex: none;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	background: #08080a;
+	border-right: 1px solid var(--line);
+	padding: 12px 0;
+}
+
+.logo {
+	margin-bottom: 10px;
+}
+
+.spacer {
+	flex: 1;
+}
+
+.item {
+	position: relative;
+	width: 40px;
+	height: 40px;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: var(--t2);
+	background: transparent;
+	transition: background 0.12s;
+}
+.item:hover {
+	background: var(--card);
+}
+.itemActive {
+	background: var(--vtint);
+	color: var(--violet);
+}
+
+.bar {
+	position: absolute;
+	left: -8px;
+	top: 10px;
+	bottom: 10px;
+	width: 3px;
+	border-radius: 0 2px 2px 0;
+	background: transparent;
+}
+.barActive {
+	background: var(--violet);
+}
+
+.setupDot {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	border: 1.5px solid #08080a;
+}
+.dotDone {
+	background: var(--green);
+}
+.dotPending {
+	background: var(--amber);
+}

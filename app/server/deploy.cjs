@@ -6,9 +6,9 @@ const fs = require('fs')
 const path = require('path')
 const C = require('./collector.cjs')
 
-const REG_FILE = process.env.MRM_DEPLOYS_FILE || path.join(__dirname, '..', '.mrm-deploys.json')
-const WEB_REPO = process.env.MRM_DEPLOY_REPO || ''
-const DEPLOY_BASE = process.env.MRM_DEPLOY_BASE || 'develop'
+const REG_FILE = process.env.OPENRM_DEPLOYS_FILE || path.join(__dirname, '..', '.openrm-deploys.json')
+const WEB_REPO = process.env.OPENRM_DEPLOY_REPO || ''
+const DEPLOY_BASE = process.env.OPENRM_DEPLOY_BASE || 'develop'
 
 const gitX = (args, t = 30000) =>
 	new Promise((r) => execFile('git', ['-C', C.REPO, ...args], { timeout: t, maxBuffer: 4 << 20 }, (e, o, er) => r({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') })))

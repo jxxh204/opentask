@@ -117,7 +117,7 @@ async function mcpSession() {
 			jsonrpc: '2.0',
 			id: 1,
 			method: 'initialize',
-			params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'mrm', version: '1' } },
+			params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'openrm', version: '1' } },
 		})
 		const sid = r.headers['mcp-session-id']
 		if (!sid) {
@@ -146,7 +146,7 @@ const toColon = (id) => id.replace('-', ':')
 const deepLink = (key, id) => `https://www.figma.com/file/${key}?node-id=${encodeURIComponent(id)}`
 
 // MCP로 미리 받아둔 PNG 영구 저장소 (REST 페이월 우회). 있으면 이걸 최우선 제공 → 토큰/만료 무관.
-const IMG_DIR = path.join(os.tmpdir(), 'mrm-figma-img')
+const IMG_DIR = path.join(os.tmpdir(), 'openrm-figma-img')
 const safeName = (id) => id.replace(/[^\w.-]/g, '_')
 const localPath = (id) => path.join(IMG_DIR, safeName(id) + '.png')
 function hasLocal(id) {
@@ -161,7 +161,7 @@ function imageFile(id) {
 }
 
 // 디스크 영속 캐시(노드ID→{at,url}) + rate-limit 쿨다운. 재시작·반복 조회에도 Figma 호출 최소화.
-const CACHE_FILE = path.join(os.tmpdir(), 'mrm-figma-cache.json')
+const CACHE_FILE = path.join(os.tmpdir(), 'openrm-figma-cache.json')
 const CACHE_TTL = 6 * 3600 * 1000 // 6시간 (이미지 URL 만료 전 재사용)
 let cache = {}
 try {
