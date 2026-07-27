@@ -16,6 +16,10 @@ const StoreTasks = require('./store/tasks.cjs')
 
 // folderId → { running, currentWaveIndex, sessions:[{taskId,tmuxSession,worktreePath}], log:[{t,dot,at}] }
 const states = new Map()
+// folderId currently inside start() — guards a concurrent double-start (e.g. double-click) from
+// racing on the same task's Worktrees.ensure()/create() (git worktree add is not safe to run twice
+// in parallel for the same path/branch). Frontend also disables the button, this is belt-and-suspenders.
+const starting = new Set()
 
 function blank() {
 	return { running: false, currentWaveIndex: 0, sessions: [], log: [] }
@@ -49,44 +53,50 @@ function isLive(live, name) {
 }
 
 async function start(folderId) {
-	const folder = StoreFolders.get(folderId)
-	if (!folder) return { ok: false, error: 'folder not found' }
-	const tasks = StoreTasks.listByFolder(folderId) // order_idx ASC = 웨이브 순서
-	if (!tasks.length) return { ok: false, error: '폴더에 태스크가 없습니다.' }
-	const s = ensureState(folderId)
-	const live = await Term.list().catch(() => [])
-	for (const task of tasks) {
-		// 이전 start에서 만든 세션이 아직 살아있으면 재사용(중복 생성 금지)
-		const existing = s.sessions.find((x) => x.taskId === task.id)
-		if (existing && isLive(live, existing.tmuxSession)) {
-			pushLog(s, `재사용: "${task.name}" → ${existing.tmuxSession}`, 'blue')
-			continue
+	if (starting.has(folderId)) return { ok: false, error: '이미 시작 중입니다 — 잠시 후 다시 시도하세요.' }
+	starting.add(folderId)
+	try {
+		const folder = StoreFolders.get(folderId)
+		if (!folder) return { ok: false, error: 'folder not found' }
+		const tasks = StoreTasks.listByFolder(folderId) // order_idx ASC = 웨이브 순서
+		if (!tasks.length) return { ok: false, error: '폴더에 태스크가 없습니다.' }
+		const s = ensureState(folderId)
+		const live = await Term.list().catch(() => [])
+		for (const task of tasks) {
+			// 이전 start에서 만든 세션이 아직 살아있으면 재사용(중복 생성 금지)
+			const existing = s.sessions.find((x) => x.taskId === task.id)
+			if (existing && isLive(live, existing.tmuxSession)) {
+				pushLog(s, `재사용: "${task.name}" → ${existing.tmuxSession}`, 'blue')
+				continue
+			}
+			// 워크트리 확보 (멱등 — 있으면 재사용, 없으면 base에서 생성). ticket 없으면 name을 raw로 → deriveNames가 슬러그화.
+			const raw = (task.ticket && String(task.ticket).trim()) || task.name
+			const wt = await Worktrees.ensure({ ticket: raw, base: folder.base, desc: task.name })
+			if (!wt.ok) {
+				pushLog(s, `워크트리 실패: "${task.name}" — ${wt.error}`, 'amber')
+				continue
+			}
+			// tmux + interactive claude 세션 (Term.create가 --model 주입/6초 후 seed 주입까지 처리)
+			const seed = `이 태스크를 진행해줘: "${task.name}". ${task.desc || ''}`.trim()
+			const t = await Term.create({ cwd: wt.path, command: 'claude', label: raw, seed })
+			if (!t.ok) {
+				pushLog(s, `세션 시작 실패: "${task.name}" — ${t.error}`, 'amber')
+				continue
+			}
+			const rec = { taskId: task.id, tmuxSession: t.name, worktreePath: wt.path }
+			const idx = s.sessions.findIndex((x) => x.taskId === task.id)
+			if (idx >= 0) s.sessions[idx] = rec
+			else s.sessions.push(rec)
+			pushLog(s, `투입: "${task.name}" → ${t.name} (${wt.dir}${wt.existed ? ', 재사용 워크트리' : ''})`, 'green')
 		}
-		// 워크트리 확보 (멱등 — 있으면 재사용, 없으면 base에서 생성). ticket 없으면 name을 raw로 → deriveNames가 슬러그화.
-		const raw = (task.ticket && String(task.ticket).trim()) || task.name
-		const wt = await Worktrees.ensure({ ticket: raw, base: folder.base, desc: task.name })
-		if (!wt.ok) {
-			pushLog(s, `워크트리 실패: "${task.name}" — ${wt.error}`, 'amber')
-			continue
-		}
-		// tmux + interactive claude 세션 (Term.create가 --model 주입/6초 후 seed 주입까지 처리)
-		const seed = `이 태스크를 진행해줘: "${task.name}". ${task.desc || ''}`.trim()
-		const t = await Term.create({ cwd: wt.path, command: 'claude', label: raw, seed })
-		if (!t.ok) {
-			pushLog(s, `세션 시작 실패: "${task.name}" — ${t.error}`, 'amber')
-			continue
-		}
-		const rec = { taskId: task.id, tmuxSession: t.name, worktreePath: wt.path }
-		const idx = s.sessions.findIndex((x) => x.taskId === task.id)
-		if (idx >= 0) s.sessions[idx] = rec
-		else s.sessions.push(rec)
-		pushLog(s, `투입: "${task.name}" → ${t.name} (${wt.dir}${wt.existed ? ', 재사용 워크트리' : ''})`, 'green')
+		// 실제로 세션이 하나라도 떴을 때만 running(정직한 상태 — advance가 헛돌지 않게). 스펙의 "running=true"는 정상경로.
+		s.running = s.sessions.length > 0
+		s.currentWaveIndex = 0
+		pushLog(s, `오케스트레이션 시작 — ${s.sessions.length}개 세션 (총 ${tasks.length}개 태스크)`, 'violet')
+		return { ok: true, ...getState(folderId) }
+	} finally {
+		starting.delete(folderId)
 	}
-	// 실제로 세션이 하나라도 떴을 때만 running(정직한 상태 — advance가 헛돌지 않게). 스펙의 "running=true"는 정상경로.
-	s.running = s.sessions.length > 0
-	s.currentWaveIndex = 0
-	pushLog(s, `오케스트레이션 시작 — ${s.sessions.length}개 세션 (총 ${tasks.length}개 태스크)`, 'violet')
-	return { ok: true, ...getState(folderId) }
 }
 
 async function advance(folderId) {

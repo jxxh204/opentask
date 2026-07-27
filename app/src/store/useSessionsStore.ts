@@ -19,10 +19,12 @@ export interface SessionsState {
 	dragTaskId: string | null
 	overFolderId: string | null // 'inbox' | folder id | null
 	orchestration: Record<string, OrchestrationState>
+	orchBusy: Record<string, boolean>
 
 	reviewTaskId: string | null
 	disputingReviewId: string | null
 	disputeText: string
+	confirmingApplyId: string | null
 	reviewBusy: boolean
 
 	loadBoard(): Promise<void>
@@ -45,6 +47,8 @@ export interface SessionsState {
 	setDisputeText(v: string): void
 	startDispute(reviewId: string): void
 	cancelDispute(): void
+	startApply(reviewId: string): void
+	cancelApply(): void
 	syncReviews(branchId: string): Promise<void>
 	applyReview(reviewId: string): Promise<void>
 	disputeReview(reviewId: string): Promise<void>
@@ -63,10 +67,12 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	dragTaskId: null,
 	overFolderId: null,
 	orchestration: {},
+	orchBusy: {},
 
 	reviewTaskId: null,
 	disputingReviewId: null,
 	disputeText: '',
+	confirmingApplyId: null,
 	reviewBusy: false,
 
 	loadBoard: async () => {
@@ -152,35 +158,49 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}
 	},
 	startOrchestration: async (folderId) => {
+		if (get().orchBusy[folderId]) return // 더블클릭 등 재진입 방지 — 서버도 동일 가드 있음(방어 중복)
+		set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: true } }))
 		try {
 			const state = await SessionsApi.startOrchestration(folderId)
 			set((s) => ({ orchestration: { ...s.orchestration, [folderId]: state } }))
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
+		} finally {
+			set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: false } }))
 		}
 	},
 	advanceOrchestration: async (folderId) => {
+		if (get().orchBusy[folderId]) return
+		set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: true } }))
 		try {
 			const state = await SessionsApi.advanceOrchestration(folderId)
 			set((s) => ({ orchestration: { ...s.orchestration, [folderId]: state } }))
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
+		} finally {
+			set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: false } }))
 		}
 	},
 	stopOrchestration: async (folderId) => {
+		if (get().orchBusy[folderId]) return
+		set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: true } }))
 		try {
 			const state = await SessionsApi.stopOrchestration(folderId)
 			set((s) => ({ orchestration: { ...s.orchestration, [folderId]: state } }))
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
+		} finally {
+			set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: false } }))
 		}
 	},
 
-	openReview: (taskId) => set({ reviewTaskId: taskId, disputingReviewId: null, disputeText: '' }),
-	closeReview: () => set({ reviewTaskId: null, disputingReviewId: null, disputeText: '' }),
+	openReview: (taskId) => set({ reviewTaskId: taskId, disputingReviewId: null, disputeText: '', confirmingApplyId: null }),
+	closeReview: () => set({ reviewTaskId: null, disputingReviewId: null, disputeText: '', confirmingApplyId: null }),
 	setDisputeText: (v) => set({ disputeText: v }),
 	startDispute: (reviewId) => set({ disputingReviewId: reviewId, disputeText: '' }),
 	cancelDispute: () => set({ disputingReviewId: null, disputeText: '' }),
+	startApply: (reviewId) => set({ confirmingApplyId: reviewId }),
+	cancelApply: () => set({ confirmingApplyId: null }),
 
 	syncReviews: async (branchId) => {
 		set({ reviewBusy: true })
@@ -194,7 +214,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}
 	},
 	applyReview: async (reviewId) => {
-		set({ reviewBusy: true })
+		set({ reviewBusy: true, confirmingApplyId: null })
 		try {
 			await SessionsApi.applyReview(reviewId)
 			await get().loadBoard()

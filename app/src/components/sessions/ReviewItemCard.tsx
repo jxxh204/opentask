@@ -19,6 +19,9 @@ export default function ReviewItemCard({ review }: { review: Review }) {
 	const setDisputeText = useSessionsStore((s) => s.setDisputeText)
 	const startDispute = useSessionsStore((s) => s.startDispute)
 	const cancelDispute = useSessionsStore((s) => s.cancelDispute)
+	const confirmingApplyId = useSessionsStore((s) => s.confirmingApplyId)
+	const startApply = useSessionsStore((s) => s.startApply)
+	const cancelApply = useSessionsStore((s) => s.cancelApply)
 	const applyReview = useSessionsStore((s) => s.applyReview)
 	const disputeReview = useSessionsStore((s) => s.disputeReview)
 	const reviewBusy = useSessionsStore((s) => s.reviewBusy)
@@ -28,6 +31,7 @@ export default function ReviewItemCard({ review }: { review: Review }) {
 	const [stLabel, stFg] = STATE_LABEL[review.state]
 	const isOpen = review.state === 'open'
 	const isDisputing = disputingReviewId === review.id
+	const isConfirmingApply = confirmingApplyId === review.id
 
 	return (
 		<div className={styles.card} style={{ background: isOpen ? 'var(--card2)' : 'var(--card)' }}>
@@ -63,9 +67,21 @@ export default function ReviewItemCard({ review }: { review: Review }) {
 								</button>
 							</div>
 						</div>
+					) : isConfirmingApply ? (
+						<div className={styles.disputeArea}>
+							<p style={{ fontSize: 12, color: 'var(--t2)' }}>이 리뷰를 세션에 보내 코드에 반영시킬까요? 실제로 커밋·푸시까지 진행됩니다.</p>
+							<div className={styles.actions}>
+								<button className={styles.applyBtn} disabled={reviewBusy} onClick={() => applyReview(review.id)}>
+									{reviewBusy ? '적용 중…' : '적용'}
+								</button>
+								<button className={styles.disputeBtn} onClick={cancelApply}>
+									취소
+								</button>
+							</div>
+						</div>
 					) : (
 						<div className={styles.actions}>
-							<button className={styles.applyBtn} disabled={reviewBusy} onClick={() => applyReview(review.id)}>
+							<button className={styles.applyBtn} disabled={reviewBusy} onClick={() => startApply(review.id)}>
 								리뷰 적용
 							</button>
 							<button className={styles.disputeBtn} onClick={() => startDispute(review.id)}>

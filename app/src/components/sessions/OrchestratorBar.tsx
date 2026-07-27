@@ -8,6 +8,7 @@ const POLL_MS = 4000
 
 export default function OrchestratorBar({ folderId, taskCount }: { folderId: string; taskCount: number }) {
 	const orch = useSessionsStore((s) => getOrchestration(s, folderId))
+	const busy = useSessionsStore((s) => !!s.orchBusy[folderId])
 	const refresh = useSessionsStore((s) => s.refreshOrchestration)
 	const start = useSessionsStore((s) => s.startOrchestration)
 	const advance = useSessionsStore((s) => s.advanceOrchestration)
@@ -44,16 +45,16 @@ export default function OrchestratorBar({ folderId, taskCount }: { folderId: str
 				<div className={styles.spacer} />
 				{orch.running ? (
 					<>
-						<span className={styles.runBtn} onClick={() => advance(folderId)}>
+						<span className={styles.runBtn} onClick={() => !busy && advance(folderId)} style={{ opacity: busy ? 0.5 : 1, pointerEvents: busy ? 'none' : 'auto' }}>
 							▶ 일괄 진행
 						</span>
-						<span className={styles.stopBtn} onClick={() => stop(folderId)}>
+						<span className={styles.stopBtn} onClick={() => !busy && stop(folderId)} style={{ opacity: busy ? 0.5 : 1, pointerEvents: busy ? 'none' : 'auto' }}>
 							중지
 						</span>
 					</>
 				) : (
-					<span className={styles.startBtn} onClick={() => start(folderId)}>
-						🎼 오케스트레이션 시작
+					<span className={styles.startBtn} onClick={() => !busy && start(folderId)} style={{ opacity: busy ? 0.5 : 1, pointerEvents: busy ? 'none' : 'auto' }}>
+						{busy ? '시작 중…' : '🎼 오케스트레이션 시작'}
 					</span>
 				)}
 			</div>
