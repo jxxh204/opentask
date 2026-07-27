@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { FIXTURE_GRAPH } from '../api/architecture'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FIXTURE_GRAPH, getArchitectureConfig, getArchitectureGraph, connectDb, scanApi, scanNext, type ArchGraph } from '../api/architecture'
 import DbColumn from '../components/architecture/DbColumn'
 import ApiColumn from '../components/architecture/ApiColumn'
 import RouteColumn from '../components/architecture/RouteColumn'
@@ -16,10 +16,74 @@ export default function ArchitecturePage() {
 	const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
 	const [db, setDb] = useState({ url: '', schema: '', connected: false })
-	const [api, setApi] = useState({ root: 'src/features', base: '/api', connected: true })
-	const [next, setNext] = useState<{ root: string; port: string; router: 'app' | 'pages'; connected: boolean }>({ root: 'src/app', port: '3000', router: 'app', connected: true })
+	const [api, setApi] = useState({ root: '', base: '', connected: false })
+	const [next, setNext] = useState<{ root: string; port: string; router: 'app' | 'pages'; connected: boolean }>({ root: '', port: '', router: 'app', connected: false })
+	const [busy, setBusy] = useState<{ db?: boolean; api?: boolean; next?: boolean }>({})
+	const [errors, setErrors] = useState<{ db?: string; api?: string; next?: string }>({})
+	const [graph, setGraph] = useState<ArchGraph | null>(null)
+	const [usingFixture, setUsingFixture] = useState(false)
 
-	const { dbGroups, apiNodes, routeNodes } = FIXTURE_GRAPH
+	async function reload() {
+		const [cfg, g] = await Promise.all([getArchitectureConfig().catch(() => null), getArchitectureGraph().catch(() => null)])
+		if (cfg) {
+			setDb((s) => ({ ...s, schema: cfg.db.schema || s.schema, connected: cfg.db.connected }))
+			setApi((s) => ({ ...s, root: cfg.api.root || s.root, base: cfg.api.base || s.base, connected: cfg.api.connected }))
+			setNext((s) => ({ ...s, root: cfg.next.root || s.root, port: cfg.next.port != null ? String(cfg.next.port) : s.port, router: cfg.next.router, connected: cfg.next.connected }))
+		}
+		if (g && !g.empty) {
+			setGraph(g)
+			setUsingFixture(false)
+		} else {
+			setGraph(FIXTURE_GRAPH)
+			setUsingFixture(true)
+		}
+	}
+
+	useEffect(() => {
+		reload()
+	}, [])
+
+	async function onConnectDb() {
+		setBusy((b) => ({ ...b, db: true }))
+		setErrors((e) => ({ ...e, db: undefined }))
+		try {
+			const r = await connectDb(db.url.trim(), db.schema.trim())
+			if (!r.ok) setErrors((e) => ({ ...e, db: r.error || '연결 실패' }))
+			else await reload()
+		} catch (e) {
+			setErrors((s) => ({ ...s, db: e instanceof Error ? e.message : String(e) }))
+		} finally {
+			setBusy((b) => ({ ...b, db: false }))
+		}
+	}
+	async function onConnectApi() {
+		setBusy((b) => ({ ...b, api: true }))
+		setErrors((e) => ({ ...e, api: undefined }))
+		try {
+			const r = await scanApi(api.root.trim(), api.base.trim())
+			if (!r.ok) setErrors((e) => ({ ...e, api: r.error || '스캔 실패' }))
+			else await reload()
+		} catch (e) {
+			setErrors((s) => ({ ...s, api: e instanceof Error ? e.message : String(e) }))
+		} finally {
+			setBusy((b) => ({ ...b, api: false }))
+		}
+	}
+	async function onConnectNext() {
+		setBusy((b) => ({ ...b, next: true }))
+		setErrors((e) => ({ ...e, next: undefined }))
+		try {
+			const r = await scanNext(next.root.trim(), next.port.trim(), next.router)
+			if (!r.ok) setErrors((e) => ({ ...e, next: r.error || '스캔 실패' }))
+			else await reload()
+		} catch (e) {
+			setErrors((s) => ({ ...s, next: e instanceof Error ? e.message : String(e) }))
+		} finally {
+			setBusy((b) => ({ ...b, next: false }))
+		}
+	}
+
+	const { dbGroups, apiNodes, routeNodes } = graph ?? FIXTURE_GRAPH
 	const dbKindById = useMemo(() => {
 		const m: Record<string, 'table' | 'fn'> = {}
 		dbGroups.forEach((g) => g.nodes.forEach((n) => (m[n.id] = n.kind)))
@@ -112,6 +176,9 @@ export default function ArchitecturePage() {
 					</div>
 					<p className={styles.subtitle}>
 						DB (테이블 · 함수) <span style={{ color: 'var(--line2)' }}>→</span> API (도메인 queries/actions) <span style={{ color: 'var(--line2)' }}>→</span> Next.js (라우트) · <b style={{ color: 'var(--t2)' }}>보기</b>=의존성 추적 · <b style={{ color: 'var(--t2)' }}>설정</b>=레이어 직접 연결
+						{usingFixture && (
+							<span style={{ color: 'var(--amber)' }}> · 예시 데이터 — 설정에서 연결하면 실제 그래프로 교체됩니다</span>
+						)}
 					</p>
 				</div>
 				<div className={styles.segmented}>
@@ -129,12 +196,14 @@ export default function ArchitecturePage() {
 					db={db}
 					api={api}
 					next={next}
+					busy={busy}
+					errors={errors}
 					onDbChange={(p) => setDb((s) => ({ ...s, ...p }))}
 					onApiChange={(p) => setApi((s) => ({ ...s, ...p }))}
 					onNextChange={(p) => setNext((s) => ({ ...s, ...p }))}
-					onConnectDb={() => setDb((s) => ({ ...s, connected: true }))}
-					onConnectApi={() => setApi((s) => ({ ...s, connected: true }))}
-					onConnectNext={() => setNext((s) => ({ ...s, connected: true }))}
+					onConnectDb={onConnectDb}
+					onConnectApi={onConnectApi}
+					onConnectNext={onConnectNext}
 				/>
 			)}
 

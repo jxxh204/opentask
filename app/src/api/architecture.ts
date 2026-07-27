@@ -1,3 +1,5 @@
+import { api } from './client'
+
 export interface DbNode {
 	id: string
 	kind: 'table' | 'fn'
@@ -26,6 +28,38 @@ export interface ArchGraph {
 	dbGroups: DbGroup[]
 	apiNodes: ApiNode[]
 	routeNodes: RouteNode[]
+	empty?: boolean
+}
+
+export interface ArchConfig {
+	ok: boolean
+	db: { connected: boolean; url: string | null; schema: string }
+	api: { connected: boolean; root: string | null; base: string | null }
+	next: { connected: boolean; root: string | null; port: number | null; router: 'app' | 'pages' }
+}
+export interface ArchActionResult {
+	ok: boolean
+	error?: string
+	tables?: number
+	functions?: number
+	domains?: number
+	routes?: number
+}
+
+export function getArchitectureConfig() {
+	return api.get<ArchConfig>('/api/architecture/config')
+}
+export function getArchitectureGraph() {
+	return api.get<ArchGraph & { ok: boolean }>('/api/architecture/graph')
+}
+export function connectDb(url: string, schema: string) {
+	return api.post<ArchActionResult>('/api/architecture/db/connect', { url, schema })
+}
+export function scanApi(root: string, base: string) {
+	return api.post<ArchActionResult>('/api/architecture/api/scan', { root, base })
+}
+export function scanNext(root: string, port: string, router: 'app' | 'pages') {
+	return api.post<ArchActionResult>('/api/architecture/next/scan', { root, port, router })
 }
 
 // 아무 것도 연결하지 않았을 때 보여줄 예시 그래프 — PRD 프로토타입의 데모 도메인(가계부 앱)을 그대로 사용.

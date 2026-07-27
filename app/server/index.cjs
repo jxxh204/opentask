@@ -93,6 +93,7 @@ const Inspector = require('./debug/inspector.cjs')
 // GitHub 통계 + Monitor 배포 커넥터 (Phase 5.1) — 읽기 전용 집계.
 const GithubStats = require('./githubStats.cjs')
 const DeployStatus = require('./deployStatus.cjs')
+const Architecture = require('./architecture.cjs') // 아키텍처 페이지 백엔드 (Phase 5b, read-only). pg는 dbConnect 안에서 lazy require.
 
 // Monitor 페이지 health 집계. 실 소스 있는 필드만 실제값, 없는 필드는 null(지어내지 않음).
 async function buildMonitorHealth() {
@@ -646,6 +647,23 @@ const server = http.createServer((req, res) => {
   if (url === '/api/monitor/actions/dispatch' && req.method === 'POST') {
     readBody(req).then((b) => Monitor.dispatchAction(b || {})).then((r) => sendJSON(res, r.ok ? 200 : 400, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
+  }
+
+  // ── Architecture / 아키텍처 (Phase 5b) — DB introspection + API/Next 스캔 (전부 read-only) ──
+  if (url === '/api/architecture/config' && req.method === 'GET') {
+    return sendJSON(res, 200, Architecture.config())
+  }
+  if (url === '/api/architecture/graph' && req.method === 'GET') {
+    return sendJSON(res, 200, Architecture.graph())
+  }
+  if (url === '/api/architecture/db/connect' && req.method === 'POST') {
+    return readBody(req).then((b) => Architecture.dbConnect(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/architecture/api/scan' && req.method === 'POST') {
+    return readBody(req).then((b) => Architecture.apiScan(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/architecture/next/scan' && req.method === 'POST') {
+    return readBody(req).then((b) => Architecture.nextScan(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
 
   if (url === '/api/templates') {
