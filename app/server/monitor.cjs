@@ -14,9 +14,11 @@ const Prompts = require('./prompts.cjs')
 const Ticket = require('./ticket.cjs')
 const AgentJobs = require('./store/agentJobs.cjs')
 const AppCfg = require('./store/settings.cjs')
+const StoreTasks = require('./store/tasks.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 // Setup 페이지의 githubRepo 설정을 매번 새로 읽음 — poll() 안에서 호출(모듈 로드 시 얼리지 않음).
 
-const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20 }, (e, o) => r(e ? '' : String(o || ''))))
+const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20, env: ghEnv() }, (e, o) => r(e ? '' : String(o || ''))))
 const ticketOf = Ticket.ticketOf
 // 이슈 검색 필터 (기본: 내가 연루된 것. 전체 팀 이슈는 'state:open', 내가 만든 것은 'author:@me')
 const ISSUE_SEARCH = process.env.OPENRM_MONITOR_ISSUE_SEARCH || 'involves:@me'
@@ -201,9 +203,13 @@ function testEvent() {
 }
 
 // ── 🚨 장애 이슈 인박스 (모니터링 채널 → 저장 → 확인 → 업무 전환) ──
-// OpenRM(Node)은 Slack을 못 읽으므로, headless claude(-p)가 OPENRM_ALERT_CHANNEL(Slack 채널 ID)을 읽어
+// OpenRM(Node)은 Slack을 못 읽으므로, headless claude(-p)가 alertChannel()(Slack 채널 ID)을 읽어
 // 미해결 알림 목록을 JSON으로 회수 → 트래커에 저장. 새 미해결 알림은 토스트로 알린다. 미설정이면 비활성.
-const ALERT_CHANNEL = process.env.OPENRM_ALERT_CHANNEL || ''
+// Setup 페이지의 slackAlertChannel 설정을 매번 새로 읽음(과거엔 OPENRM_ALERT_CHANNEL 환경변수로 부팅 시
+// 한 번만 얼려서, Setup에서 채널을 바꿔도 재시작 전까진 반영이 안 됐다 — REPO/PR_REPOS와 같은 종류의 버그).
+function alertChannel() {
+	return AppCfg.getAppConfig().slackAlertChannel || process.env.OPENRM_ALERT_CHANNEL || ''
+}
 const ALERTS_FILE = process.env.OPENRM_ALERTS_FILE || path.join(__dirname, '..', '.openrm-alerts.json')
 const ALERT_CLAUDE_BIN = process.env.OPENRM_CLAUDE_BIN || 'claude'
 let alerts = {}
@@ -278,12 +284,24 @@ function upsertAlert(a, now) {
 			emit({ kind: 'alert-new', level: 'warn', title: `🔁 재발한 장애 이슈: ${prev.title}${prev.count > 1 ? ` (${prev.count}회)` : ''}`, detail: prev.summary, url: prev.threadUrl, repo: 'monitor' })
 		}
 	}
+	// 같은 장애가 임계치(AppConfig.alertAutoConvertThreshold, 기본 3) 이상 반복되면 사람이 매번 "전환"을
+	// 누르지 않아도 자동으로 개발실 미분류 업무를 만든다. 이미 전환됐거나 해결됐으면 건드리지 않음(중복 생성 방지).
+	const rec = alerts[id]
+	const threshold = Number(AppCfg.getAppConfig().alertAutoConvertThreshold) || 3
+	if (!rec.resolved && !rec.converted && rec.count >= threshold) {
+		try {
+			const task = StoreTasks.create({ folderId: null, name: `[반복 ${rec.count}회] ${rec.title}`, desc: rec.summary || rec.symptom || '' })
+			rec.converted = true
+			rec.autoConvertedTaskId = task.id
+			emit({ kind: 'alert-auto-convert', level: 'info', title: `📋 자동 업무 전환: ${rec.title} (${rec.count}회 반복)`, detail: '개발실 미분류에 추가됨', url: rec.threadUrl, repo: 'monitor' })
+		} catch (_) {}
+	}
 	return added
 }
 async function fetchAlerts() {
 	if (alertsFetching) return { ok: false, error: '이미 읽는 중입니다.' }
 	alertsFetching = true
-	const prompt = Prompts.render('monitor.alerts', { channelId: ALERT_CHANNEL })
+	const prompt = Prompts.render('monitor.alerts', { channelId: alertChannel() })
 	const r = await new Promise((res) => {
 		const child = execFile(ALERT_CLAUDE_BIN, ['-p', prompt, '--output-format', 'json'], { cwd: C.REPO, timeout: 150000, maxBuffer: 16 << 20, env: process.env }, (e, o, er) =>
 			res({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') }),
@@ -509,7 +527,7 @@ function tsToHHMM(ts) {
 function ingestSlackEvent(ev) {
 	if (!ev || ev.type !== 'message') return { ok: false, ignored: 'not-message' }
 	// 다른 채널이면 무시 (모니터링 채널만)
-	if (ev.channel && ev.channel !== ALERT_CHANNEL) return { ok: false, ignored: 'other-channel' }
+	if (ev.channel && ev.channel !== alertChannel()) return { ok: false, ignored: 'other-channel' }
 	// 편집/삭제/조인 등 서브타입은 무시 — 일반 메시지 + 봇 알림 + 스레드-브로드캐스트만
 	if (ev.subtype && !['bot_message', 'thread_broadcast'].includes(ev.subtype)) return { ok: false, ignored: 'subtype:' + ev.subtype }
 	const text = slackEventText(ev)
@@ -595,4 +613,4 @@ async function stopClaude(kind = 'ops') {
 	return { ok: true }
 }
 
-module.exports = { start, stop, poll, setIntervalMs, getState, subscribe, testEvent, claudeStatus, startClaude, stopClaude, fetchAlerts, ackAlert, markAlertConverted, removeAlert, alertsState, setAlertsInterval, ingestSlackEvent, ALERT_CHANNEL, askReviewFinding, dispatchAction }
+module.exports = { start, stop, poll, setIntervalMs, getState, subscribe, testEvent, claudeStatus, startClaude, stopClaude, fetchAlerts, ackAlert, markAlertConverted, removeAlert, alertsState, setAlertsInterval, ingestSlackEvent, askReviewFinding, dispatchAction }

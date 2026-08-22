@@ -205,6 +205,11 @@ async function buildCockpit() {
     .slice(0, 6)
     .map((s) => ({ ticket: s.ticket, name: s.name, branch: s.branch, touchedMs: s.touchedMs, touchedFile: s.touchedFile, dirty: s.dirty, pr: s.pr, isMain: s.isMain }))
 
+  // 브랜치명 → git/PR 요약. Sessions 사이드바가 태스크·서브태스크 행에 PR 배지·ahead/behind를
+  // 실데이터로 붙이는 용도(TaskRow) — streams() 전체를 매번 다시 돌리는 대신 이 캐시된 결과를 재사용.
+  const byBranch = {}
+  for (const s of all) if (s.branch) byBranch[s.branch] = { dirty: s.dirty, ahead: s.ahead, behind: s.behind, pr: s.pr }
+
   const data = {
     ok: true,
     now: { focused, recent },
@@ -216,9 +221,12 @@ async function buildCockpit() {
       prOpen: all.filter((s) => s.pr && !s.pr.draft).length,
       prDraft: all.filter((s) => s.pr && s.pr.draft).length,
       ciFail: all.filter((s) => s.pr && s.pr.ci === 'fail').length,
+      // 사이드바 하단 "master · N 작업" 표시용 — 메인 워크트리(isMain)가 지금 어느 브랜치에 있는지.
+      mainBranch: (all.find((s) => s.isMain) || {}).branch || null,
     },
     devServers: devs,
     active,
+    byBranch,
     streamsTotal: all.length,
     prError,
     builtAt: new Date().toISOString(),

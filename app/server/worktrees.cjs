@@ -68,16 +68,28 @@ function deriveNames(raw, desc) {
 	return { branch, dir: 'at-' + dirSlug }
 }
 
+// base 미지정 시(지금 UI엔 폴더별 base를 정하는 곳이 없어 항상 미지정) 레포의 현재 체크아웃된
+// 브랜치로 폴백. 예전엔 'develop' 하드코딩이었는데, 레포 기본 브랜치 이름이 dev/main/master 등
+// 다르면 매번 "base 브랜치를 찾을 수 없음"으로 조용히 실패했다(오케스트레이션 세션이 0개로 끝남).
+async function detectCurrentBranch(repo) {
+	const r = await gitX(['rev-parse', '--abbrev-ref', 'HEAD'], repo)
+	const b = r.ok ? r.out.trim() : ''
+	return b && b !== 'HEAD' ? b : null // detached HEAD 등이면 폴백 불가
+}
+
 // 새 워크트리 생성 (티켓/브랜치 → at-<번호> 형제 디렉토리에 git worktree add).
 // 브랜치가 이미 있으면 attach, 없으면 base에서 새로 분기.
-async function create({ ticket, base, desc, dir: dirOverride, branch: explicitBranch } = {}) {
+// repoPath/repoBase: 멀티레포 프로젝트에서 태스크가 지정한 레포(store/repos.cjs) — 미지정 시 기존과
+// 동일하게 AppConfig.rootPath(C.REPO) 단일 레포로 동작(하위호환, 동작 변화 없음).
+async function create({ ticket, base, desc, dir: dirOverride, branch: explicitBranch, repoPath, repoBase } = {}) {
+	const repo = repoPath || C.REPO
 	let branch, dir
 	let remoteFetched = false
 	if (explicitBranch) {
 		// 명시 브랜치(예: PR 브랜치)를 워크트리로 — 원격에만 있으면 fetch 후 attach
 		branch = String(explicitBranch).trim()
 		dir = (dirOverride && String(dirOverride).trim()) || ('at-' + branch.replace(new RegExp(`^${Ticket.PREFIX}-`, 'i'), '').replace(/[^a-zA-Z0-9._-]/g, '-')).slice(0, 60)
-		await gitX(['fetch', 'origin', branch], C.REPO).catch(() => {}) // origin/<branch> 갱신
+		await gitX(['fetch', 'origin', branch], repo).catch(() => {}) // origin/<branch> 갱신
 		remoteFetched = true
 	} else {
 		const names = deriveNames(ticket, desc)
@@ -85,26 +97,26 @@ async function create({ ticket, base, desc, dir: dirOverride, branch: explicitBr
 		branch = names.branch
 		dir = (dirOverride && String(dirOverride).trim()) || names.dir
 	}
-	const parent = path.dirname(C.REPO)
+	const parent = path.dirname(repo)
 	const wtPath = path.join(parent, dir)
 	if (fs.existsSync(wtPath)) return { ok: false, error: `이미 존재하는 폴더: ${dir} (기존 워크트리에서 시작하세요)` }
 
-	const baseRef = (base && String(base).trim()) || process.env.OPENRM_NEW_TASK_BASE || 'develop'
-	const localExists = (await gitX(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch], C.REPO)).ok
+	const baseRef = (base && String(base).trim()) || repoBase || process.env.OPENRM_NEW_TASK_BASE || (await detectCurrentBranch(repo)) || 'main'
+	const localExists = (await gitX(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch], repo)).ok
 	let r
 	if (localExists) {
-		r = await gitX(['worktree', 'add', wtPath, branch], C.REPO)
+		r = await gitX(['worktree', 'add', wtPath, branch], repo)
 	} else if (explicitBranch) {
 		// 원격 브랜치로 로컬 브랜치 만들며 워크트리 (origin/<branch> → 폴백 FETCH_HEAD)
-		r = await gitX(['worktree', 'add', '-b', branch, wtPath, 'origin/' + branch], C.REPO)
-		if (!r.ok) r = await gitX(['worktree', 'add', '-b', branch, wtPath, 'FETCH_HEAD'], C.REPO)
+		r = await gitX(['worktree', 'add', '-b', branch, wtPath, 'origin/' + branch], repo)
+		if (!r.ok) r = await gitX(['worktree', 'add', '-b', branch, wtPath, 'FETCH_HEAD'], repo)
 	} else {
-		const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', baseRef], C.REPO)).ok
+		const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', baseRef], repo)).ok
 		if (!baseOk) return { ok: false, error: `base 브랜치를 찾을 수 없음: ${baseRef} (git fetch 필요할 수 있음)` }
-		r = await gitX(['worktree', 'add', '-b', branch, wtPath, baseRef], C.REPO)
+		r = await gitX(['worktree', 'add', '-b', branch, wtPath, baseRef], repo)
 	}
 	if (!r.ok) return { ok: false, error: (r.err || 'git worktree add 실패').split('\n').filter(Boolean).slice(-1)[0] || 'git worktree add 실패' }
-	const envCopied = copyEnvFiles(wtPath)
+	const envCopied = copyEnvFiles(wtPath, repo)
 	return { ok: true, path: wtPath, dir, branch, base: baseRef, created: true, attached: localExists, remoteFetched, envCopied }
 }
 
@@ -132,11 +144,11 @@ async function remove(wtPath, branch) {
 
 // gitignore된 env 파일을 워크트리로 복사 (없으면 next.config rewrites가 undefined로 dev 서버가 깨짐).
 // 멱등 — 대상에 이미 있으면 건드리지 않음(수정본 보존). 워크트리 생성·재사용·dev 시작 때 항상 호출.
-function copyEnvFiles(wtPath) {
+function copyEnvFiles(wtPath, repo = C.REPO) {
 	const ENV_FILES = (process.env.OPENRM_WORKTREE_COPY || '.env.local,.env.development.local,.env.test.local,.env.production.local,.env.sentry-build-plugin').split(',').map((s) => s.trim()).filter(Boolean)
 	const copied = []
 	for (const f of ENV_FILES) {
-		const srcF = path.join(C.REPO, f)
+		const srcF = path.join(repo, f)
 		const dstF = path.join(wtPath, f)
 		try {
 			if (fs.existsSync(srcF) && !fs.existsSync(dstF)) {
@@ -186,17 +198,18 @@ function ensureNodeModules(wtPath) {
 
 // 워크트리 재사용-또는-생성: 폴더가 이미 있으면 그대로 쓰고(existed), 없으면 create.
 // ▶진행이 기존 워크트리에서 이어가도록 — create는 폴더 있으면 에러내지만 ensure는 재사용.
-async function ensure({ ticket, base, desc } = {}) {
+async function ensure({ ticket, base, desc, repoPath, repoBase } = {}) {
+	const repo = repoPath || C.REPO
 	const names = deriveNames(ticket, desc)
 	if (!names) return { ok: false, error: '티켓/브랜치명을 입력하세요.' }
-	const wtPath = path.join(path.dirname(C.REPO), names.dir)
+	const wtPath = path.join(path.dirname(repo), names.dir)
 	if (fs.existsSync(wtPath)) {
 		// 재사용 워크트리에도 빠진 env 파일 보강 (항상 복사 원칙)
-		const envCopied = copyEnvFiles(wtPath)
+		const envCopied = copyEnvFiles(wtPath, repo)
 		const head = (await git(['rev-parse', '--abbrev-ref', 'HEAD'], wtPath)).trim()
 		return { ok: true, path: wtPath, dir: names.dir, branch: head || names.branch, existed: true, created: false, envCopied }
 	}
-	return await create({ ticket, base, desc })
+	return await create({ ticket, base, desc, repoPath, repoBase })
 }
 
 // 정기배포 브랜치 생성: 숫자 번호 → deploy-<번호> 를 develop(기본) 기준으로 만들고 origin에 push.

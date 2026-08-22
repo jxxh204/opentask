@@ -5,14 +5,22 @@ const { execFile } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const C = require('./collector.cjs')
+const AppCfg = require('./store/settings.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 
 const REG_FILE = process.env.OPENRM_DEPLOYS_FILE || path.join(__dirname, '..', '.openrm-deploys.json')
-const WEB_REPO = process.env.OPENRM_DEPLOY_REPO || ''
-const DEPLOY_BASE = process.env.OPENRM_DEPLOY_BASE || 'develop'
+// 우선순위: Setup 페이지의 AppConfig(deployRepo/deployBase) → env 변수(하위호환) → 기본값.
+// 매번 새로 계산 — Setup에서 바꾸면 재시작 없이 바로 반영되게.
+function webRepo() {
+	return AppCfg.getAppConfig().deployRepo || process.env.OPENRM_DEPLOY_REPO || ''
+}
+function deployBase() {
+	return AppCfg.getAppConfig().deployBase || process.env.OPENRM_DEPLOY_BASE || 'develop'
+}
 
 const gitX = (args, t = 30000) =>
 	new Promise((r) => execFile('git', ['-C', C.REPO, ...args], { timeout: t, maxBuffer: 4 << 20 }, (e, o, er) => r({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') })))
-const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20 }, (e, o) => r(e ? '' : String(o || ''))))
+const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20, env: ghEnv() }, (e, o) => r(e ? '' : String(o || ''))))
 
 function loadReg() {
 	try {
@@ -51,7 +59,7 @@ async function worktreeOf(branch) {
 }
 
 async function prOf(branch) {
-	const raw = await gh(['pr', 'list', '-R', WEB_REPO, '--head', branch, '--state', 'all', '-L', '1', '--json', 'number,url,state,title'])
+	const raw = await gh(['pr', 'list', '-R', webRepo(), '--head', branch, '--state', 'all', '-L', '1', '--json', 'number,url,state,title'])
 	try {
 		const a = JSON.parse(raw || '[]')
 		return a[0] || null
@@ -64,7 +72,7 @@ async function list() {
 	const raw = (await gitX(['branch', '--list', 'deploy-*', '--format=%(refname:short)'])).out
 	const branches = raw.split('\n').map((s) => s.trim()).filter(Boolean)
 	const reg = loadReg()
-	const slug = WEB_REPO
+	const slug = webRepo()
 	const out = await Promise.all(
 		branches.map(async (branch) => {
 			const e = reg[branch] || {}
@@ -73,7 +81,7 @@ async function list() {
 				branch,
 				notionUrl: e.notionUrl || null,
 				createdAt: e.createdAt || null,
-				base: e.base || DEPLOY_BASE,
+				base: e.base || deployBase(),
 				branchUrl: `https://github.com/${slug}/tree/${branch}`,
 				pr: pr ? { number: pr.number, url: pr.url, state: pr.state, title: pr.title } : null,
 				worktree: wt,
@@ -81,7 +89,7 @@ async function list() {
 		}),
 	)
 	out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || b.branch.localeCompare(a.branch))
-	return { ok: true, deploys: out, base: DEPLOY_BASE }
+	return { ok: true, deploys: out, base: deployBase() }
 }
 
 async function create({ input, num, notionUrl }) {
@@ -90,17 +98,18 @@ async function create({ input, num, notionUrl }) {
 	if (!n) return { ok: false, error: '배포 번호를 못 찾았어요. 번호(예: 286)를 함께 적어주세요.' }
 	const notion = notionUrl || p.notion || null
 	const branch = 'deploy-' + n[0]
-	const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', DEPLOY_BASE])).ok
-	if (!baseOk) return { ok: false, error: `base 브랜치 없음: ${DEPLOY_BASE}` }
+	const base = deployBase()
+	const baseOk = (await gitX(['rev-parse', '--verify', '--quiet', base])).ok
+	if (!baseOk) return { ok: false, error: `base 브랜치 없음: ${base}` }
 	const exists = (await gitX(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch])).ok
 	if (exists) return { ok: false, error: `이미 있는 브랜치: ${branch}` }
-	const c = await gitX(['branch', branch, DEPLOY_BASE])
+	const c = await gitX(['branch', branch, base])
 	if (!c.ok) return { ok: false, error: (c.err.split('\n').find((l) => l.trim()) || 'branch 생성 실패').slice(0, 140) }
 	const push = await gitX(['push', '-u', 'origin', branch], 60000)
 	const reg = loadReg()
-	reg[branch] = { notionUrl: notion, base: DEPLOY_BASE, createdAt: Date.now() }
+	reg[branch] = { notionUrl: notion, base, createdAt: Date.now() }
 	saveReg(reg)
-	return { ok: true, branch, base: DEPLOY_BASE, notionUrl: notion, pushed: push.ok, pushError: push.ok ? null : (push.err.split('\n').find((l) => l.trim()) || '').slice(0, 160) }
+	return { ok: true, branch, base, notionUrl: notion, pushed: push.ok, pushError: push.ok ? null : (push.err.split('\n').find((l) => l.trim()) || '').slice(0, 160) }
 }
 
 // 삭제: 워크트리(있으면) + 로컬 브랜치 + 원격 브랜치 + 레지스트리. deploy- 접두만 허용.
@@ -135,7 +144,7 @@ async function setNotion({ branch, notionUrl }) {
 	const n = String(notionUrl || '').trim()
 	if (!n) return { ok: false, error: '노션 링크를 입력하세요.' }
 	const reg = loadReg()
-	reg[branch] = { base: DEPLOY_BASE, createdAt: Date.now(), ...(reg[branch] || {}), notionUrl: n }
+	reg[branch] = { base: deployBase(), createdAt: Date.now(), ...(reg[branch] || {}), notionUrl: n }
 	saveReg(reg)
 	return { ok: true, branch, notionUrl: n }
 }

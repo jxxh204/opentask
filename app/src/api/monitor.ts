@@ -68,3 +68,23 @@ export function getMonitorConnectors() {
 export function dispatchMonitorAction(key: string, instruction: string) {
 	return api.post<DispatchResult>('/api/monitor/actions/dispatch', { key, instruction })
 }
+
+// AWS MFA 세션 — 읽기전용 STS 호출(get-session-token/get-caller-identity)만 사용 (server/aws.cjs 참고)
+export interface AwsMfaStatus {
+	valid: boolean
+	error: string | null
+	account: string
+	arn: string
+	serial: string | null
+	hasSerial: boolean
+	expiration: string | null
+	remainingMs: number | null
+	renewedAt: number | null
+}
+
+export function getAwsMfaStatus(force?: boolean) {
+	return api.get<AwsMfaStatus>(`/api/monitor/aws${force ? '?force=1' : ''}`)
+}
+export function renewAwsMfa(code: string) {
+	return api.post<AwsMfaStatus & { ok: boolean; error?: string }>('/api/monitor/aws/mfa', { code })
+}

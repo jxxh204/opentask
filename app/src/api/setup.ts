@@ -4,6 +4,7 @@ export interface AppConfig {
 	rootPath: string | null
 	wtPath: string | null
 	branchPrefix: string | null
+	ticketPrefix: string | null
 	operatorName: string
 	githubRepo: string | null
 	githubRepos: string[]
@@ -19,6 +20,61 @@ export interface AppConfig {
 	sentryProject: string | null
 	awsDeployWebhookUrl: string | null
 	vitalsEndpoint: string | null
+	slackAlertChannel: string | null
+	notionBacklogDb: string | null
+	notionBacklogAssignee: string | null
+	notionBacklogService: string | null
+	notionBacklogPlatform: string | null
+	deployRepo: string | null
+	deployBase: string | null
+	githubOAuthClientId: string | null
+}
+
+// GitHub 연동 — ① gh CLI 위임 ② OAuth Device Flow (server/githubConnect.cjs)
+export interface GhCliStatus {
+	ok: boolean
+	loggedIn: boolean
+	username?: string
+}
+export interface GithubOAuthStart {
+	ok: boolean
+	userCode?: string
+	verificationUri?: string
+	interval?: number
+	expiresIn?: number
+	error?: string
+}
+export interface GithubOAuthPoll {
+	ok: boolean
+	done?: boolean
+	slowDown?: boolean
+	username?: string
+	error?: string
+}
+
+export function getGhCliStatus() {
+	return api.get<GhCliStatus>('/api/setup/github/gh-status')
+}
+export function startGithubOAuth() {
+	return api.post<GithubOAuthStart>('/api/setup/github/oauth/start')
+}
+export function pollGithubOAuth() {
+	return api.post<GithubOAuthPoll>('/api/setup/github/oauth/poll')
+}
+
+export interface OperatorSettings {
+	operatorName: string
+	// server/settings.cjs MODEL_POLICY와 같은 형태 — 액션명 → 실제 claude 모델 id.
+	// 얕은 병합(Settings.save)이라 patch로 보낼 땐 항상 전체 객체를 다시 보내야 한다.
+	modelPolicy?: Record<string, string>
+}
+
+export function getOperatorSettings() {
+	return api.get<{ settings: OperatorSettings }>('/api/settings')
+}
+
+export function updateOperatorSettings(patch: Partial<OperatorSettings>) {
+	return api.post<{ settings: OperatorSettings }>('/api/settings', patch)
 }
 
 export interface SetupStatus {

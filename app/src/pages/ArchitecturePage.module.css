@@ -31,7 +31,7 @@
 	display: flex;
 	gap: 3px;
 	padding: 3px;
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	flex: none;

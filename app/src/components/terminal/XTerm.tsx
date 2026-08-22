@@ -1,19 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 
 // 진짜 임베드 터미널 — xterm.js ↔ (백엔드) node-pty가 tmux 세션에 attach. WebSocket 양방향.
-export default function XTerm({ session, cwd, onClose }: { session: string; cwd?: string; onClose?: () => void }) {
+// VSCode 통합 터미널처럼 패널 자체가 곧 터미널이다 — 별도 "확대" 토글 없이 패널 크기 그대로 쓴다.
+export default function XTerm({ session, cwd, onClose, modelLabel }: { session: string; cwd?: string; onClose?: () => void; modelLabel?: string | null }) {
 	const hostRef = useRef<HTMLDivElement>(null)
-	const [maximized, setMaximized] = useState(false)
-	// 확대 상태에서 ESC → 축소 (ResizeObserver가 크기 변화 감지해 자동 fit)
-	useEffect(() => {
-		if (!maximized) return
-		const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMaximized(false) }
-		document.addEventListener('keydown', onKey)
-		return () => document.removeEventListener('keydown', onKey)
-	}, [maximized])
 
 	useEffect(() => {
 		if (!hostRef.current) return
@@ -75,13 +68,16 @@ export default function XTerm({ session, cwd, onClose }: { session: string; cwd?
 	}, [session, cwd])
 
 	return (
-		<div className={`xterm-wrap ${maximized ? 'maximized' : ''}`}>
+		<div className="xterm-wrap">
 			<div className="xterm-bar">
 				<span className="xterm-name">🖥️ {session}</span>
 				<span style={{ flex: 1 }} />
-				<button className="btn-dry xterm-max" onClick={() => setMaximized((m) => !m)} title={maximized ? '축소 (ESC)' : '전체화면으로 확대'}>
-					{maximized ? '⤡ 축소' : '⤢ 확대'}
-				</button>
+				{modelLabel && (
+					<span className="xterm-model">
+						<span className="dot" />
+						{modelLabel}
+					</span>
+				)}
 				{onClose && (
 					<button className="btn-dry" onClick={onClose} title="패널 닫기 (세션은 유지)">
 						✕ 닫기

@@ -7,6 +7,7 @@ const C = require('./collector.cjs')
 const Active = require('./active.cjs')
 const Ticket = require('./ticket.cjs')
 const AppCfg = require('./store/settings.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 
 // PR의 실제 변경 파일만 verdict (gh files + 워크트리 내용). develop 기준 diff(에픽 전체)와 달리 정확.
 function verdictForFiles(files, repo) {
@@ -38,7 +39,7 @@ function verdictForFiles(files, repo) {
 
 function sh(cmd, args, timeout = 15000) {
 	return new Promise((resolve) =>
-		execFile(cmd, args, { cwd: C.REPO, timeout, maxBuffer: 8 << 20 }, (e, out) => resolve(e ? '' : String(out || ''))),
+		execFile(cmd, args, { cwd: C.REPO, timeout, maxBuffer: 8 << 20, env: cmd === 'gh' ? ghEnv() : process.env }, (e, out) => resolve(e ? '' : String(out || ''))),
 	)
 }
 const gh = (args) => sh('gh', args)

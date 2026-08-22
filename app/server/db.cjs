@@ -146,6 +146,64 @@ const MIGRATIONS = [
 			);
 		`)
 	},
+	// v3 — 태스크별 오케스트레이션 시작 프롬프트. 비어있으면 orchestrator.cjs의 자동 생성 문구로 폴백.
+	(db) => {
+		db.exec(`ALTER TABLE tasks ADD COLUMN start_prompt TEXT;`)
+	},
+	// v4 — 멀티레포 지원. 레포 레지스트리(이름/경로/기본 브랜치/설명) + 태스크별 대상 레포.
+	// repo_id가 비어있으면(레지스트리에 0~1개만 등록된 기존/단일-레포 세팅) 지금처럼 AppConfig.rootPath로 폴백.
+	(db) => {
+		db.exec(`
+			CREATE TABLE repos (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				path TEXT NOT NULL,
+				base TEXT,
+				description TEXT NOT NULL DEFAULT '',
+				order_idx INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL
+			);
+			ALTER TABLE tasks ADD COLUMN repo_id TEXT REFERENCES repos(id) ON DELETE SET NULL;
+			ALTER TABLE tasks ADD COLUMN repo_auto INTEGER NOT NULL DEFAULT 0;
+		`)
+	},
+	// v5 — 폴더(= 사이드바 트리의 최상위 오케스트레이션 단위) 보관함. 완료된 폴더를 지우지 않고
+	// 날짜별로 보존만 하는 프로토타입의 "보관함" 기능 — board()는 archived=0만 보여준다.
+	(db) => {
+		db.exec(`
+			ALTER TABLE folders ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE folders ADD COLUMN archived_at INTEGER;
+		`)
+	},
+	// v6 — AI 판단 감사 로그 + 재요청 카운터 + merge 게이트. 전부 "기획: 이상적 워크플로우" 문서의
+	// ②⑤⑧ 안전장치를 실제 데이터로 옮긴 것 — orchestrator.cjs의 conductor.feed는 인메모리라 서버
+	// 재시작 시 소실되는데(§07), 판정 근거만큼은 재시작과 무관하게 남아야 나중에 감사가 가능하다.
+	(db) => {
+		db.exec(`
+			CREATE TABLE decisions (
+				id TEXT PRIMARY KEY,
+				folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
+				task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+				kind TEXT NOT NULL CHECK (kind IN ('repo_assign', 'repo_verify_hold', 'kind_judge', 'review_verdict')),
+				reason TEXT NOT NULL DEFAULT '',
+				meta_json TEXT,
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX idx_decisions_folder ON decisions(folder_id);
+			CREATE INDEX idx_decisions_task ON decisions(task_id);
+
+			ALTER TABLE reviews ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE reviews ADD COLUMN source TEXT NOT NULL DEFAULT 'human' CHECK (source IN ('human', 'ai'));
+
+			ALTER TABLE folders ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
+		`)
+	},
+	// v7 — mainTask 생성 확인 단계(§12 "AI 제안 + 사람이 자유롭게 덮어쓰기")의 "재시도 횟수(N)" 필드.
+	// 재요청 에스컬레이션 사다리(prReview.cjs applyReview)가 이전엔 1/2/3회차를 하드코딩했는데,
+	// 이제 이 폴더의 실제 N을 기준으로 "새 세션+모델 상향" 시점을 정한다.
+	(db) => {
+		db.exec(`ALTER TABLE folders ADD COLUMN retry_limit INTEGER NOT NULL DEFAULT 3;`)
+	},
 ]
 
 function migrate() {
@@ -159,6 +217,16 @@ function migrate() {
 	}
 }
 migrate()
+
+// Setup 페이지의 "환경변수" 테이블(env_vars, 자유 형식 KEY=VALUE)을 실제 process.env로 주입.
+// db.cjs는 index.cjs의 require 체인에서 가장 먼저 로드되므로(collector.cjs→store/settings.cjs→
+// 여기), ticket.cjs/worktrees.cjs 등 다른 모듈이 모듈 로드 시점에 읽는 process.env.OPENRM_* 값이
+// 실제로 반영된다. 이미 쉘에서 설정된 키는 덮어쓰지 않음(쉘 설정이 항상 우선).
+try {
+	for (const row of db.prepare('SELECT key, value FROM env_vars').all()) {
+		if (row.key && !(row.key in process.env)) process.env[row.key] = row.value
+	}
+} catch (_) {}
 
 function tx(fn) {
 	return db.transaction(fn)

@@ -1,0 +1,495 @@
+.appRoot {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.root {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	background: var(--bg);
+}
+
+/* 사이드바+메인 아래 전체 폭 상태바 — 코크핏 요약(서버/cockpit.cjs 실데이터, SessionShell이 15초마다
+   /api/cockpit를 폴링). 프로토타입의 .statusbar 그대로. */
+.statusbar {
+	flex: none;
+	height: 30px;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 0 14px;
+	background: var(--card);
+	border-top: 1px solid var(--line);
+	font-size: 10.5px;
+	color: var(--t3);
+}
+.sbItem {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+}
+.sbItem b {
+	color: var(--t2);
+	font-weight: 600;
+}
+.sbDot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--green);
+	box-shadow: 0 0 0 3px var(--gtint);
+}
+.sbSep {
+	width: 1px;
+	height: 12px;
+	background: var(--line2);
+	flex: none;
+}
+.sbPill {
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--btint);
+	color: var(--blue);
+}
+.sbSpacer {
+	flex: 1;
+}
+
+.sidebar {
+	width: 268px;
+	flex: 0 0 auto;
+	min-height: 0;
+	background: var(--card);
+	border-right: 1px solid var(--line);
+	display: flex;
+	flex-direction: column;
+}
+
+.head {
+	position: relative;
+	padding: 10px 10px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	border-bottom: 1px solid var(--line);
+}
+
+.repoPicker {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	display: inline-flex;
+}
+.repoSelect {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	color: var(--ink);
+	font-size: 12.5px;
+	font-weight: 700;
+	padding: 7px 9px 7px 10px;
+	cursor: pointer;
+}
+.repoSelect:hover {
+	background: var(--card-hover);
+}
+.repoSelectLabel {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repoSelectChev {
+	flex: none;
+	color: var(--t3);
+	display: flex;
+	transition: transform 0.12s;
+}
+.repoSelectChev svg {
+	width: 13px;
+	height: 13px;
+}
+.open .repoSelectChev {
+	transform: rotate(180deg);
+}
+.repoSelectPanel {
+	position: absolute;
+	top: 34px;
+	left: 0;
+	z-index: 30;
+	width: 100%;
+	min-width: 190px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	padding: 5px;
+}
+.repoSelectOpt {
+	padding: 7px 9px;
+	border-radius: 7px;
+	cursor: pointer;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repoSelectOpt:hover {
+	background: var(--card-hover);
+}
+.repoSelectDivider {
+	height: 1px;
+	background: var(--line);
+	margin: 5px 2px;
+}
+.repoSelectAdd {
+	color: var(--violet);
+	font-weight: 700;
+}
+.repoSelectOpt.selected,
+.selected {
+	color: var(--violet);
+	background: var(--vtint);
+}
+
+.inboxAnchor {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+}
+.inboxTrigger {
+	height: 26px;
+	padding: 0 9px;
+	border-radius: 7px;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	background: transparent;
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 11px;
+	font-weight: 700;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.inboxTrigger:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+.inboxTrigger svg {
+	width: 13px;
+	height: 13px;
+	flex: none;
+}
+.inboxPanel {
+	position: absolute;
+	top: 32px;
+	right: 0;
+	z-index: 30;
+	width: 260px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	padding: 10px;
+}
+.inboxPanelLabel {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--ink);
+	margin-bottom: 6px;
+}
+.inboxInput {
+	width: 100%;
+	min-height: 58px;
+	resize: vertical;
+	background: var(--card);
+	color: var(--ink);
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	font-size: 12px;
+	padding: 8px 9px;
+	margin-bottom: 8px;
+}
+.inboxInput::placeholder {
+	color: var(--t3);
+}
+.inboxSubmit {
+	width: 100%;
+	padding: 7px 0;
+	border-radius: var(--radius-chip);
+	border: none;
+	background: var(--violet);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+.inboxSubmit:hover {
+	opacity: 0.9;
+}
+.inboxSubmit:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+/* 일감 추가/레포 분류가 실제로 진행 중이라는 걸 보여주는 자리 — 이전엔 이 공백에 아무 표시가 없었다. */
+.inboxSubmitSpinner {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1.5px solid rgba(255, 255, 255, 0.4);
+	border-top-color: #fff;
+	animation: inboxSpin 0.7s linear infinite;
+	flex: none;
+}
+@keyframes inboxSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.inboxClassifying {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 9.5px;
+	color: var(--violet);
+	font-weight: 700;
+}
+.inboxClassifying .inboxSubmitSpinner {
+	border-color: var(--vtint);
+	border-top-color: var(--violet);
+}
+.inboxPanelHint {
+	margin-top: 8px;
+	font-size: 10px;
+	line-height: 1.5;
+	color: var(--t3);
+}
+
+.taskCount {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 10px 4px;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	letter-spacing: 0.03em;
+	cursor: pointer;
+}
+.taskCount:hover {
+	color: var(--t2);
+}
+.tcchev {
+	font-size: 8px;
+	transition: transform 0.12s;
+}
+.taskCount.collapsed .tcchev {
+	transform: rotate(-90deg);
+}
+
+.inboxList {
+	flex: none;
+	max-height: 168px;
+	overflow-y: auto;
+	border-bottom: 1px solid var(--line);
+}
+.inboxRow {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 10px;
+	margin: 0 6px 4px;
+	border-radius: 8px;
+	cursor: pointer;
+}
+.inboxRow:hover {
+	background: var(--card-hover);
+}
+.inboxRowSelected {
+	background: var(--vtint);
+}
+.inboxRowSelected .inboxTitle {
+	color: var(--violet);
+}
+.inboxIcon {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	margin-top: 1px;
+	color: var(--t3);
+}
+.inboxIcon svg {
+	width: 100%;
+	height: 100%;
+}
+.inboxBody {
+	min-width: 0;
+	flex: 1;
+}
+.inboxTitle {
+	font-size: 11.5px;
+	color: var(--ink);
+	line-height: 1.35;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.inboxMeta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 3px;
+}
+.inboxTime {
+	font-size: 9.5px;
+	color: var(--t3);
+}
+.inboxAction {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--violet);
+	padding: 2px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+}
+
+.treeScroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 4px 10px 14px;
+}
+
+.treeEmpty {
+	margin: 4px 0 2px 4px;
+	padding: 8px 7px;
+	font-size: 11px;
+	color: var(--t3);
+}
+
+.foot {
+	flex: none;
+	border-top: 1px solid var(--line);
+	padding: 9px 14px;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 10.5px;
+	color: var(--t3);
+}
+.livedot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--green);
+	box-shadow: 0 0 0 3px var(--gtint);
+}
+
+.archiveRow {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 9px 14px;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--t2);
+	cursor: pointer;
+}
+.archiveRow:hover {
+	background: var(--card-hover);
+}
+.archiveIcon {
+	flex: none;
+	display: flex;
+}
+.archiveIcon svg {
+	width: 14px;
+	height: 14px;
+}
+.archiveCount {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	background: var(--card2);
+	border-radius: var(--radius-chip);
+	padding: 1px 7px;
+	flex: none;
+}
+.archiveRowActive {
+	color: var(--violet);
+	background: var(--vtint);
+}
+.archiveRowActive .archiveCount {
+	color: var(--violet);
+}
+
+.archiveDateLabel {
+	padding: 10px 7px 5px;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	letter-spacing: 0.02em;
+}
+.archiveItemRow {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	padding: 6px 7px;
+	border-radius: 8px;
+}
+.archiveItemRow:hover {
+	background: var(--card-hover);
+}
+.archiveItemBody {
+	min-width: 0;
+	flex: 1;
+}
+.archiveItemTitle {
+	font-size: 12px;
+	color: var(--t2);
+	line-height: 1.35;
+}
+.wtLineSmall {
+	margin-top: 2px;
+	font-size: 9.5px;
+	color: var(--t3);
+	opacity: 0.8;
+}
+.archiveRestoreBtn {
+	flex: none;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--violet);
+	cursor: pointer;
+	padding: 2px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+	white-space: nowrap;
+}
+.archiveRestoreBtn:hover {
+	opacity: 0.85;
+}
+
+
+.workspace {
+	flex: 1 1 auto;
+	min-width: 0;
+}

@@ -18,14 +18,26 @@ function listByFolder(folderId) {
 	return db.prepare('SELECT * FROM tasks WHERE folder_id = ? ORDER BY order_idx ASC').all(folderId)
 }
 
-function create({ folderId, name, desc, kind, ticket }) {
+function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
 	const id = randomUUID()
 	const now = Date.now()
 	const fid = folderId || null
 	const maxOrder = fid
 		? db.prepare('SELECT COALESCE(MAX(order_idx), -1) AS m FROM tasks WHERE folder_id = ?').get(fid).m
 		: db.prepare('SELECT COALESCE(MAX(order_idx), -1) AS m FROM tasks WHERE folder_id IS NULL').get().m
-	db.prepare('INSERT INTO tasks (id, folder_id, order_idx, name, desc, kind, ticket, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, fid, maxOrder + 1, name, desc || '', kind || 'single', ticket || null, now, now)
+	db.prepare('INSERT INTO tasks (id, folder_id, order_idx, name, desc, kind, ticket, start_prompt, repo_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+		id,
+		fid,
+		maxOrder + 1,
+		name,
+		desc || '',
+		kind || 'single',
+		ticket || null,
+		startPrompt || null,
+		repoId || null,
+		now,
+		now,
+	)
 	return get(id)
 }
 
@@ -35,7 +47,20 @@ function update(id, patch) {
 	const name = patch.name ?? cur.name
 	const desc = patch.desc ?? cur.desc
 	const kind = patch.kind ?? cur.kind
-	db.prepare('UPDATE tasks SET name = ?, desc = ?, kind = ?, updated_at = ? WHERE id = ?').run(name, desc, kind, Date.now(), id)
+	const startPrompt = 'startPrompt' in patch ? patch.startPrompt || null : cur.start_prompt
+	const repoId = 'repoId' in patch ? patch.repoId || null : cur.repo_id
+	// repoId를 사람이 직접 지정/변경하면 자동배정 표시(repo_auto)는 해제 — AI 추천이 아니라 확정값이 됨.
+	const repoAuto = 'repoAuto' in patch ? (patch.repoAuto ? 1 : 0) : 'repoId' in patch ? 0 : cur.repo_auto
+	db.prepare('UPDATE tasks SET name = ?, desc = ?, kind = ?, start_prompt = ?, repo_id = ?, repo_auto = ?, updated_at = ? WHERE id = ?').run(
+		name,
+		desc,
+		kind,
+		startPrompt,
+		repoId,
+		repoAuto,
+		Date.now(),
+		id,
+	)
 	return get(id)
 }
 

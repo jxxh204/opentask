@@ -8,12 +8,15 @@ export default function PrReviewModal() {
 	const closeReview = useSessionsStore((s) => s.closeReview)
 	const folders = useSessionsStore((s) => s.folders)
 	const inbox = useSessionsStore((s) => s.inbox)
+	const reviewBusy = useSessionsStore((s) => s.reviewBusy)
+	const syncReviews = useSessionsStore((s) => s.syncReviews)
+	const startAiReview = useSessionsStore((s) => s.startAiReview)
 
 	const allTasks = [...inbox, ...folders.flatMap((f) => f.tasks)]
 	const task = allTasks.find((t) => t.id === reviewTaskId) ?? null
 
-	const primaryPr = task?.branches.find((b) => b.links.some((l) => l.kind === 'pr'))
-	const prLink = primaryPr?.links.find((l) => l.kind === 'pr')
+	const primaryBranch = task?.branches.find((b) => b.links.some((l) => l.kind === 'pr'))
+	const prLink = primaryBranch?.links.find((l) => l.kind === 'pr')
 	const reviews = task?.reviews ?? []
 	const openCount = reviews.filter((r) => r.state === 'open').length
 
@@ -30,6 +33,16 @@ export default function PrReviewModal() {
 				<span className={`m ${styles.counter}`}>
 					미처리 {openCount}/{reviews.length}
 				</span>
+				{primaryBranch && (
+					<>
+						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => syncReviews(primaryBranch.id)} title="GitHub에 사람이 남긴 리뷰 코멘트를 다시 불러옵니다">
+							동기화
+						</button>
+						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => startAiReview(primaryBranch.id)} title="AI가 diff를 읽고 이슈를 냅니다(§12 ⑧)">
+							AI 리뷰
+						</button>
+					</>
+				)}
 				<button className={styles.closeBtn} onClick={closeReview}>
 					✕
 				</button>

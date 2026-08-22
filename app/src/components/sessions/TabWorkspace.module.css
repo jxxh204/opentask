@@ -1,0 +1,263 @@
+.wrap {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+}
+
+.tabbar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 42px;
+	padding: 0 10px;
+	background: var(--card);
+	border-bottom: 1px solid var(--line);
+}
+
+.tab {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 12px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--t3);
+	cursor: pointer;
+}
+.tab:hover {
+	color: var(--t2);
+	background: var(--card-hover);
+}
+.tabActive {
+	color: var(--violet);
+	background: var(--vtint);
+}
+
+.tabClose {
+	font-size: 13px;
+	color: var(--t3);
+	line-height: 1;
+}
+.tabClose:hover {
+	color: var(--red);
+}
+
+.tabRenameInput {
+	width: 90px;
+	height: 20px;
+	padding: 0 4px;
+	border-radius: var(--radius-chip);
+	background: var(--card);
+	border: 1px solid var(--violet);
+	color: var(--ink);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+/* 탭 우클릭 메뉴 — 지금은 이름 변경 하나뿐이지만 향후 탭 설정이 늘어날 자리. */
+.tabMenu {
+	position: absolute;
+	top: 34px;
+	left: 0;
+	z-index: 30;
+	min-width: 120px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	padding: 5px;
+	cursor: default;
+}
+.tabMenuItem {
+	padding: 7px 9px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+}
+.tabMenuItem:hover {
+	background: var(--card-hover);
+}
+
+.cmdkAnchor {
+	position: relative;
+	margin-left: 2px;
+}
+.cmdkBtn {
+	width: 26px;
+	height: 26px;
+	border-radius: var(--radius-chip);
+	background: transparent;
+	border: 1px solid var(--line2);
+	color: var(--t3);
+	font-size: 15px;
+	line-height: 1;
+	cursor: pointer;
+}
+.cmdkBtn:hover {
+	color: var(--ink);
+	background: var(--card-hover);
+}
+.cmdkPanel {
+	position: absolute;
+	top: 32px;
+	left: 0;
+	z-index: 30;
+	width: 220px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	padding: 6px;
+}
+.cmdkItem {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 9px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
+	color: var(--ink);
+	cursor: pointer;
+}
+.cmdkItem:hover {
+	background: var(--card-hover);
+}
+.cmdkBadge {
+	font-family: var(--font-mono);
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--t3);
+	background: var(--line2);
+	border-radius: var(--radius-chip);
+	padding: 1px 6px;
+	flex: none;
+}
+.cmdkDivider {
+	height: 1px;
+	background: var(--line);
+	margin: 5px 2px;
+}
+
+.body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.termWrap {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+.termHost {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.empty,
+.stub {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 40px;
+	gap: 8px;
+}
+.emptyIcon {
+	font-size: 22px;
+	color: var(--t3);
+	margin-bottom: 4px;
+}
+.emptyTitle,
+.stubTitle {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.emptySub,
+.stubSub {
+	font-size: 11.5px;
+	line-height: 1.6;
+	color: var(--t3);
+	max-width: 44ch;
+}
+
+.stubBtn {
+	margin-top: 6px;
+	height: 34px;
+	padding: 0 18px;
+	border-radius: var(--radius-control);
+	border: none;
+	background: var(--violet);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.stubBtn:hover {
+	opacity: 0.9;
+}
+.stubBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.stubError {
+	font-size: 11px;
+	color: var(--red);
+}
+
+/* mainTask 생성 확인 단계(§12) — "기본 접힘 고급 설정". 평소엔 이 한 줄만 보이다가 눌러야 아래
+   폼이 펼쳐진다 — 16개 필드가 한 번에 쏟아지지 않게. */
+.confirmSummary {
+	margin-top: 4px;
+	font-size: 10.5px;
+	color: var(--t3);
+	cursor: pointer;
+	padding: 3px 8px;
+	border-radius: var(--radius-chip);
+	background: var(--card2);
+}
+.confirmSummary:hover {
+	color: var(--t2);
+}
+.confirmForm {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+	max-width: 320px;
+	text-align: left;
+	margin-top: 4px;
+	padding: 10px;
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	background: var(--card2);
+}
+.confirmRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.confirmLabel {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--t2);
+	flex: none;
+}
+.confirmPrompt {
+	width: 100%;
+	min-height: 52px;
+	resize: vertical;
+	font-family: var(--font-sans);
+}

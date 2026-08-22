@@ -1,16 +1,173 @@
-.card {
-	border-radius: 13px;
-	overflow: hidden;
-	transition: border-color 0.12s, background 0.12s;
+.node {
+	margin-bottom: 2px;
 }
 
 .head {
+	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 12px 14px;
+	gap: 7px;
+	padding: 7px 7px;
+	border-radius: var(--radius-chip);
 	cursor: pointer;
+}
+.head:hover {
+	background: var(--card-hover);
+}
+.headSelected {
+	background: var(--vtint);
+}
+.headSelected .nameInput,
+.headSelected .nameText {
+	color: var(--violet);
+	font-weight: 700;
+}
+
+/* 우클릭 "이름 변경" 메뉴 — 클릭 한 번으로 바로 편집되던 인풋 대신, 실수로 이름이 안 바뀌게. */
+.ctxMenu {
+	position: absolute;
+	top: 34px;
+	left: 30px;
+	z-index: 30;
+	min-width: 120px;
 	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	padding: 5px;
+	cursor: default;
+}
+.ctxMenuItem {
+	padding: 7px 9px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+}
+.ctxMenuItem:hover {
+	background: var(--card-hover);
+}
+
+/* 링크 클러스터(Figma/Notion/Slack/PR) — 이 태스크 산하 서브태스크·브랜치 링크 전체를 종류별로
+   모아 아이콘 하나씩만 보여준다. 프로토타입의 .link-cluster/.link-panel 그대로. */
+.linkAnchor {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+}
+.linkCluster {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 2px 4px;
+	border-radius: var(--radius-chip);
+	cursor: pointer;
+}
+.linkCluster:hover {
+	background: var(--card-hover);
+}
+.linkIcon {
+	width: 12px;
+	height: 12px;
+	display: flex;
+	color: var(--t3);
+	flex: none;
+}
+.linkIcon svg {
+	width: 100%;
+	height: 100%;
+}
+.linkCluster:hover .linkIcon {
+	color: var(--t2);
+}
+.linkPanel {
+	position: absolute;
+	top: 22px;
+	left: 0;
+	z-index: 30;
+	width: 220px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	padding: 8px;
+}
+.linkPanelGroup {
+	padding: 4px 2px;
+}
+.linkPanelGroup + .linkPanelGroup {
+	border-top: 1px solid var(--line);
+	margin-top: 4px;
+	padding-top: 7px;
+}
+.linkPanelSrc {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	margin-bottom: 3px;
+}
+.linkPanelSrc svg {
+	width: 12px;
+	height: 12px;
+}
+.linkPanelItem {
+	display: block;
+	font-size: 11.5px;
+	color: var(--ink);
+	padding: 4px 6px;
+	border-radius: var(--radius-chip);
+	line-height: 1.4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.linkPanelItem:hover {
+	background: var(--card-hover);
+}
+
+.archiveBtn {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	border-radius: var(--radius-chip);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t3);
+	opacity: 0;
+	visibility: hidden;
+}
+.archiveBtn svg {
+	width: 12px;
+	height: 12px;
+}
+.head:hover .archiveBtn {
+	opacity: 1;
+	visibility: visible;
+}
+.archiveBtn:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+.archiveConfirm {
+	width: auto;
+	padding: 0 6px;
+	opacity: 1 !important;
+	visibility: visible;
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--red);
+	background: var(--rtint);
+}
+.archiveConfirm:hover {
+	background: var(--rtint);
+	color: var(--red);
 }
 
 .chevron {
@@ -22,50 +179,153 @@
 	transform: rotate(90deg);
 }
 
-.nameInput {
-	font-size: 13.5px;
-	font-weight: 800;
-	color: var(--ink);
-	width: 200px;
-	background: transparent;
-	border: none;
-	outline: none;
-}
-.nameInput:focus {
-	background: #1b1b20;
-	border-radius: 6px;
-}
-
-.count {
-	font-size: 10px;
-	font-weight: 700;
-	color: var(--violet);
-	background: var(--vtint);
-	border-radius: 6px;
-	padding: 2px 8px;
-}
-
-.base {
-	font-size: 10px;
-	color: var(--t3);
-}
-
-.body {
-	padding: 0 8px 8px;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-height: 46px;
-}
-
-.emptyDrop {
+/* 프로토타입의 .agent-status와 동일 — 16x16 원, 아이콘 9x9. "완료"는 실데이터에 없어(라이브
+   git/gh 조인 필요) 지어내지 않고, 조율 중(보라 스피너)/대기(시계) 두 상태만 실데이터로 표현. */
+.statusIcon {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	flex: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	height: 42px;
-	margin-top: 6px;
-	border: 1px dashed var(--line2);
-	border-radius: 9px;
-	font-size: 11px;
+}
+.statusIcon svg {
+	width: 9px;
+	height: 9px;
+}
+.running {
+	background: var(--vtint);
+	color: var(--violet);
+}
+.waiting {
+	background: var(--atint);
+	color: var(--amber);
+}
+.spinner {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 2px solid var(--line2);
+	border-top-color: var(--violet);
+	animation: folderSpin 0.7s linear infinite;
+}
+@keyframes folderSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* auto_merge가 켜진 mainTask는 눈에 띄어야 한다 — 사람 확인 없이 실제 merge가 나갈 수 있다는 신호라
+   amber(대기/주의)를 쓴다(§12 merge 게이트, DESIGN.md 색 체계). */
+.autoMergeBadge {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 1px 6px;
+	border-radius: var(--radius-chip);
+	background: var(--atint);
+	color: var(--amber);
+}
+
+.nameText {
+	flex: 1;
+	min-width: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink);
+	line-height: 1.3;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.nameInput {
+	flex: 1;
+	min-width: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink);
+	line-height: 1.3;
+	background: transparent;
+	border: none;
+	outline: none;
+	text-overflow: ellipsis;
+}
+.nameInput:focus {
+	background: var(--card2);
+	border-radius: var(--radius-chip);
+}
+
+.time {
+	flex: none;
+	font-size: 10px;
 	color: var(--t3);
+}
+
+/* 프로토타입의 task-body — 오케스트레이터는 사이드바 노드가 아니라 워크스페이스 탭이라
+   (TabWorkspace 참고) 여기 나열되는 건 서브태스크(작업)뿐이다. 들여쓰기는 한 단계만. */
+.taskBody {
+	margin: 3px 0 6px 21px;
+	padding-left: 10px;
+	border-left: 1px dashed var(--line);
+	display: flex;
+	flex-direction: column;
+}
+
+.subtaskList {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.emptyDrop {
+	padding: 8px 7px;
+	font-size: 10.5px;
+	color: var(--t3);
+}
+
+/* 접힌 mainTask 카드 — 안 펼쳐도 서브태스크 상태를 미리 보여준다(§10). 우선순위 상위 몇 개 + "+N",
+   TaskRow가 쓰는 색 그대로 축소만 해서 새 색을 만들지 않는다. */
+.previewChips {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin: 2px 0 6px 21px;
+	flex-wrap: wrap;
+}
+.previewChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 2px 7px;
+	border-radius: var(--radius-chip);
+	max-width: 130px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.previewChip.done {
+	background: var(--gtint);
+	color: var(--green);
+}
+.previewChip.running {
+	background: var(--vtint);
+	color: var(--violet);
+}
+.previewChip.waiting {
+	background: var(--atint);
+	color: var(--amber);
+}
+.previewChip.needsAuth,
+.previewChip.needsInput {
+	background: var(--rtint);
+	color: var(--red);
+}
+.previewOverflow {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	flex: none;
 }

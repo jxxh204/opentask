@@ -2,9 +2,51 @@
 // 세션은 'orm-' 접두로 격리 — OpenRM이 만든 것만 list/kill 한다(임의 tmux 세션 보호).
 'use strict'
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const { execFile } = require('child_process')
 const Worktrees = require('./worktrees.cjs') // dev 시작 시 node_modules/env 보장용 (worktrees→collector, 순환 없음)
+const Settings = require('./settings.cjs')
+
+// claude가 한 번도 안 본 cwd에서는 "이 폴더를 신뢰하시겠습니까?" 1회성 확인 다이얼로그가 뜨는데,
+// 이게 뜨면 send-keys로 보낸 seed가 다이얼로그 위에 얹혀 채팅으로 전달되지 못하고 유실된다 —
+// 오케스트레이션은 태스크마다 새 git worktree(=한 번도 안 본 경로)를 만드므로 매번 이 게이트에 걸린다.
+// 워크트리는 사용자가 Setup에서 지정한 자기 레포 안이므로, "Yes, I trust this folder"를 직접 누르는 것과
+// 동일하게 미리 신뢰 등록해 다이얼로그 자체가 안 뜨게 한다. 실패해도 세션 생성은 막지 않음(다이얼로그가
+// 뜨면 뜨는 대로 진행 — best-effort).
+const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.homedir(), '.claude.json')
+// mcpFolderId가 있으면 이 세션은 지휘자다 — mcpDispatch.cjs(§12 "지휘 방식 개선")를 이 cwd의
+// mcpServers에 등록해 curl-in-prompt 대신 구조화된 MCP 툴(dispatch_subtask/log_event/set_subtask_kind)을
+// 쓸 수 있게 한다. 사람 개입 없이 자동 — trustFolder()가 이미 하고 있던 "신뢰 다이얼로그 미리 우회"와
+// 같은 자리, 같은 방식.
+function trustFolder(cwd, mcpFolderId) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
+    cfg.projects = cfg.projects || {}
+    const existing = cfg.projects[cwd] || {}
+    const alreadyTrusted = !!existing.hasTrustDialogAccepted
+    // 신뢰 다이얼로그는 이미 처리됐고 MCP 등록도 필요 없으면 더 손댈 게 없다 — 파일 쓰기 생략.
+    if (alreadyTrusted && !mcpFolderId) return
+    const mcpServers = { ...(existing.mcpServers || {}) }
+    if (mcpFolderId) {
+      mcpServers['opentask-dispatch'] = {
+        command: process.execPath, // Node 바이너리 절대경로 — PATH에 없는 쉘에서도 항상 동작
+        args: [path.join(__dirname, 'mcpDispatch.cjs')],
+        env: { OPENTASK_FOLDER_ID: mcpFolderId, OPENTASK_PORT: String(process.env.OPENRM_PORT || 8770) },
+      }
+    }
+    cfg.projects[cwd] = {
+      allowedTools: [],
+      mcpContextUris: [],
+      enabledMcpjsonServers: [],
+      disabledMcpjsonServers: [],
+      ...existing,
+      mcpServers,
+      hasTrustDialogAccepted: true,
+    }
+    fs.writeFileSync(CLAUDE_CONFIG_PATH, JSON.stringify(cfg, null, 2))
+  } catch (_) {}
+}
 
 const PREFIX = 'orm-'
 // 필드 구분자 — 멀티문자 토큰. tmux 3.6a가 \x1f 등 제어문자(<0x20)를 format 출력에서 삭제하므로
@@ -108,9 +150,42 @@ async function exists(name) {
   return (await tmux(['has-session', '-t', name])).ok
 }
 
+// 초기 지시(seed)를 claude TUI에 실제로 꽂힐 때까지 재시도하며 주입.
+// 예전엔 고정 6초 setTimeout이었는데, MCP 인증 체크 등으로 부팅이 그보다 오래 걸리면 send-keys가
+// 아직 입력을 못 받는 상태의 pane에 꽂혀 조용히 유실됐다(seed가 "주입됨"으로 기록되는데 실제 세션엔
+// 아무 지시도 안 들어간 실버그 — 오케스트레이션 "시작"이 아무 반응 없는 것처럼 보이는 원인이었다).
+// `❯` 프롬프트 렌더 여부는 스플래시 화면에도 이미 떠 있어 신호가 못 됐다 — 대신 "방금 타이핑한 텍스트가
+// 실제로 화면에 반영됐는지"로 검증한다. 매 시도 전엔 C-u로 이전 시도의 잔여 입력을 지운다.
+async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 } = {}) {
+  const marker = oneLine.slice(0, 12)
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    await tmux(['send-keys', '-t', name, 'C-u'])
+    await tmux(['send-keys', '-t', name, '-l', oneLine])
+    await new Promise((res) => setTimeout(res, 400))
+    const check = await tmux(['capture-pane', '-p', '-t', name])
+    if (check.ok && check.out.includes(marker)) {
+      // 텍스트가 화면에 꽂힌 것과 그 순간 Enter를 "제출"로 처리할 준비가 된 것은 다르다(claude
+      // TUI 버전에 따라 렌더링↔입력 처리 타이밍이 어긋날 수 있음 — 실측: Enter 한 번으로도, 600ms
+      // 후 재확인+한 번 더로도 씹혀서 프롬프트에 텍스트만 남고 제출 안 된 채 멈추는 케이스 확인됨,
+      // 수동으로 몇 초 뒤 Enter를 다시 보내면 성공함). 프롬프트에서 marker가 사라질 때까지(=제출
+      // 완료) 최대 ~18초 동안 1.2초 간격으로 Enter를 반복 재시도한다.
+      for (let i = 0; i < 15; i++) {
+        await tmux(['send-keys', '-t', name, 'Enter'])
+        await new Promise((res) => setTimeout(res, 1200))
+        const after = await tmux(['capture-pane', '-p', '-t', name])
+        if (!after.ok || !after.out.includes(marker)) break // marker가 프롬프트에서 사라짐 = 제출됨
+      }
+      return true
+    }
+    await new Promise((res) => setTimeout(res, intervalMs))
+  }
+  return false
+}
+
 // 새 터미널 생성: 워크트리(cwd)에서 detached 세션 → (옵션) 명령 실행 + (옵션) 초기 지시(seed) 주입.
-// seed는 claude 같은 TUI가 뜬 뒤 주입돼야 하므로 6초 지연 후 send-keys (monitor 루프와 동일 패턴).
-async function create({ cwd, command, label, seed, model }) {
+// mcpFolderId: 이 세션이 지휘자면 그 folderId — mcpDispatch.cjs를 이 cwd에 등록시킨다(trustFolder 참고).
+async function create({ cwd, command, label, seed, model, mcpFolderId }) {
   if (!cwd) return { ok: false, error: 'cwd 필수' }
   try {
     if (!fs.statSync(cwd).isDirectory()) return { ok: false, error: 'cwd 디렉토리 아님' }
@@ -125,26 +200,26 @@ async function create({ cwd, command, label, seed, model }) {
   // -e LANG: 세션 셸/claude가 UTF-8로 동작 → 한글 안 깨짐 (launchd 서버엔 LANG 없어 필수)
   const created = await tmux(['new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', '-e', 'LANG=en_US.UTF-8', '-e', 'LC_CTYPE=en_US.UTF-8'])
   if (!created.ok) return { ok: false, error: 'tmux new-session 실패: ' + created.err }
-  // 모델 자동 배분 — claude 명령에 --model 주입 (이미 있으면 유지)
+  // 모델 자동 배분 — claude 명령인데 호출부가 모델을 안 넘겼으면(오케스트레이터를 거치지 않는 즉석
+  // 세션 등) 여기서 기본 배분한다. 이게 없으면 사이드바/탭 어디에도 모델이 안 뜬다(빈 데이터가 아니라
+  // 아예 배분 자체가 안 된 것 — orchestrator.cjs가 겪었던 것과 같은 갭).
+  if (!model && command && /\bclaude\b/.test(String(command))) model = Settings.modelFor('dev')
+  // claude 명령에 --model 주입 (이미 있으면 유지)
   let cmd = command
   if (model && cmd && /(^|\/|\s)claude(\s|$)/.test(String(cmd)) && !/--model/.test(String(cmd))) {
     cmd = String(cmd).replace(/^(\s*\S+)/, `$1 --model ${model}`)
   }
+  if (cmd && /\bclaude\b/.test(String(cmd))) trustFolder(cwd, mcpFolderId)
   if (cmd && String(cmd).trim()) {
     await tmux(['send-keys', '-t', name, String(cmd), 'Enter'])
   }
   const seedText = seed && String(seed).trim()
   if (seedText) {
-    // claude TUI가 준비될 시간 후 초기 지시 한 줄 주입 (단일 라인)
     const oneLine = seedText.replace(/[\r\n]+/g, ' ').slice(0, 2000)
-    setTimeout(() => {
-      tmux(['send-keys', '-t', name, '-l', oneLine])
-        .then(() => tmux(['send-keys', '-t', name, 'Enter']))
-        .catch(() => {})
-    }, 6000)
+    injectSeed(name, oneLine).catch(() => {})
   }
   recordSession(name, cwd, label || name.slice(PREFIX.length), command, model)
-  return { ok: true, name, label: name.slice(PREFIX.length), cwd, command: command || null, model: model || null, seeded: !!seedText }
+  return { ok: true, name, label: name.slice(PREFIX.length), cwd, command: command || null, model: model || null, modelLabel: model ? Settings.modelLabel(model) : null, seeded: !!seedText }
 }
 
 // 재부팅/종료로 사라진(스냅샷엔 있지만 현재 안 떠있는) 세션 목록.
@@ -381,4 +456,4 @@ async function send({ name, message, enter = true }) {
   return { ok: true, sent: true }
 }
 
-module.exports = { list, listLive, status, create, kill, send, exists, startDevServer, stopDevServer, devSessionForPort, restartDevSession, freePort, restorable, restore, forget, baseName, PREFIX, checkAvailable }
+module.exports = { list, listLive, status, create, kill, send, exists, startDevServer, stopDevServer, devSessionForPort, restartDevSession, freePort, restorable, restore, forget, baseName, PREFIX, checkAvailable, trustFolder }

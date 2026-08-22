@@ -75,4 +75,12 @@ function start() {
 	return setInterval(tick, 10000) // 10초마다 상태 전이 확인
 }
 
-module.exports = { start }
+// 에스컬레이션(§12) — 세션 상태 전이가 아니라 리뷰 재요청 횟수처럼 이 모듈의 tick()이 보지 못하는
+// 이벤트용. "N회 초과 실패 → 대화 로그로만 에스컬레이션"은 질문대기/인증필요와 같은 문제(안 보면 놓침)라
+// 지적됐던 부분 — 같은 알림 파이프에 태운다. tick()과 달리 호출한 쪽이 판단해 직접 부른다.
+function notifyEscalation(title, body) {
+	if (Settings.get('agentNotify') === false) return
+	notifyMac(`🚨 ${title}`, body || '')
+}
+
+module.exports = { start, notifyEscalation }

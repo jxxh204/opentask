@@ -7,9 +7,10 @@
 const { execFile } = require('child_process')
 const C = require('./collector.cjs')
 const AppCfg = require('./store/settings.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 
 function sh(cmd, args, timeout = 20000) {
-	return new Promise((resolve) => execFile(cmd, args, { cwd: C.REPO, timeout, maxBuffer: 16 << 20 }, (e, out) => resolve(e ? '' : String(out || ''))))
+	return new Promise((resolve) => execFile(cmd, args, { cwd: C.REPO, timeout, maxBuffer: 16 << 20, env: cmd === 'gh' ? ghEnv() : process.env }, (e, out) => resolve(e ? '' : String(out || ''))))
 }
 const gh = (args, t) => sh('gh', args, t)
 const git = (args, repo, t) => sh('git', ['-C', repo, ...args], t)

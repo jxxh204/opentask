@@ -16,7 +16,7 @@ const MODEL_POLICY = {
 	enrich: 'claude-sonnet-4-6', // 스레드 정리 — Slack/Notion MCP + 추출(안전)
 	classify: 'claude-haiku-4-5', // 업무 코드/비개발 판정 — 제목·요약만 보는 경량 분류(초경량 haiku)
 	ops: 'claude-sonnet-4-6', // 비개발 업무 자동수행 — Notion 쓰기+구조화+리서치(MCP), haiku 부족(안전)
-	review: 'claude-sonnet-4-6', // PR 코드 리뷰(diff 분석·이슈 도출)
+	review: 'claude-opus-4-8', // PR 코드 리뷰(diff 분석·이슈 도출) — dev/improve와 동급. 검증자가 실행자(opus)보다 약하면 안 됨(하네스 원칙)
 	improve: 'claude-opus-4-8', // 리뷰대로 코드 개선(제품 코드 수정·커밋·푸시)
 	link: 'claude-sonnet-4-6', // 배포 백로그 연결 — Notion relation 읽고 병합(안전)
 	translate: 'claude-haiku-4-5', // 브랜치명 번역(초경량 — haiku 적합)
@@ -33,14 +33,26 @@ function modelFor(action) {
 	if (s.fableLock && m && /fable/.test(m)) m = 'claude-opus-4-8'
 	return m
 }
-// 모델 id → 짧은 표기(실시간 배지)
+// 모델 id → 표시용 라벨 — 가족 이름 + 버전(예: 'claude-opus-4-8' → 'Opus 4.8'). 예전엔 가족만
+// 남기고 버전을 버렸는데(그냥 'opus'), TaskRow/터미널 툴바 어디서도 몇 버전인지 알 길이 없었다.
 function modelLabel(id) {
 	if (!id) return ''
-	if (/opus/.test(id)) return 'opus'
-	if (/sonnet/.test(id)) return 'sonnet'
-	if (/haiku/.test(id)) return 'haiku'
-	if (/fable/.test(id)) return 'fable'
-	return id.replace(/^claude-/, '')
+	const m = id.match(/^claude-(opus|sonnet|haiku|fable)-(.+)$/)
+	if (!m) return id.replace(/^claude-/, '')
+	const [, tier, verRaw] = m
+	const version = verRaw.replace(/-/g, '.')
+	return `${tier[0].toUpperCase()}${tier.slice(1)} ${version}`
+}
+
+// 액션 기준으로 표시 라벨을 계산 — fableLock 때문에 정책과 실제 배정이 달라진 경우 "(비용 잠금)"을
+// 붙인다. modelLabel(id)만으로는 최종 id밖에 안 보여서 "왜 지휘자가 Fable이 아니라 Opus지?"가 안 풀림(§06).
+function modelLabelFor(action) {
+	const s = load()
+	const p = s.modelPolicy || {}
+	const wanted = p[action] || MODEL_POLICY[action] || null
+	const actual = modelFor(action)
+	const locked = s.fableLock && wanted && /fable/.test(wanted) && wanted !== actual
+	return modelLabel(actual) + (locked ? ' (비용 잠금)' : '')
 }
 
 // 운영자 이름 게터 — 빈 값이면 기본값으로 안전하게 폴백(프롬프트 문법 깨짐 방지).
@@ -63,4 +75,4 @@ function save(patch) {
 	} catch (_) {}
 	return next
 }
-module.exports = { load, save, get: (k) => load()[k], operatorName, modelFor, modelLabel, MODEL_POLICY }
+module.exports = { load, save, get: (k) => load()[k], operatorName, modelFor, modelLabel, modelLabelFor, MODEL_POLICY }

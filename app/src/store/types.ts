@@ -47,10 +47,24 @@ export interface Task {
 	desc: string
 	kind: TaskKind
 	ticket: string | null
+	start_prompt: string | null
+	repo_id: string | null
+	repo_auto: 0 | 1
 	created_at: number
 	updated_at: number
 	branches: Branch[]
 	reviews: Review[]
+}
+
+// 멀티레포 프로젝트용 "연결된 레포" — 0~1개면 오케스트레이션은 지금처럼 단일 rootPath를 그대로 쓴다.
+export interface Repo {
+	id: string
+	name: string
+	path: string
+	base: string | null
+	description: string
+	order_idx: number
+	created_at: number
 }
 
 export interface Folder {
@@ -60,6 +74,10 @@ export interface Folder {
 	order_idx: number
 	created_at: number
 	updated_at: number
+	archived: 0 | 1
+	archived_at: number | null
+	// merge 게이트(§12) — 기본 꺼짐(Merge-ready: 자동 approve만, merge는 사람). 켜면 클린 판정 시 실제 merge까지 자동.
+	auto_merge: 0 | 1
 	tasks: Task[]
 }
 

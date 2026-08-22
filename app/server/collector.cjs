@@ -6,6 +6,7 @@ const path = require('path')
 const net = require('net')
 const { execFile } = require('child_process')
 const AppCfg = require('./store/settings.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 
 // OpenRM은 레포 밖 서비스 → 대상 레포 경로가 필요하다. 우선순위: Setup 페이지가 쓰는
 // AppConfig.rootPath(실사용 소스) → REPO_PATH 환경변수(하위호환) → 이 앱 자신의 상위 디렉토리(데모 폴백).
@@ -50,7 +51,7 @@ function stateMtimeISO() {
 
 function exec(cmd, args, timeoutMs = 4000) {
 	return new Promise((resolve) => {
-		execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20, cwd: resolveRepo() }, (err, stdout) =>
+		execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20, cwd: resolveRepo(), env: cmd === 'gh' ? ghEnv() : process.env }, (err, stdout) =>
 			resolve(err ? null : String(stdout || ''))
 		)
 	})

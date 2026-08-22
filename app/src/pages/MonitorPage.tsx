@@ -6,6 +6,7 @@ import HealthStrip from '../components/monitor/HealthStrip'
 import ConnectorCard from '../components/monitor/ConnectorCard'
 import AlertsFeed from '../components/monitor/AlertsFeed'
 import AlertActionRow from '../components/monitor/AlertActionRow'
+import AwsMfaPanel from '../components/monitor/AwsMfaPanel'
 import StatusDot from '../components/common/StatusDot'
 import styles from './MonitorPage.module.css'
 
@@ -92,6 +93,10 @@ export default function MonitorPage() {
 						{(connectors ?? []).map((c) => (
 							<ConnectorCard key={c.id} id={c.id} connected={c.connected} detail={connectorDetail(c, health)} />
 						))}
+					</div>
+
+					<div style={{ marginTop: 14 }}>
+						<AwsMfaPanel />
 					</div>
 
 					<div className={styles.feedGrid}>

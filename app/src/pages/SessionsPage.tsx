@@ -3,11 +3,7 @@ import { useSetupStore, isSetupConfigured } from '../store/useSetupStore'
 import { useSessionsStore } from '../store/useSessionsStore'
 import FolderPicker from '../components/sessions/FolderPicker'
 import SetupGate from '../components/common/SetupGate'
-import TaskComposer from '../components/sessions/TaskComposer'
-import InboxSection from '../components/sessions/InboxSection'
-import FolderCard from '../components/sessions/FolderCard'
-import PrReviewModal from '../components/sessions/PrReviewModal'
-import styles from './SessionsPage.module.css'
+import SessionShell from '../components/sessions/SessionShell'
 
 // Reuses the same rootPath/wtPath/branchPrefix fields the Setup page's 'paths'
 // step edits (single source of truth, two entry points) — see plan principle 5.
@@ -68,55 +64,21 @@ function SessionsSetupGate() {
 export default function SessionsPage() {
 	const configured = useSetupStore(isSetupConfigured)
 	const hydrateSetup = useSetupStore((s) => s.hydrate)
-	const folders = useSessionsStore((s) => s.folders)
-	const inbox = useSessionsStore((s) => s.inbox)
 	const loadBoard = useSessionsStore((s) => s.loadBoard)
-	const createFolder = useSessionsStore((s) => s.createFolder)
+	const loadRepos = useSessionsStore((s) => s.loadRepos)
 
 	useEffect(() => {
 		hydrateSetup()
 	}, [hydrateSetup])
 
 	useEffect(() => {
-		if (configured) loadBoard()
-	}, [configured, loadBoard])
+		if (configured) {
+			loadBoard()
+			loadRepos()
+		}
+	}, [configured, loadBoard, loadRepos])
 
 	if (!configured) return <SessionsSetupGate />
 
-	const totalTasks = inbox.length + folders.reduce((n, f) => n + f.tasks.length, 0)
-
-	return (
-		<div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-			<div className={styles.topbar}>
-				<svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-					<path d="M12 3.2a8.8 8.8 0 1 0 6.3 2.5" stroke="var(--violet)" strokeWidth={2.6} strokeLinecap="round" />
-					<circle cx="18.3" cy="5.7" r="2.7" fill="var(--blue)" />
-				</svg>
-				<span className={styles.title}>개발실</span>
-				<span className={`m ${styles.counts}`}>
-					{folders.length} folders · {totalTasks} tasks
-				</span>
-			</div>
-
-			<div className={styles.composerWrap}>
-				<TaskComposer />
-			</div>
-
-			<div className={`scroll-y ${styles.board}`}>
-				<div className={styles.boardInner}>
-					<InboxSection tasks={inbox} />
-					{folders.map((f) => (
-						<FolderCard key={f.id} folder={f} />
-					))}
-					<button className={styles.addFolderBtn} onClick={() => createFolder('새 폴더')}>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-							<path d="M12 5v14M5 12h14" />
-						</svg>
-						새 폴더 만들기
-					</button>
-				</div>
-			</div>
-			<PrReviewModal />
-		</div>
-	)
+	return <SessionShell />
 }

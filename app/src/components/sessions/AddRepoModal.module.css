@@ -1,0 +1,220 @@
+.pad {
+	padding: 20px 22px;
+}
+
+.title {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--ink);
+	margin-bottom: 14px;
+}
+
+.primaryOpt {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	cursor: pointer;
+	text-align: left;
+}
+.primaryOpt:hover {
+	background: var(--card-hover);
+	border-color: var(--violet);
+}
+
+.optIcon {
+	flex: none;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	background: var(--card);
+	border: 1px solid var(--line2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t2);
+}
+.optIcon svg {
+	width: 17px;
+	height: 17px;
+}
+
+.optBody {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.optTitle {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.optSub {
+	font-size: 10.5px;
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sectionLabel {
+	margin: 16px 0 8px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	color: var(--t3);
+}
+
+.otherOpts {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	overflow: hidden;
+}
+.otherOpt {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 14px;
+	background: var(--card);
+	border: none;
+	cursor: pointer;
+	text-align: left;
+}
+.otherOpt:not(:last-child) {
+	border-bottom: 1px solid var(--line);
+}
+.otherOpt:hover {
+	background: var(--card-hover);
+}
+.otherIcon {
+	flex: none;
+	width: 26px;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t3);
+}
+.otherIcon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.manageLink {
+	margin-top: 16px;
+	text-align: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--t3);
+	cursor: pointer;
+}
+.manageLink:hover {
+	color: var(--ink);
+}
+
+.form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.label {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	margin-top: 8px;
+}
+.label:first-child {
+	margin-top: 0;
+}
+.input {
+	width: 100%;
+	height: 34px;
+}
+
+.pathRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.pathText {
+	flex: 1;
+	min-width: 0;
+	height: 34px;
+	padding: 0 10px;
+	border-radius: 8px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 11px;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pickBtn {
+	flex: none;
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 8px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 11.5px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.pickBtn:hover {
+	background: var(--card-hover);
+}
+
+.error {
+	margin-top: 4px;
+	font-size: 11px;
+	color: var(--red);
+}
+
+.formActions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+.ghostBtn {
+	height: 34px;
+	padding: 0 14px;
+	border-radius: 8px;
+	background: transparent;
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 12.5px;
+	cursor: pointer;
+}
+.ghostBtn:hover {
+	background: var(--card-hover);
+}
+.primaryBtn {
+	height: 34px;
+	padding: 0 16px;
+	border-radius: 8px;
+	background: var(--violet);
+	border: none;
+	color: #fff;
+	font-size: 12.5px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.primaryBtn:hover {
+	opacity: 0.9;
+}
+.primaryBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}

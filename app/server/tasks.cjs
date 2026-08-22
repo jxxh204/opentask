@@ -13,6 +13,8 @@ const Settings = require('./settings.cjs')
 const Prompts = require('./prompts.cjs')
 const NT = require('./notiontitles.cjs')
 const Ticket = require('./ticket.cjs')
+const AppCfg = require('./store/settings.cjs')
+const { ghEnv } = require('./ghEnv.cjs')
 
 const REG_FILE = process.env.OPENRM_TASKS_FILE || path.join(__dirname, '..', '.openrm-tasks.json')
 const REPOS = (process.env.OPENRM_PR_REPOS
@@ -20,9 +22,9 @@ const REPOS = (process.env.OPENRM_PR_REPOS
 	: []
 ).map((slug) => ({ slug, name: slug.split('/').pop() }))
 
-const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20 }, (e, o) => r(e ? '' : String(o || ''))))
+const gh = (args) => new Promise((r) => execFile('gh', args, { timeout: 20000, maxBuffer: 8 << 20, env: ghEnv() }, (e, o) => r(e ? '' : String(o || ''))))
 // 에러까지 회수하는 실행기 (삭제 등 쓰기 작업용)
-const ghX = (args) => new Promise((r) => execFile('gh', args, { timeout: 30000, maxBuffer: 8 << 20 }, (e, o, er) => r({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') })))
+const ghX = (args) => new Promise((r) => execFile('gh', args, { timeout: 30000, maxBuffer: 8 << 20, env: ghEnv() }, (e, o, er) => r({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') })))
 const gitX = (args) => new Promise((r) => execFile('git', ['-C', C.REPO, ...args], { timeout: 30000, maxBuffer: 4 << 20 }, (e, o, er) => r({ ok: !e, out: String(o || ''), err: String(er || (e && e.message) || '') })))
 const ticketOf = Ticket.ticketOf
 // PR 표면(surface) — 한 업무가 jsp(백엔드 템플릿)·web(PC)·webview(모바일) 여러 PR로 나뉠 수 있어 구분 표기.
@@ -877,16 +879,22 @@ function enrichStatus(jobId) {
 }
 
 // ── 📋 백로그 자동 생성 (티켓 없는 업무 → Notion 일감 카드 생성 → 티켓 회수) ──
-// 고정 데이터(운영자 지정): DB·작업자·상태·서비스·플랫폼·아이콘·본문 템플릿. env로 override 가능.
-const BACKLOG = {
-	db: process.env.OPENRM_BACKLOG_DB || '',
-	assignee: process.env.OPENRM_BACKLOG_ASSIGNEE || '',
-	status: process.env.OPENRM_BACKLOG_STATUS || '할일',
-	service: process.env.OPENRM_BACKLOG_SERVICE || '',
-	platform: process.env.OPENRM_BACKLOG_PLATFORM || '',
+// 고정 데이터(운영자 지정): DB·작업자·상태·서비스·플랫폼·아이콘·본문 템플릿.
+// 우선순위: Setup 페이지의 AppConfig(notionBacklog*) → env 변수(하위호환) → 빈 값.
+// 매번 새로 계산 — Setup에서 바꾸면 재시작 없이 바로 반영되게(collector.cjs의 REPO 게터와 동일한 이유).
+function backlogConfig() {
+	const cfg = AppCfg.getAppConfig()
+	return {
+		db: cfg.notionBacklogDb || process.env.OPENRM_BACKLOG_DB || '',
+		assignee: cfg.notionBacklogAssignee || process.env.OPENRM_BACKLOG_ASSIGNEE || '',
+		status: process.env.OPENRM_BACKLOG_STATUS || '할일',
+		service: cfg.notionBacklogService || process.env.OPENRM_BACKLOG_SERVICE || '',
+		platform: cfg.notionBacklogPlatform || process.env.OPENRM_BACKLOG_PLATFORM || '',
+	}
 }
 const BACKLOG_TEMPLATE = ['## 작업내용', '', '### 내용', '{내용}', '', '### 참고', '{참고}', '', '---', '', '### Todo', '- [ ] ', '', '### Test Case', ''].join('\n')
 function backlogPrompt({ title, summary, links, priority, estimate }) {
+	const BACKLOG = backlogConfig()
 	const extra = []
 	if (priority) extra.push(`- 우선순위 = ${priority}`)
 	if (estimate) extra.push(`- 추정/예상 = ${estimate}`)
@@ -1023,7 +1031,6 @@ function ensureMeta(reg) {
 	if (!Array.isArray(m.groups)) m.groups = []
 	if (!m.groupBase || typeof m.groupBase !== 'object') m.groupBase = {} // { 그룹명: 'release/7.14' } — 배포 타깃 base
 	if (!m.chain || typeof m.chain !== 'object') m.chain = {} // { 그룹명: true } — 체인 모드(카드 순서대로 PR base 사슬)
-	if (!Array.isArray(m.archived)) m.archived = [] // 📦 보관함 — 해결한 작업 스냅샷(날짜별 이력). 삭제와 달리 기록 보존.
 	return m
 }
 // 그룹의 base 브랜치 지정/해제 — 이 그룹에 넣는 작업의 PR을 이 브랜치로 타깃(L1). 빈 값이면 해제(정리용 그룹).
@@ -1772,93 +1779,6 @@ function startPrQuestion({ key, repo, number, question }) {
 	return { ok: true, jobId, prKey }
 }
 
-// ── 📦 작업 보관함 (해결한 작업을 날짜별 이력으로 보존 — 삭제와 별개) ──
-// 삭제는 흔적을 지우지만, 보관은 스냅샷(티켓·제목·PR·그룹·보관일)을 남기고 워크트리만 정리한다.
-async function archiveTask({ key }) {
-	if (!key) return { ok: false, error: 'key 필수' }
-	let t = buildCache.data && buildCache.data.tasks.find((x) => x.key === key)
-	if (!t) {
-		const b = await build().catch(() => null)
-		t = b && b.tasks.find((x) => x.key === key)
-	}
-	if (!t) return { ok: false, error: '작업을 찾을 수 없습니다.' }
-	const done = { worktrees: [], branches: [], errors: [] }
-	// 워크트리·로컬 브랜치 정리 (미커밋 변경은 --force로 폐기). PR은 건드리지 않음(머지됐거나 그대로 둠).
-	for (const s of t.streams || []) {
-		if (s.isMain) continue
-		const rm = await gitX(['worktree', 'remove', '--force', s.path])
-		if (!rm.ok) { done.errors.push(`워크트리 ${s.name || s.path} 제거 실패: ${(rm.err.split('\n').find((l) => l.trim()) || '').slice(0, 100)}`); continue }
-		done.worktrees.push(s.name || s.path)
-		if (s.branch && s.branch !== '?' && !/^\(/.test(s.branch)) {
-			const bd = await gitX(['branch', '-D', s.branch])
-			if (bd.ok) done.branches.push(s.branch)
-		}
-	}
-	const reg = loadReg()
-	const m = ensureMeta(reg)
-	const snap = {
-		key: t.key,
-		ticket: t.ticket || null,
-		title: t.title || null,
-		group: t.group || null,
-		prs: (t.prs || []).map((p) => ({ number: p.number, repo: p.repo, url: p.url, title: p.title || null, state: p.state || null })),
-		links: t.links || null,
-		archivedAt: Date.now(),
-	}
-	m.archived = (m.archived || []).filter((a) => a.key !== t.key) // 중복 방지(재보관 시 갱신)
-	m.archived.push(snap)
-	if (reg[key]) delete reg[key] // 등록 제거 → 활성 보드에서 빠짐
-	saveReg(reg)
-	prCache.at = 0
-	patchCache((d) => { d.tasks = d.tasks.filter((x) => x.key !== key); d.count = d.tasks.length })
-	bustBuild()
-	return { ok: true, archivedAt: snap.archivedAt, ...done }
-}
-// 보관 해제 → 수동 등록으로 복원(보드에 다시 표시). 워크트리는 이미 정리됐으니 링크·PR·그룹만 되살린다.
-function unarchiveTask({ key }) {
-	if (!key) return { ok: false, error: 'key 필수' }
-	const reg = loadReg()
-	const m = ensureMeta(reg)
-	const snap = (m.archived || []).find((a) => a.key === key)
-	if (!snap) return { ok: false, error: '보관 항목을 찾을 수 없습니다.' }
-	m.archived = m.archived.filter((a) => a.key !== key)
-	const e = reg[key] || (reg[key] = {})
-	e.manual = true
-	if (snap.title) e.title = snap.title
-	if (snap.group) e.group = snap.group
-	if (snap.links) e.links = snap.links
-	if (Array.isArray(snap.prs) && snap.prs.length) e.manualPrs = snap.prs.map((p) => ({ number: p.number, repo: p.repo, url: p.url, title: p.title || null, state: p.state || null }))
-	saveReg(reg)
-	prCache.at = 0
-	bustBuild()
-	return { ok: true }
-}
-// 보관 항목 영구 삭제 (이력에서 제거 — 워크트리는 이미 없으니 등록만 정리)
-function deleteArchived({ key }) {
-	if (!key) return { ok: false, error: 'key 필수' }
-	const reg = loadReg()
-	const m = ensureMeta(reg)
-	const before = (m.archived || []).length
-	m.archived = (m.archived || []).filter((a) => a.key !== key)
-	if (m.archived.length === before) return { ok: false, error: '보관 항목 없음' }
-	saveReg(reg)
-	return { ok: true }
-}
-// 보관함 조회 — 보관일(YYYY-MM-DD, 로컬) 기준으로 그룹핑, 최신 날짜·최신 항목 순.
-function listArchived() {
-	const reg = loadReg()
-	const m = ensureMeta(reg)
-	const arr = (m.archived || []).slice().sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0))
-	const dayKey = (ms) => {
-		const d = new Date(ms || Date.now())
-		const p = (n) => String(n).padStart(2, '0')
-		return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-	}
-	const byDay = {}
-	for (const a of arr) (byDay[dayKey(a.archivedAt)] || (byDay[dayKey(a.archivedAt)] = [])).push(a)
-	const archived = Object.keys(byDay).sort((a, b) => b.localeCompare(a)).map((date) => ({ date, items: byDay[date] }))
-	return { ok: true, total: arr.length, archived }
-}
 
 // 수동 링크 추가/삭제 (피그마 등 PR에 없는 것 보강). url로 종류 자동 판별.
 function mutateLink({ ticket, url, kind, action }) {
@@ -1888,4 +1808,4 @@ function setTitle({ ticket, title }) {
 	return { ok: true }
 }
 
-module.exports = { build, createFromLink, enrichThread, startEnrich, enrichStatus, startBacklog, listJobs, removeTask, mutateLink, setTitle, setGroup, setGroupBase, setDevServer, setMemo, setTc, setTaskModel, startClassify, setTaskClass, startOps, reorderGroup, setChain, applyChain, startGroupDevServer, createGroup, removeGroup, renameGroup, cleanupDone, archiveTask, unarchiveTask, deleteArchived, listArchived, startPrReview, startPrImprove, startPrApplyReview, startPrQuestion, listFailures, retryFailure, dismissFailure, translateToEnglishSlug, linkBacklogs, REVIEW_DIRECTIVE, extractLinks, linkKind }
+module.exports = { build, createFromLink, enrichThread, startEnrich, enrichStatus, startBacklog, listJobs, removeTask, mutateLink, setTitle, setGroup, setGroupBase, setDevServer, setMemo, setTc, setTaskModel, startClassify, setTaskClass, startOps, reorderGroup, setChain, applyChain, startGroupDevServer, createGroup, removeGroup, renameGroup, cleanupDone, startPrReview, startPrImprove, startPrApplyReview, startPrQuestion, listFailures, retryFailure, dismissFailure, translateToEnglishSlug, linkBacklogs, REVIEW_DIRECTIVE, extractLinks, linkKind }

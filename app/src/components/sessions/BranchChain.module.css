@@ -39,7 +39,7 @@
 .card {
 	background: var(--card2);
 	border: 1px solid var(--line2);
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	padding: 9px 12px;
 }
 
@@ -57,7 +57,7 @@
 }
 
 .rel {
-	font-size: 9px;
+	font-size: 9.5px;
 	color: var(--t3);
 	margin-left: auto;
 }
@@ -75,7 +75,7 @@
 	height: 21px;
 	padding: 0 8px;
 	border: 1px solid var(--line2);
-	border-radius: 6px;
+	border-radius: var(--radius-chip);
 	font-size: 10px;
 	color: var(--t2);
 }

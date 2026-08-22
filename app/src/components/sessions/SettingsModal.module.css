@@ -1,0 +1,86 @@
+.head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 13px 16px;
+	border-bottom: 1px solid var(--line);
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.close {
+	cursor: pointer;
+	color: var(--t3);
+	font-size: 14px;
+}
+.close:hover {
+	color: var(--ink);
+}
+
+.body {
+	padding: 16px;
+	overflow-y: auto;
+	min-height: 0;
+}
+
+.modelList {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
+.modelRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.modelRowLabel {
+	font-size: 11px;
+	color: var(--t2);
+	flex: 1;
+	min-width: 0;
+}
+
+.row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+.rowLabel {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink);
+	margin-bottom: 5px;
+}
+.rowHint {
+	font-size: 10.5px;
+	color: var(--t3);
+	line-height: 1.55;
+}
+
+.toggle {
+	flex: none;
+	display: flex;
+	background: var(--card);
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	padding: 2px;
+}
+.opt {
+	border: none;
+	background: none;
+	color: var(--t3);
+	font-size: 11px;
+	font-weight: 700;
+	padding: 5px 12px;
+	border-radius: 999px;
+	cursor: pointer;
+}
+.optActive {
+	background: var(--violet);
+	color: #fff;
+}

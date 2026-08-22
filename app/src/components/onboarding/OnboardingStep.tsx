@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import ConnectorLogo from '../common/ConnectorLogo'
 import FolderPicker from '../sessions/FolderPicker'
 import styles from './OnboardingStep.module.css'
@@ -27,6 +28,8 @@ export interface OnboardingStepVM {
 	note?: string
 	/** overrides the default "연결됨" done-badge label (e.g. "설치됨" for an environment check step) */
 	doneLabel?: string
+	/** extra interactive content below the standard cta row (e.g. GitHub's gh-CLI/OAuth connect buttons) */
+	extra?: ReactNode
 }
 
 export default function OnboardingStep({ step, open, onToggle, onConnect, onSkip }: { step: OnboardingStepVM; open: boolean; onToggle(): void; onConnect(): void; onSkip(): void }) {
@@ -80,6 +83,7 @@ export default function OnboardingStep({ step, open, onToggle, onConnect, onSkip
 							)}
 							<span className={styles.hint}>{step.hint}</span>
 						</div>
+						{step.extra}
 					</div>
 				</div>
 			)}

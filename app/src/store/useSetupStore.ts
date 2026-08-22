@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { getSetupStatus, postConnector, listEnvVars, createEnvVar, updateEnvVar as apiUpdateEnvVar, removeEnvVar as apiRemoveEnvVar, checkTmux } from '../api/setup'
+import { getSetupStatus, postConnector, listEnvVars, createEnvVar, updateEnvVar as apiUpdateEnvVar, removeEnvVar as apiRemoveEnvVar, checkTmux, getOperatorSettings, updateOperatorSettings } from '../api/setup'
 
 export interface ConnectorConfig {
 	connected: boolean
@@ -19,6 +19,7 @@ export interface SetupState {
 	rootPath: string | null
 	wtPath: string | null
 	branchPrefix: string
+	ticketPrefix: string
 	operatorName: string
 	githubRepo: string | null
 	devServerUrl: string | null
@@ -32,7 +33,10 @@ export interface SetupState {
 	setRootPath(p: string): void
 	setWorktreePath(p: string): void
 	setBranchPrefix(p: string): void
+	setTicketPrefix(p: string): void
 	setOperatorName(p: string): void
+	/** POST /api/settings — the only path that actually persists operatorName (used by AI review-prompt text) */
+	syncOperatorName(name: string): Promise<void>
 	setConnector(id: string, patch: Partial<ConnectorConfig>): void
 	/** optimistic local update + POST /api/setup/connectors/:id, reconciled from the server's response */
 	syncConnector(id: string, fields: Record<string, string>): Promise<void>
@@ -55,6 +59,7 @@ export const useSetupStore = create<SetupState>()(
 			rootPath: null,
 			wtPath: null,
 			branchPrefix: '',
+			ticketPrefix: '',
 			operatorName: '',
 			githubRepo: null,
 			devServerUrl: null,
@@ -68,7 +73,17 @@ export const useSetupStore = create<SetupState>()(
 			setRootPath: (p) => set({ rootPath: p }),
 			setWorktreePath: (p) => set({ wtPath: p }),
 			setBranchPrefix: (p) => set({ branchPrefix: p }),
+			setTicketPrefix: (p) => set({ ticketPrefix: p }),
 			setOperatorName: (p) => set({ operatorName: p }),
+			syncOperatorName: async (name) => {
+				set({ operatorName: name }) // optimistic
+				try {
+					const res = await updateOperatorSettings({ operatorName: name })
+					set({ operatorName: res.settings.operatorName })
+				} catch (e) {
+					console.warn('[setup] failed to sync operatorName to backend:', e)
+				}
+			},
 			setConnector: (id, patch) =>
 				set((s) => {
 					const cur = s.connectors[id] ?? { connected: false, fields: {} }
@@ -91,6 +106,7 @@ export const useSetupStore = create<SetupState>()(
 						rootPath: res.appConfig.rootPath,
 						wtPath: res.appConfig.wtPath,
 						branchPrefix: res.appConfig.branchPrefix ?? s.branchPrefix,
+						ticketPrefix: res.appConfig.ticketPrefix ?? s.ticketPrefix,
 						githubRepo: res.appConfig.githubRepo,
 						devServerUrl: res.appConfig.devServerUrl,
 						connectors: { ...s.connectors, [id]: { connected: true, fields } },
@@ -105,13 +121,15 @@ export const useSetupStore = create<SetupState>()(
 
 			hydrate: async () => {
 				try {
-					const [status, serverEnv] = await Promise.all([getSetupStatus(), listEnvVars()])
+					const [status, serverEnv, operatorSettings] = await Promise.all([getSetupStatus(), listEnvVars(), getOperatorSettings()])
 					set({
 						rootPath: status.appConfig.rootPath,
 						wtPath: status.appConfig.wtPath,
 						branchPrefix: status.appConfig.branchPrefix ?? '',
+						ticketPrefix: status.appConfig.ticketPrefix ?? '',
 						githubRepo: status.appConfig.githubRepo,
 						devServerUrl: status.appConfig.devServerUrl,
+						operatorName: operatorSettings.settings.operatorName ?? '',
 						env: serverEnv.map((e) => ({ id: e.id, key: e.key, value: e.value, secret: !!e.secret, masked: !!e.secret })),
 						hydrated: true,
 					})

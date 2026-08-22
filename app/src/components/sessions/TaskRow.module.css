@@ -1,60 +1,261 @@
 .row {
-	border-radius: 10px;
-	overflow: hidden;
+	border-radius: var(--radius-chip);
 }
 
 .head {
+	position: relative;
 	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 11px 12px;
+	align-items: flex-start;
+	gap: 7px;
+	padding: 5px 7px;
+	border-radius: var(--radius-chip);
 	cursor: pointer;
 }
-
-.grip {
-	flex: none;
-	cursor: grab;
-	color: #3a3a42;
+.head:hover {
+	background: var(--card-hover);
+}
+.headSelected {
+	background: var(--vtint);
+}
+.headSelected .title {
+	color: var(--violet);
+	font-weight: 600;
+}
+/* feed에 실제 새 이벤트가 들어온 순간에만 반짝인다 — 장식용 반복 애니메이션 아님(§10). */
+.flash {
+	animation: taskFlash 0.5s ease-out;
+}
+@keyframes taskFlash {
+	0% {
+		background: var(--vtint);
+	}
+	100% {
+		background: transparent;
+	}
 }
 
-.chevron {
-	flex: none;
-	color: var(--t3);
-	transition: transform 0.15s;
+/* 우클릭 "이름 변경" 메뉴 — FolderCard와 동일 패턴, 실수로 이름이 안 바뀌게. */
+.ctxMenu {
+	position: absolute;
+	top: 26px;
+	left: 26px;
+	z-index: 30;
+	min-width: 120px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	padding: 5px;
+	cursor: default;
 }
-.chevronOpen {
-	transform: rotate(90deg);
-}
-
-.name {
-	font-size: 12.5px;
+.ctxMenuItem {
+	padding: 7px 9px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--ink);
+	cursor: pointer;
+}
+.ctxMenuItem:hover {
+	background: var(--card-hover);
+}
+
+.statusDot {
+	width: 13px;
+	height: 13px;
+	border-radius: 50%;
+	flex: none;
+	margin-top: 1px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.statusDot svg {
+	width: 8px;
+	height: 8px;
+}
+.waiting {
+	background: var(--atint);
+	color: var(--amber);
+}
+.done {
+	background: var(--gtint);
+	color: var(--green);
+}
+.running {
+	background: var(--vtint);
+	color: var(--violet);
+}
+/* 질문대기/인증필요 — amber(정상 대기)와는 성격이 달라 red로 구분, 놓치기 쉬우니 펄스로 눈에 띄게(§12). */
+.needsAuth,
+.needsInput {
+	background: var(--rtint);
+	color: var(--red);
+	animation: taskAlert 1.4s ease-in-out infinite;
+}
+@keyframes taskAlert {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
+.spinner {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	border: 1.5px solid var(--line2);
+	border-top-color: var(--violet);
+	animation: taskSpin 0.7s linear infinite;
+}
+@keyframes taskSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.body {
+	min-width: 0;
+	flex: 1;
+}
+
+.line1 {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.title {
+	font-size: 11px;
+	color: var(--t2);
+	line-height: 1.3;
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.titleInput {
+	font-size: 11px;
+	font-family: inherit;
+	color: var(--t2);
+	line-height: 1.3;
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: none;
+	outline: none;
+}
+.titleInput:focus {
+	background: var(--card2);
+	border-radius: var(--radius-chip);
+}
 
-.chainGlyph {
-	font-size: 10px;
+.subTime {
 	flex: none;
+	font-size: 9.5px;
+	color: var(--t3);
 }
 
-.body {
-	padding: 2px 14px 14px 40px;
+.pill {
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	flex: none;
+	cursor: pointer;
+}
+.pillIssues {
+	background: var(--rtint);
+	color: var(--red);
+}
+.pillOk {
+	background: var(--btint);
+	color: var(--blue);
+}
+.pillPr {
+	background: var(--btint);
+	color: var(--blue);
+	cursor: default;
+}
+.pillPrDraft {
+	background: var(--card2);
+	color: var(--t2);
+	border: 1px solid var(--line2);
+	cursor: default;
 }
 
-.bodyInner {
-	border-left: 1px solid var(--line2);
-	padding-left: 18px;
+.quickStart {
+	flex: none;
+	font-size: 11px;
+	cursor: pointer;
+	line-height: 1;
+}
+
+.wtLine {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 2px;
+	font-size: 9.5px;
+	color: var(--t3);
+	opacity: 0.8;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wtIcon {
+	flex: none;
+	opacity: 0.7;
+}
+.chainGlyph {
+	color: var(--violet);
+}
+.deltaAhead {
+	font-weight: 700;
+	color: var(--green);
+}
+.deltaBehind {
+	font-weight: 700;
+	color: var(--amber);
+}
+
+/* 워크트리(⎇ 브랜치) ≠ 담당 에이전트 — 별도 줄로 표기. 프로토타입의 .agent-chip 그대로,
+   같은 에이전트가 여러 워크트리를 오갈 때 색으로 바로 알아보도록. */
+.modelChip {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 2px;
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--violet);
+}
+.modelDot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	flex: none;
+	background: var(--violet);
+}
+
+.detail {
+	margin: 4px 0 6px 21px;
+	padding-left: 10px;
+	border-left: 1px solid var(--line);
 }
 
 .desc {
-	font-size: 11.5px;
-	line-height: 1.6;
+	font-size: 11px;
+	line-height: 1.55;
 	color: var(--t2);
-	margin: 10px 0 14px;
-	max-width: 64ch;
+	margin: 6px 0 10px;
+}
+
+.promptLabel {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	margin: 0 0 5px;
 }

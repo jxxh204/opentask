@@ -80,11 +80,16 @@ const Settings = require('./settings.cjs')
 // AppCfg(store/settings.cjs), 시크릿은 Secrets(store/secrets.cjs)에 저장한다.
 const AppCfg = require('./store/settings.cjs')
 const Secrets = require('./store/secrets.cjs')
+const GithubConnect = require('./githubConnect.cjs') // gh CLI 위임 상태확인 + OAuth Device Flow
 const EnvVars = require('./store/envVars.cjs')
 // Sessions(개발실) CRUD store 계층. 기존 `Tasks`(flat-JSON, ./tasks.cjs)와 충돌하므로 Store* 로 별칭.
 const StoreFolders = require('./store/folders.cjs')
 const StoreTasks = require('./store/tasks.cjs')
 const StoreBranches = require('./store/branches.cjs')
+const StoreRepos = require('./store/repos.cjs') // 멀티레포 프로젝트용 레포 레지스트리
+const StoreDecisions = require('./store/decisions.cjs') // AI 판정 감사 로그(§12) — feed와 달리 재시작에도 안 날아감
+const RepoAdd = require('./repoAdd.cjs') // "레포 추가" 모달의 clone/새 프로젝트
+const RepoClassify = require('./repoClassify.cjs') // 새 태스크 → 레포 자동배정(헤드리스 claude)
 const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
 const PrReview = require('./prReview.cjs') // PR 리뷰 코멘트 fetch/apply/dispute (Phase 3.3)
 // Debug(디버깅) — Playwright 실브라우저 세션 (Phase 4b). playwright는 이 모듈들 안에서 lazy require라 부팅엔 영향 없음.
@@ -147,6 +152,7 @@ async function buildMonitorConnectors() {
       { id: 'sentry', label: 'Sentry', connected: Sentry.configured() },
       { id: 'pr-ci', label: 'PR·CI', connected: AppCfg.prRepos().length > 0 },
       aws,
+      { id: 'slack', label: 'Slack 알림', connected: !!AppCfg.getAppConfig().slackAlertChannel },
       { id: 'vitals', label: 'Web Vitals', connected: false }, // 백엔드 없음 — placeholder 미연결
       { id: 'bundle', label: 'Bundle', connected: false }, // 동일
       { id: 'lighthouse', label: 'Lighthouse', connected: false }, // 동일
@@ -156,15 +162,23 @@ async function buildMonitorConnectors() {
 
 // Setup 온보딩 스텝(id) → 각 필드의 저장 위치. config: AppConfig 필드명, secret: secrets 키명.
 // (프론트 src/pages/SetupPage.tsx의 STEPS/OPTS fieldDefs key와 1:1 대응. 'paths'는 rootPath/wtPath/branchPrefix로 직접 매핑.)
+// ⚠️ 'sentry'는 여기 없다 — Sentry는 이미 완전한 자체 설정 API(/api/sentry/config, 레거시
+// server/settings.cjs 기반)가 있어서 그걸 그대로 쓴다(아래 라우트). 예전엔 여기 sentry: {dsn: secret}로도
+// 매핑돼 있었는데, sentry.cjs가 실제로 보는 값(token/org/project)과 전혀 다른 곳(secrets.sentryDsn)에
+// 쓰여서 Setup에서 "연결"해도 모니터링이 절대 동작 안 하는 죽은 매핑이었다 — 제거.
 const SETUP_CONNECTOR_MAP = {
   dev: { devServerUrl: { config: 'devServerUrl' }, webviewPort: { config: 'webviewPort' } },
   github: { repo: { config: 'githubRepo' }, token: { secret: 'githubToken' } },
+  githubOAuth: { clientId: { config: 'githubOAuthClientId' } },
   db: { connString: { secret: 'dbConnString' }, schema: { config: 'dbSchema' } },
-  paths: { rootPath: { config: 'rootPath' }, wtPath: { config: 'wtPath' }, branchPrefix: { config: 'branchPrefix' } },
+  paths: { rootPath: { config: 'rootPath' }, wtPath: { config: 'wtPath' }, branchPrefix: { config: 'branchPrefix' }, ticketPrefix: { config: 'ticketPrefix' } },
   app: { apiRoot: { config: 'apiRoot' }, nextRoot: { config: 'nextRoot' } },
-  sentry: { dsn: { secret: 'sentryDsn' } },
   aws: { webhook: { config: 'awsDeployWebhookUrl' } },
   vitals: { endpoint: { config: 'vitalsEndpoint' } },
+  slack: { channelId: { config: 'slackAlertChannel' } },
+  notion: { db: { config: 'notionBacklogDb' }, assignee: { config: 'notionBacklogAssignee' }, service: { config: 'notionBacklogService' }, platform: { config: 'notionBacklogPlatform' } },
+  slackSign: { secret: { secret: 'slackSigningSecret' } },
+  deploy: { repo: { config: 'deployRepo' }, base: { config: 'deployBase' } },
 }
 // GET/POST connector 공통 응답 — 현재 저장 상태 스냅샷.
 function setupStatus() {
@@ -432,6 +446,36 @@ function loop(fn, ms) {
   run()
 }
 
+// ── 정적 파일 서빙 (app/dist) — vite build 산출물. Electron 패키징/프로덕션에서 이 포트 하나로 프론트까지 서빙.
+// dist/가 없으면(dev 모드, Vite가 따로 뜸) 조용히 스킵 — 기존 동작 무변경.
+const DIST_DIR = path.join(__dirname, '..', 'dist')
+const STATIC_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json; charset=utf-8',
+}
+function serveStatic(url, res) {
+  if (!fs.existsSync(DIST_DIR)) return false
+  const safePath = path.normalize(decodeURIComponent(url)).replace(/^(\.\.[/\\])+/, '')
+  let filePath = path.join(DIST_DIR, safePath)
+  if (!filePath.startsWith(DIST_DIR)) filePath = DIST_DIR // path traversal 방지
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(DIST_DIR, 'index.html') // SPA 폴백 (BrowserRouter — 딥링크/새로고침 대응)
+  }
+  if (!fs.existsSync(filePath)) return false
+  const ext = path.extname(filePath)
+  res.writeHead(200, { 'Content-Type': STATIC_MIME[ext] || 'application/octet-stream' })
+  fs.createReadStream(filePath).pipe(res)
+  return true
+}
+
 const server = http.createServer((req, res) => {
   // CSR(Vite)에서 직접 호출 가능하도록 CORS 허용 — 단 origin은 로컬만 반사(와일드카드 금지)
   const origin = req.headers.origin
@@ -456,7 +500,7 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, repo: C.REPO, state: C.STATE_PATH }))
+    return res.end(JSON.stringify({ ok: true, repo: C.REPO, state: C.STATE_PATH, host: HOST, port: PORT }))
   }
   // ── Setup / 온보딩 (Phase 2b) — SQLite 영속화 ──────────────────────
   if (url === '/api/setup/status' && req.method === 'GET') {
@@ -512,6 +556,16 @@ const server = http.createServer((req, res) => {
   if (url === '/api/setup/tmux' && req.method === 'GET') {
     return Term.checkAvailable().then((r) => sendJSON(res, 200, r))
   }
+  // GitHub 연동 — ① gh CLI 위임(설정 0) ② OAuth Device Flow(gh CLI 없을 때)
+  if (url === '/api/setup/github/gh-status' && req.method === 'GET') {
+    return GithubConnect.ghStatus().then((r) => sendJSON(res, 200, r))
+  }
+  if (url === '/api/setup/github/oauth/start' && req.method === 'POST') {
+    return GithubConnect.oauthStart().then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+  }
+  if (url === '/api/setup/github/oauth/poll' && req.method === 'POST') {
+    return GithubConnect.oauthPoll().then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+  }
 
   // ── Sessions / 개발실 (Phase 3.1) — folders·tasks·branches CRUD (SQLite store) ──
   // 주의: /api/tasks·/api/branches는 method로 분기한다 — 기존 GET 핸들러(구 flat-JSON/​git API,
@@ -536,10 +590,63 @@ const server = http.createServer((req, res) => {
     const id = decodeURIComponent(url.slice('/api/folders/'.length))
     return sendJSON(res, 200, StoreFolders.remove(id))
   }
+  // 보관함 — 완료된 폴더를 지우지 않고 archived=1로 표시만(board()는 archived=0만 반환).
+  if (url === '/api/folders/archived' && req.method === 'GET') {
+    return sendJSON(res, 200, { folders: StoreTasks.board(StoreFolders.listArchived()).folders })
+  }
+  if (url.endsWith('/archive') && url.startsWith('/api/folders/') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/folders/'.length, -'/archive'.length))
+    const r = StoreFolders.archive(id)
+    return sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' })
+  }
+  if (url.endsWith('/restore') && url.startsWith('/api/folders/') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/folders/'.length, -'/restore'.length))
+    const r = StoreFolders.restore(id)
+    return sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' })
+  }
+  // repos (멀티레포 프로젝트 — 레포 레지스트리)
+  if (url === '/api/repos' && req.method === 'GET') {
+    return sendJSON(res, 200, StoreRepos.list())
+  }
+  if (url === '/api/repos' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => { const r = StoreRepos.create(b || {}); sendJSON(res, r && r.ok === false ? 400 : 200, r) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/repos/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length))
+    return readBody(req)
+      .then((b) => { const r = StoreRepos.update(id, b || {}); sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' }) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/repos/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length))
+    return sendJSON(res, 200, StoreRepos.remove(id))
+  }
+  // "레포 추가" 모달의 Clone from URL / Create new project — 폴더 찾아보기(기존 폴더 등록)는
+  // FolderPicker가 이미 쓰는 /api/setup/fs/* 로 충분해서 별도 라우트 없음.
+  if (url === '/api/repos/clone' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => RepoAdd.cloneRepo(b || {}))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/repos/init' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => RepoAdd.initRepo(b || {}))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // tasks
   if (url === '/api/tasks' && req.method === 'POST') {
     return readBody(req)
-      .then((b) => sendJSON(res, 200, StoreTasks.composeTask(StoreTasks.create(b || {}))))
+      .then((b) => {
+        const task = StoreTasks.composeTask(StoreTasks.create(b || {}))
+        // 레포를 명시 안 했고(사람이 직접 안 골랐고) 등록된 레포가 2개 이상이면 백그라운드로 자동배정 —
+        // 태스크 생성 응답은 안 기다리고 바로 나감(수 초 걸리는 헤드리스 claude 호출이라 블로킹 안 함).
+        if (!task.repo_id) RepoClassify.classifyTask(task.id).catch(() => {})
+        sendJSON(res, 200, task)
+      })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
   if (url.startsWith('/api/tasks/') && req.method === 'PATCH') {
@@ -549,8 +656,8 @@ const server = http.createServer((req, res) => {
         b = b || {}
         const cur = StoreTasks.get(id)
         if (!cur) return sendJSON(res, 404, { ok: false, error: 'not found' })
-        // 편집(rename/desc/kind) — 해당 키가 있을 때만
-        if ('name' in b || 'desc' in b || 'kind' in b) StoreTasks.update(id, b)
+        // 편집(rename/desc/kind/시작 프롬프트/레포) — 해당 키가 있을 때만
+        if ('name' in b || 'desc' in b || 'kind' in b || 'startPrompt' in b || 'repoId' in b) StoreTasks.update(id, b)
         // refile/reorder — folderId 키가 있으면(명시적 null=inbox 포함) 그 값으로, 없고 beforeTaskId만 있으면 현재 폴더 유지
         if ('folderId' in b || 'beforeTaskId' in b) {
           const targetFolder = 'folderId' in b ? b.folderId : cur.folder_id
@@ -590,6 +697,12 @@ const server = http.createServer((req, res) => {
     const id = decodeURIComponent(url.slice('/api/branch-links/'.length))
     return sendJSON(res, 200, StoreBranches.removeLink(id))
   }
+  // AI 판정 감사 로그(§12) — repo_assign/kind_judge/review_verdict/repo_verify_hold. conductor.feed(인메모리)와
+  // 달리 서버 재시작에도 남는다. read-only.
+  if (url.startsWith('/api/folders/') && url.endsWith('/decisions') && req.method === 'GET') {
+    const fid = decodeURIComponent(url.slice('/api/folders/'.length, url.length - '/decisions'.length))
+    return sendJSON(res, 200, { ok: true, decisions: StoreDecisions.listByFolder(fid) })
+  }
   // ── Sessions 오케스트레이션 (Phase 3.2) — 폴더 단위 순차 웨이브. 실제 git worktree + tmux+claude 세션 생성. ──
   // method 분기라 위 folders CRUD(PATCH/DELETE /api/folders/:id)와 충돌하지 않는다(경로가 .../orchestrate/... 로 더 김).
   if (url.startsWith('/api/folders/') && url.includes('/orchestrate/')) {
@@ -604,11 +717,47 @@ const server = http.createServer((req, res) => {
       if (action === 'stop' && req.method === 'POST') return done(Orchestrator.stop(fid))
     }
   }
+  // ── 지휘자(conductor) 세션 (Phase 3.4) — 오케스트레이터 자체의 클로드 세션. say/event는 지휘자
+  //    세션 자신이 curl로 호출(conductorSeed 참고), tell은 UI가 사람 발화를 지휘자에게 전달할 때 쓴다. ──
+  if (url.startsWith('/api/folders/') && url.includes('/conductor/')) {
+    const cm = url.match(/^\/api\/folders\/([^/]+)\/conductor\/(start|stop|say|tell|event|feed|set-kind)$/)
+    if (cm) {
+      const fid = decodeURIComponent(cm[1])
+      const action = cm[2]
+      const done = (p) => p.then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      if (action === 'feed' && req.method === 'GET') return sendJSON(res, 200, Orchestrator.conductorFeed(fid))
+      if (action === 'start' && req.method === 'POST') return done(Orchestrator.startConductor(fid))
+      if (action === 'stop' && req.method === 'POST') return done(Orchestrator.stopConductor(fid))
+      if (action === 'say' && req.method === 'POST') {
+        readBody(req).then((b) => done(Orchestrator.conductorSay(fid, b && b.taskId, b && b.text)))
+        return
+      }
+      if (action === 'tell' && req.method === 'POST') {
+        readBody(req).then((b) => done(Orchestrator.conductorTell(fid, b && b.text)))
+        return
+      }
+      if (action === 'event' && req.method === 'POST') {
+        readBody(req).then((b) => sendJSON(res, 200, Orchestrator.conductorEvent(fid, b || {})))
+        return
+      }
+      if (action === 'set-kind' && req.method === 'POST') {
+        readBody(req).then((b) => done(Promise.resolve(Orchestrator.conductorSetKind(fid, b && b.taskId, b && b.kind, b && b.reason))))
+        return
+      }
+    }
+  }
 
   // ── PR 리뷰 (Phase 3.3) — GitHub 코멘트 fetch / apply(로컬 dispatch) / dispute(실제 GitHub 쓰기) ──
   if (url.startsWith('/api/branches/') && url.endsWith('/reviews/sync') && req.method === 'POST') {
     const id = decodeURIComponent(url.slice('/api/branches/'.length, url.length - '/reviews/sync'.length))
     return PrReview.syncReviewsForBranch(id)
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // ⑧ AI 자동 리뷰 — diff를 스스로 읽고 이슈를 낸다(tasks.cjs startPrReview 패턴 이식, §12).
+  if (url.startsWith('/api/branches/') && url.endsWith('/reviews/ai-review') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/branches/'.length, url.length - '/reviews/ai-review'.length))
+    return PrReview.startAiReview(id)
       .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
@@ -1204,21 +1353,6 @@ const server = http.createServer((req, res) => {
     readBody(req).then((b) => Tasks.removeTask(b || {}).then((d) => sendJSON(res, 200, d))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
-  if (url === '/api/tasks/archive' && req.method === 'POST') {
-    readBody(req).then((b) => Tasks.archiveTask(b || {}).then((d) => sendJSON(res, 200, d))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-    return
-  }
-  if (url === '/api/tasks/unarchive' && req.method === 'POST') {
-    readBody(req).then((b) => sendJSON(res, 200, Tasks.unarchiveTask(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-    return
-  }
-  if (url === '/api/tasks/archived') {
-    return sendJSON(res, 200, Tasks.listArchived())
-  }
-  if (url === '/api/tasks/archived/remove' && req.method === 'POST') {
-    readBody(req).then((b) => sendJSON(res, 200, Tasks.deleteArchived(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-    return
-  }
   if (url === '/api/tasks/pr-review' && req.method === 'POST') {
     readBody(req).then((b) => sendJSON(res, 200, Tasks.startPrReview(b || {}))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
@@ -1578,6 +1712,97 @@ const server = http.createServer((req, res) => {
     )
     return
   }
+  // ── 워크트리별 .env.local — "로컬 서버" 탭. cwd는 /term WS와 같은 규칙으로 프로젝트 루트
+  // 하위여야만 허용(임의 경로 읽기/쓰기 방지). 재시작은 기존 Term.devSessionForPort/
+  // restartDevSession을 그대로 재사용 — 포트가 그 워크트리에서 실제로 떠 있으면 제자리 재시작.
+  if (url === '/api/worktree/env' && req.method === 'GET') {
+    const cwd = new URL(req.url, 'http://x').searchParams.get('cwd') || ''
+    const proj = path.dirname(C.REPO)
+    const resolved = path.resolve(cwd)
+    if (!cwd || (resolved !== proj && !resolved.startsWith(proj + path.sep))) return sendJSON(res, 400, { ok: false, error: 'cwd가 프로젝트 루트 하위가 아닙니다' })
+    let text = ''
+    try {
+      text = fs.readFileSync(path.join(resolved, '.env.local'), 'utf8')
+    } catch (_) {
+      /* 파일 없으면 빈 목록 — 아직 한 번도 저장 안 한 새 워크트리일 수 있음 */
+    }
+    const vars = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => {
+        const i = l.indexOf('=')
+        return i < 0 ? null : { key: l.slice(0, i).trim(), value: l.slice(i + 1).trim() }
+      })
+      .filter(Boolean)
+    return sendJSON(res, 200, { ok: true, vars, cwd: resolved })
+  }
+  if (url === '/api/worktree/env' && req.method === 'POST') {
+    readBody(req)
+      .then(async (b) => {
+        const cwd = (b && b.cwd) || ''
+        const proj = path.dirname(C.REPO)
+        const resolved = path.resolve(cwd)
+        if (!cwd || (resolved !== proj && !resolved.startsWith(proj + path.sep))) return sendJSON(res, 400, { ok: false, error: 'cwd가 프로젝트 루트 하위가 아닙니다' })
+        const vars = Array.isArray(b.vars) ? b.vars : []
+        const text = vars.map((v) => `${v.key}=${v.value}`).join('\n') + '\n'
+        fs.writeFileSync(path.join(resolved, '.env.local'), text, 'utf8')
+        const port = Number(b.port) || 0
+        if (!port) return sendJSON(res, 200, { ok: true, restarted: false })
+        const info = await Term.devSessionForPort(port).catch(() => null)
+        if (info && info.hasSession) {
+          const r = await Term.restartDevSession(info)
+          return sendJSON(res, 200, { ok: true, restarted: r.ok, restartedIn: r.restartedIn })
+        }
+        return sendJSON(res, 200, { ok: true, restarted: false, error: `:${port}에서 재시작할 dev 세션을 찾지 못했습니다 — 파일은 저장됐습니다` })
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+    return
+  }
+  // 이 워크트리의 살아있는 클로드 세션이 Task 툴로 띄운 서브에이전트 — hasClaudeHistory()와 같은
+  // ~/.claude/projects/<cwd 인코딩>/*.jsonl 트랜스크립트를 읽어 실제 tool_use(name: Agent/Task)를
+  // 뽑아낸다. 가장 최근에 수정된 jsonl(=지금 붙어있는 세션)만 본다. 가짜 데이터 없음 — 트랜스크립트가
+  // 없거나 서브에이전트를 한 번도 안 띄웠으면 빈 배열.
+  if (url === '/api/worktree/subagents' && req.method === 'GET') {
+    const cwd = new URL(req.url, 'http://x').searchParams.get('cwd') || ''
+    const proj = path.dirname(C.REPO)
+    const resolved = path.resolve(cwd)
+    if (!cwd || (resolved !== proj && !resolved.startsWith(proj + path.sep))) return sendJSON(res, 400, { ok: false, error: 'cwd가 프로젝트 루트 하위가 아닙니다' })
+    try {
+      const enc = resolved.replace(/[/.]/g, '-')
+      const dir = path.join(process.env.HOME || '', '.claude', 'projects', enc)
+      const files = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith('.jsonl'))
+        .map((f) => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+      if (!files.length) return sendJSON(res, 200, { ok: true, subagents: [] })
+      const lines = fs.readFileSync(path.join(dir, files[0].f), 'utf8').split('\n').filter(Boolean)
+      const subagents = []
+      for (const line of lines) {
+        let row
+        try {
+          row = JSON.parse(line)
+        } catch (_) {
+          continue
+        }
+        const content = row?.message?.content
+        if (!Array.isArray(content)) continue
+        for (const block of content) {
+          if (block?.type === 'tool_use' && (block.name === 'Agent' || block.name === 'Task')) {
+            subagents.push({
+              subagentType: block.input?.subagent_type || '알 수 없음',
+              description: block.input?.description || block.input?.name || '',
+              at: row.timestamp || null,
+            })
+          }
+        }
+      }
+      return sendJSON(res, 200, { ok: true, subagents: subagents.slice(-30).reverse() })
+    } catch (_) {
+      return sendJSON(res, 200, { ok: true, subagents: [] })
+    }
+  }
   // ── MSW 시나리오 (현재 보고 있는 페이지 관련) ──
   if (url === '/api/msw/scenarios') {
     const sp = new URL(req.url, 'http://x').searchParams
@@ -1668,11 +1893,12 @@ const server = http.createServer((req, res) => {
   }
   // 🔗 Slack Events API 인바운드 — 채널 알림을 claude -p 없이 직접 수신.
   //   설정: Slack 앱 Event Subscriptions Request URL = https://<공개주소>/api/slack/events, message.channels 구독.
-  //   서명검증: env SLACK_SIGNING_SECRET 설정 시 강제(미설정이면 로컬 테스트용 통과).
+  //   서명검증: Setup의 slackSign 커넥터(Secrets.slackSigningSecret) 또는 env SLACK_SIGNING_SECRET 설정 시 강제
+  //   (미설정이면 로컬 테스트용 통과).
   if (url === '/api/slack/events' && req.method === 'POST') {
     readRawBody(req)
       .then((raw) => {
-        const secret = process.env.SLACK_SIGNING_SECRET
+        const secret = Secrets.get('slackSigningSecret') || process.env.SLACK_SIGNING_SECRET
         const remoteAddr = String(req.socket.remoteAddress || '')
         const remoteIsLocal = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1'
         if (secret) {
@@ -1826,6 +2052,9 @@ const server = http.createServer((req, res) => {
       clients.delete(res)
     })
     return
+  }
+  if (req.method === 'GET' && !url.startsWith('/api') && url !== '/events') {
+    if (serveStatic(url, res)) return
   }
   res.writeHead(404, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ error: 'not found' }))
@@ -1991,24 +2220,43 @@ function migrateTmuxSessionPrefix() {
     .catch((e) => console.log(`   ⚠️  tmux 세션 마이그레이션 오류: ${String((e && e.message) || e)}`))
 }
 
-server.listen(PORT, HOST, () => {
-  console.log(`\n🪪  OpenRM 백엔드 — http://${HOST}:${PORT}`)
-  console.log(`   repo : ${C.REPO}`)
-  console.log(`   state: ${C.STATE_PATH || '(없음)'}\n`)
-  // 레거시 접두 세션 → 'orm-' 1회성 리네임. tmux 세션은 이 앱 전용 네임스페이스가 아니라
-  // 머신 전역이라, 자동 실행 시 이 리포와 무관한 다른 'mrm-' 세션(다른 프로젝트/툴)까지 건드릴 수
-  // 있음이 실제로 확인됨 — 그래서 기본은 비활성, 명시적으로 켠 경우에만 실행한다.
-  if (process.env.OPENRM_MIGRATE_TMUX === '1') migrateTmuxSessionPrefix()
-  watchState()
-  watchSrc()
-  Preview.setOnSignin((id, pwd) => DevUsers.saveLogin(id, pwd)) // iframe 직접 로그인 → 계정 자동저장
-  Preview.start()
-  loop(C.pollTmux, 5000)
-  loop(C.pollPorts, 10000)
-  loop(C.pollPRs, 30000)
-  Monitor.start() // PR·이슈 모니터 자동 시작 (cmux "10분 모니터링" 세션 대체)
-  console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
-  Aws.startExpiryWatch() // OpenRM 코어에선 비활성 스텁(원본 AWS MFA 감시는 사내 인프라 결합이라 제외)
-  require('./notify.cjs').start() // 에이전트 완료/질문/인증 → 맥 알림
-  console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작\n')
-})
+// startServer — listen을 함수로 감싸서 호출 시점/포트를 호출자(Electron main 등)가 통제할 수 있게 함.
+// `node server/index.cjs`로 직접 실행할 땐 아래 require.main 체크에서 자동으로 호출되어 기존과 동일하게 동작.
+function startServer(opts = {}) {
+  const port = opts.port || PORT
+  const host = opts.host || HOST
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, host, () => {
+      console.log(`\n🪪  OpenRM 백엔드 — http://${host}:${port}`)
+      console.log(`   repo : ${C.REPO}`)
+      console.log(`   state: ${C.STATE_PATH || '(없음)'}\n`)
+      // 레거시 접두 세션 → 'orm-' 1회성 리네임. tmux 세션은 이 앱 전용 네임스페이스가 아니라
+      // 머신 전역이라, 자동 실행 시 이 리포와 무관한 다른 'mrm-' 세션(다른 프로젝트/툴)까지 건드릴 수
+      // 있음이 실제로 확인됨 — 그래서 기본은 비활성, 명시적으로 켠 경우에만 실행한다.
+      if (process.env.OPENRM_MIGRATE_TMUX === '1') migrateTmuxSessionPrefix()
+      watchState()
+      watchSrc()
+      Preview.setOnSignin((id, pwd) => DevUsers.saveLogin(id, pwd)) // iframe 직접 로그인 → 계정 자동저장
+      Preview.start()
+      loop(C.pollTmux, 5000)
+      loop(C.pollPorts, 10000)
+      loop(C.pollPRs, 30000)
+      Monitor.start() // PR·이슈 모니터 자동 시작 (cmux "10분 모니터링" 세션 대체)
+      console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
+      Aws.startExpiryWatch() // AWS MFA 세션 만료 감시 — 인증 풀리면 맥 알림 (읽기전용 STS 호출만, aws.cjs 참고)
+      require('./notify.cjs').start() // 에이전트 완료/질문/인증 → 맥 알림
+      console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작\n')
+      resolve({ port, host, server })
+    })
+  })
+}
+
+if (require.main === module) {
+  startServer().catch((e) => {
+    console.error('❌ 서버 시작 실패:', (e && e.message) || e)
+    process.exit(1)
+  })
+}
+
+module.exports = { startServer, server }

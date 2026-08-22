@@ -1,10 +1,18 @@
-// ticket.cjs — 티켓 접두사(예: GBIZ, JIRA, PROJ) 중앙 설정. OPENRM_TICKET_PREFIX로 자기 프로젝트에 맞게 바꾼다.
+// ticket.cjs — 티켓 접두사(예: GBIZ, JIRA, PROJ) 중앙 설정.
+// 우선순위: Setup 페이지의 AppConfig.ticketPrefix → OPENRM_TICKET_PREFIX 환경변수 → 'PROJ'.
+// 매번 새로 계산해야 함(게터) — collector.cjs의 REPO 게터와 같은 이유: Setup에서 바꾸면
+// 재시작 없이 바로 반영되게.
 'use strict'
-const PREFIX = process.env.OPENRM_TICKET_PREFIX || 'PROJ'
-const RE_SRC = `${PREFIX}-\\d+`
+const AppCfg = require('./store/settings.cjs')
+
+function currentPrefix() {
+	const cfg = AppCfg.getAppConfig()
+	if (cfg.ticketPrefix && String(cfg.ticketPrefix).trim()) return String(cfg.ticketPrefix).trim()
+	return process.env.OPENRM_TICKET_PREFIX || 'PROJ'
+}
 
 function re(flags) {
-	return new RegExp(RE_SRC, flags)
+	return new RegExp(`${currentPrefix()}-\\d+`, flags)
 }
 
 function ticketOf(text) {
@@ -14,7 +22,18 @@ function ticketOf(text) {
 
 function normalizeBranchPrefix(branch) {
 	const b = String(branch || '')
-	return re('i').test(b.slice(0, PREFIX.length + 1)) ? b.replace(new RegExp(`^${PREFIX}-`, 'i'), `${PREFIX}-`) : b
+	const p = currentPrefix()
+	return re('i').test(b.slice(0, p.length + 1)) ? b.replace(new RegExp(`^${p}-`, 'i'), `${p}-`) : b
 }
 
-module.exports = { PREFIX, RE_SRC, re, ticketOf, normalizeBranchPrefix }
+module.exports = {
+	get PREFIX() {
+		return currentPrefix()
+	},
+	get RE_SRC() {
+		return `${currentPrefix()}-\\d+`
+	},
+	re,
+	ticketOf,
+	normalizeBranchPrefix,
+}

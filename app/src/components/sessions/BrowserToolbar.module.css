@@ -1,0 +1,184 @@
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line);
+	flex: none;
+	position: relative;
+}
+
+.iconBtn {
+	flex: none;
+	width: 28px;
+	height: 28px;
+	border-radius: 7px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t2);
+	cursor: pointer;
+	position: relative;
+}
+.iconBtn svg {
+	width: 15px;
+	height: 15px;
+}
+.iconBtn:hover {
+	background: var(--card-hover);
+}
+.disabled {
+	color: var(--t3);
+	opacity: 0.4;
+	cursor: default;
+}
+.disabled:hover {
+	background: none;
+}
+.active {
+	color: var(--violet);
+	background: var(--vtint);
+}
+.envLabelBtn {
+	width: auto;
+	padding: 0 10px;
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	font-weight: 700;
+}
+
+.addressBar {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	background: var(--card);
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	padding: 0 12px;
+	color: var(--t3);
+}
+.addressBar svg {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+.addressBar input {
+	flex: 1;
+	min-width: 0;
+	background: none;
+	border: none;
+	padding: 7px 0;
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	color: var(--ink);
+}
+.addressBar input:disabled {
+	color: var(--t2);
+}
+.addressBar input:focus {
+	outline: none;
+}
+
+.sessionBtn {
+	flex: none;
+	font-size: 10.5px;
+	font-weight: 700;
+	padding: 7px 13px;
+	border-radius: 999px;
+	cursor: pointer;
+	border: none;
+	background: var(--violet);
+	color: #fff;
+}
+.sessionBtn.stop {
+	background: none;
+	border: 1px solid var(--line2);
+	color: var(--red);
+}
+.sessionBtn:hover {
+	opacity: 0.9;
+}
+.sessionBtn:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.error {
+	flex: none;
+	font-size: 10.5px;
+	color: var(--red);
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.envAnchor,
+.overflowAnchor {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+}
+
+.envPanel {
+	position: absolute;
+	top: 34px;
+	right: 0;
+	z-index: 30;
+	width: 380px;
+	max-height: 70vh;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	overflow: hidden;
+}
+.envEmpty {
+	padding: 16px;
+	font-size: 11px;
+	color: var(--t3);
+}
+
+.overflowMenu {
+	position: absolute;
+	top: 34px;
+	right: 0;
+	z-index: 30;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	width: 200px;
+	padding: 8px;
+}
+.overflowRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 7px 6px;
+	font-size: 11px;
+	color: var(--t2);
+}
+
+.deviceToggle {
+	display: flex;
+	background: var(--card);
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	padding: 2px;
+	flex: none;
+}
+.deviceOpt {
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--t3);
+	padding: 3px 9px;
+	border-radius: 999px;
+	cursor: pointer;
+}
+.deviceOptActive {
+	background: var(--violet);
+	color: #fff;
+}

@@ -69,7 +69,7 @@ button {
 	width: 100%;
 	height: 38px;
 	padding: 0 11px;
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	background: var(--bg);
 	border: 1px solid var(--line2);
 	color: var(--ink);
@@ -84,5 +84,73 @@ button {
 }
 .fin::placeholder {
 	color: #5a5a62;
+}
+
+/* shared dry (ghost) button skin — icon/text controls that sit on a panel bar */
+.btn-dry {
+	height: 26px;
+	padding: 0 10px;
+	border-radius: 7px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.btn-dry:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+
+/* XTerm.tsx — 실제 xterm.js 터미널 패널. 부모가 높이를 갖고 있어야 fit()이 맞게 계산된다.
+   VSCode 통합 터미널처럼 패널 자체가 곧 터미널이라 별도 "확대" 토글은 두지 않는다. */
+.xterm-wrap {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background: #05080d;
+}
+.xterm-bar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 38px;
+	padding: 0 10px;
+	background: var(--card2);
+	border-bottom: 1px solid var(--line);
+}
+.xterm-name {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.xterm-model {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--violet);
+	flex: none;
+}
+.xterm-model .dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--violet);
+	flex: none;
+}
+.xterm-host {
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 6px 10px;
+}
+.xterm-host .xterm {
+	height: 100%;
 }
 

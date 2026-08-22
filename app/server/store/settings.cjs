@@ -39,6 +39,16 @@ const APP_CONFIG_DEFAULTS = {
 	sentryProject: null,
 	awsDeployWebhookUrl: null,
 	vitalsEndpoint: null,
+	slackAlertChannel: null,
+	alertAutoConvertThreshold: 3, // 같은 장애(알림)가 이 횟수 이상 반복되면 자동으로 개발실 미분류 업무로 전환
+	ticketPrefix: null, // 티켓 접두사(예: GBIZ, PROJ) — ticket.cjs. 워크트리/브랜치명 파생 기준.
+	notionBacklogDb: null, // 백로그 자동생성 대상 Notion DB ID — tasks.cjs
+	notionBacklogAssignee: null,
+	notionBacklogService: null,
+	notionBacklogPlatform: null,
+	deployRepo: null, // 정기배포 브랜치 대상 레포 — deploy.cjs
+	deployBase: null, // 정기배포 브랜치의 기준 브랜치(기본 develop)
+	githubOAuthClientId: null, // GitHub OAuth App Client ID — Device Flow 연동(githubConnect.cjs)용, secret 아님
 }
 
 function getAppConfig() {

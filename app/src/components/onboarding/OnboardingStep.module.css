@@ -90,7 +90,7 @@
 	color: var(--t2);
 	background: var(--bg);
 	border: 1px solid var(--line2);
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	padding: 10px 12px;
 	margin-bottom: 12px;
 	white-space: pre-wrap;
@@ -118,7 +118,7 @@
 .connectBtn {
 	height: 36px;
 	padding: 0 16px;
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	background: var(--violet);
 	border: none;
 	cursor: pointer;
@@ -130,7 +130,7 @@
 .skipBtn {
 	height: 36px;
 	padding: 0 13px;
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	background: transparent;
 	border: 1px solid var(--line2);
 	cursor: pointer;

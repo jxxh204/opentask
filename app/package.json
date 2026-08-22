@@ -4,18 +4,24 @@
   "private": true,
   "description": "OpenRM · 병렬 AI 개발 관제탑 — 여러 워크트리·에이전트를 한 화면에서 감시·지시",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "server": "node server/index.cjs",
     "dev": "vite",
     "start": "concurrently -n server,vite -c blue,green \"node server/index.cjs\" \"vite\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "electron:dev": "concurrently -n server,vite,electron -c blue,green,magenta \"node server/index.cjs\" \"vite\" \"ELECTRON_START_URL=http://localhost:5180 electron .\"",
+    "electron:rebuild": "electron-rebuild -f -w better-sqlite3,node-pty",
+    "electron:build": "tsc -b && vite build && electron-builder",
+    "rebuild:node": "npm rebuild better-sqlite3 node-pty && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^11.3.0",
@@ -29,13 +35,34 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4",
     "@types/better-sqlite3": "^7.6.11",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.1.0",
+    "electron": "^33",
+    "electron-builder": "^26",
     "typescript": "^5.5.4",
     "vite": "^5.4.6"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "build": {
+    "appId": "com.openrm.desktop",
+    "productName": "OpenRM",
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/node-pty/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "directories": {
+      "output": "release"
+    }
+  }
 }
