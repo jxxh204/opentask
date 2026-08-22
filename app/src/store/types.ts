@@ -78,6 +78,9 @@ export interface Folder {
 	archived_at: number | null
 	// merge 게이트(§12) — 기본 꺼짐(Merge-ready: 자동 approve만, merge는 사람). 켜면 클린 판정 시 실제 merge까지 자동.
 	auto_merge: 0 | 1
+	// 레포는 폴더 단위로 하나만 — 서브태스크(Task.repo_id)는 폴더 생성 시 이 값을 물려받고 이후로도
+	// 이 값이 정답(orchestrator.cjs가 워크트리를 만들 때 이 값을 쓴다).
+	repo_id: string | null
 	tasks: Task[]
 }
 

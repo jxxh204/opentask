@@ -306,8 +306,9 @@ async function mapLimit(items, limit, fn) {
 	return out
 }
 
-async function list() {
-	const raw = await git(['worktree', 'list', '--porcelain'], C.REPO)
+async function list(repoPath) {
+	const repo = repoPath || C.REPO
+	const raw = await git(['worktree', 'list', '--porcelain'], repo)
 	const wts = []
 	let cur = null
 	for (const line of raw.split('\n')) {
@@ -343,7 +344,7 @@ async function list() {
 			lastTs: Number(lastTs) || 0,
 			ahead: Number(ahead.trim()) || 0,
 			behind: Number(behind.trim()) || 0,
-			isMain: w.path === C.REPO,
+			isMain: w.path === repo,
 		}
 	})
 
@@ -353,8 +354,8 @@ async function list() {
 }
 
 // 특정 브랜치가 이미 워크트리로 체크아웃돼 있으면 그 경로 (없으면 null)
-async function pathForBranch(branch) {
-	const r = await gitX(['worktree', 'list', '--porcelain'], C.REPO)
+async function pathForBranch(branch, repoPath) {
+	const r = await gitX(['worktree', 'list', '--porcelain'], repoPath || C.REPO)
 	if (!r.ok) return null
 	let curPath = null
 	for (const line of r.out.split('\n')) {
@@ -363,4 +364,11 @@ async function pathForBranch(branch) {
 	}
 	return null
 }
-module.exports = { list, create, ensure, remove, copyEnvFiles, ensureNodeModules, deriveNames, createDeployBranch, buildGroupBranch, pathForBranch }
+
+// 개수만 필요할 때(레포 관리 테이블 배지 등) — list()처럼 워크트리마다 status/log/rev-list를
+// 돌리지 않고 worktree 줄만 센다. 워크트리가 수십 개인 레포에서도 가볍다.
+async function count(repoPath) {
+	const raw = await git(['worktree', 'list', '--porcelain'], repoPath || C.REPO)
+	return raw.split('\n').filter((l) => l.startsWith('worktree ')).length
+}
+module.exports = { list, create, ensure, remove, copyEnvFiles, ensureNodeModules, deriveNames, createDeployBranch, buildGroupBranch, pathForBranch, count }

@@ -25,6 +25,7 @@ web
 - tmux + Claude Code 세션을 실제로 열고 지시를 주입 (node-pty + xterm).
 - GitHub(PR/이슈/CI)를 기본으로, 필요 시 Sentry/AWS/Slack/Notion/Figma 연동을 통해 findings를 수집.
 - Setup(초기 설정) 완료 전에는 Sessions/Monitor/GitHub/Architecture/Debug 페이지가 게이팅되어 접근 불가하며, 설정 전에는 데모 데이터로 동작.
+- 확정 규칙: 모든 메뉴는 SessionShell의 탭 워크스페이스 안에서 열린다 — 별도 라우트로 이동하지 않는다("모든 메뉴는 탭에서 나온다"). 태스크/워크트리에 속하지 않는 전역 메뉴(크론잡, 모델 배정 등)는 고정 가짜 노드 id로 기존 탭 인프라를 재사용해 이 규칙을 지킨다. 다만 Debug/GitHub/Monitor/Architecture/Setup 5개는 아직 예전 듀얼레일 Shell(ActivityBar+ContextPanel, 항상 다크)에 남아 있고 SessionShell 어디서도 링크되지 않아 실사용 중에는 마주치지 않는다 — 이 5개를 탭 워크스페이스로 옮기는 작업은 아직 진행되지 않음.
 
 ## Capabilities and Constraints
 
@@ -33,13 +34,14 @@ web
 - 모니터는 단순 로그가 아닌 findings 트래커: GitHub 이슈(`involves:@me`), PR CI 실패, PR 변경 요청을 추적해 open/resolved/regression 상태를 관리하고 SSE 토스트로 알림.
 - PR 리뷰 코멘트 "반영"은 태스크의 살아있는 터미널 세션에 실제 지시를 주입하고, "반박"은 실제 GitHub에 공개 답글을 게시함 — 되돌릴 수 없는 실제 액션.
 - 미확정: 다중 사용자 동시 접근/권한 분리는 아직 설계되지 않음(1인 운영자 도구에서 팀 도구로 확장 중인 과도기). 기본 오퍼레이터 표시 이름 "마티"는 Setup에서 바꿀 수 있으나, 리뷰/오케스트레이션 프롬프트 다수에 하드코딩된 잔재가 남아있음(`ADAPT.md`에 문서화된 미해결 갭).
+- 인앱 자동화(Automations/크론잡): OS cron·launchd와 연동하지 않는다 — "로컬 전용 도구에 과한 인프라"라는 판단에 따라, 앱이 켜져 있을 때만 동작하는 자체 폴링 스케줄러(`server/scheduler.cjs`, 30초 간격)로 구현. 스케줄 타입은 interval(N분마다)/daily(매일 HH:MM)/weekly(요일+시각) 세 가지. 액션은 현재 "새 일감 생성" 하나로 의도적으로 제한 — "AI가 스스로 작업 범위를 만들지 않는다"는 기존 원칙과 충돌하지 않도록, 사람이 미리 정한 스케줄만 그대로 실행한다.
 
 ## Brand Commitments
 
 - 라이트/다크 테마 모두 지원, 기본은 시스템 설정 추종 — 설정 모달에서 명시적으로 전환 가능.
 - 한국어 우선 UI 카피.
 - Pretendard(sans) + JetBrains Mono 폰트.
-- 시맨틱 컬러 규칙: violet = 에이전트/선택/직렬 체인, blue = PR/링크, green = 진행/성공/병렬, amber = 대기/주의, red = 실패/삭제.
+- 시맨틱 컬러 규칙: 상태색만 뚜렷하게 쓴다 — blue = PR/링크, green = 진행/성공/병렬, amber = 대기/주의, red = 실패/삭제. 에이전트/선택/직렬 체인을 나타내던 바이올렛 액센트는 "더 전문성 있는 CLI 툴 컬러"를 원한 요청에 따라 그레이스케일(라이트 `#5b6472` / 다크 `#9ba4b3`)로 교체됨 — 액센트를 의도적으로 죽이고 상태색만으로 의미를 구분하는 절제된 방향으로 확정.
 - 제품명 OpenTask(내부 코드네임 "MRM" → OpenRM을 거쳐 리브랜딩 — "무엇을 최상위 단위로 삼는가"를 기준으로 태스크 중심 정체성을 이름에 반영).
 
 ## Evidence on Hand

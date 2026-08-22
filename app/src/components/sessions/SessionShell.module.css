@@ -72,10 +72,10 @@
 
 .head {
 	position: relative;
-	padding: 10px 10px;
+	padding: 6px 10px 10px;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	border-bottom: 1px solid var(--line);
 }
 
@@ -89,15 +89,15 @@
 	width: 100%;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 6px;
-	background: var(--card2);
-	border: 1px solid var(--line2);
-	border-radius: var(--radius-control);
+	background: none;
+	border: none;
+	border-radius: var(--radius-chip);
 	color: var(--ink);
-	font-size: 12.5px;
+	font-size: 13.5px;
 	font-weight: 700;
-	padding: 7px 9px 7px 10px;
+	padding: 6px 5px;
 	cursor: pointer;
 }
 .repoSelect:hover {
@@ -127,7 +127,9 @@
 	left: 0;
 	z-index: 30;
 	width: 100%;
-	min-width: 190px;
+	min-width: 220px;
+	max-height: 70vh;
+	overflow-y: auto;
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
@@ -136,7 +138,7 @@
 }
 .repoSelectOpt {
 	padding: 7px 9px;
-	border-radius: 7px;
+	border-radius: var(--radius-chip);
 	cursor: pointer;
 	font-size: 12.5px;
 	font-weight: 600;
@@ -148,48 +150,261 @@
 .repoSelectOpt:hover {
 	background: var(--card-hover);
 }
-.repoSelectDivider {
+
+/* 레포 드롭다운 안, 레포 목록 아래 — "레포 관리"로 가는 진입점(전엔 이 자리에 워크트리 목록이
+   있었는데, 태스크로 안 들어온 워크트리는 사이드바 하단 .sidebarWt* 섹션으로 옮겼다). */
+.wtDivider {
 	height: 1px;
 	background: var(--line);
 	margin: 5px 2px;
 }
-.repoSelectAdd {
-	color: var(--violet);
-	font-weight: 700;
+.repoSelectManage {
+	color: var(--t2);
 }
+
+/* 사이드바 하단, 태스크 트리 아래 — git worktree list 중 아직 OpenTask 태스크로 등록 안 된 것만
+   (등록된 건 태스크 트리 안에서 이미 보이므로 중복 표시 안 함). 태스크 목록과는 구분선으로 분리. */
+.sidebarWtSection {
+	flex: none;
+	max-height: 180px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.sidebarWtDivider {
+	height: 1px;
+	background: var(--line);
+	margin: 0 10px;
+}
+.sidebarWtHeader {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px 4px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: var(--t3);
+	text-transform: uppercase;
+}
+.sidebarWtCount {
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--t3);
+	background: var(--card2);
+	padding: 1px 6px;
+	border-radius: 999px;
+}
+.sidebarWtList {
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 0 6px 6px;
+}
+.wtHint {
+	padding: 6px 9px;
+	font-size: 11px;
+	color: var(--t3);
+}
+/* list()가 워크트리마다 git status/log/rev-list를 도는 동안(워크트리 많은 레포는 수 초) 빈 화면
+   대신 자리 표시 — 실제 행(.wtRow)과 같은 높이/여백이라 데이터가 도착해도 레이아웃이 튀지 않는다. */
+.wtSkeletonRow {
+	padding: 6px 9px;
+}
+.wtSkeletonBar {
+	display: block;
+	height: 11px;
+	border-radius: var(--radius-chip);
+	background: linear-gradient(90deg, var(--card2) 25%, var(--card-hover) 50%, var(--card2) 75%);
+	background-size: 200% 100%;
+	animation: wtSkeletonShimmer 1.3s ease-in-out infinite;
+}
+@keyframes wtSkeletonShimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+.wtRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--radius-chip);
+}
+.wtRow:hover {
+	background: var(--card-hover);
+}
+.wtRowMain {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 4px 6px 9px;
+	cursor: pointer;
+	overflow: hidden;
+}
+.wtRowLabel {
+	display: block;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wtRowAction {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	margin-right: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-chip);
+	color: var(--t3);
+	cursor: pointer;
+}
+.wtRowAction svg {
+	width: 14px;
+	height: 14px;
+}
+.wtRowAction:hover {
+	background: var(--card);
+	color: var(--ink);
+}
+/* 사이드바 최상단, 레포 피커 위 — Automations처럼 Sessions 트리 밖으로 나가는 진입점(Orca 사이드바
+   참고). 지금은 하나뿐이지만 여러 개가 되어도 늘어나는 리스트 형태. */
+.navLinks {
+	padding: 10px 8px 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.navLink {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	width: 100%;
+	padding: 8px 8px;
+	border: none;
+	background: none;
+	border-radius: var(--radius-chip);
+	color: var(--t2);
+	font-size: 11.5px;
+	font-weight: 600;
+	cursor: pointer;
+	text-align: left;
+}
+.navLink:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+.navLinkIcon {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	display: flex;
+	color: var(--t3);
+}
+.navLinkIcon svg {
+	width: 100%;
+	height: 100%;
+}
+
+/* Orca 사이드바 참고 — nav 링크 아래, 레포 섹션 위. 알약형 회색 필드에 아이콘+placeholder. 트리(일감함
+   + 태스크 목록)를 이름으로 좁혀 보여준다(레포 스코프는 그대로, 레포 자체를 검색하지는 않음). */
+.sidebarSearch {
+	margin: 10px 10px 8px;
+	height: 34px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 10px;
+	background: var(--card2);
+	border-radius: var(--radius-control);
+	cursor: text;
+}
+.sidebarSearchIcon {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	display: flex;
+	color: var(--t3);
+}
+.sidebarSearchIcon svg {
+	width: 100%;
+	height: 100%;
+}
+.sidebarSearchInput {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	background: none;
+	color: var(--ink);
+	font-size: 12.5px;
+}
+.sidebarSearchInput::placeholder {
+	color: var(--t3);
+}
+
 .repoSelectOpt.selected,
 .selected {
 	color: var(--violet);
 	background: var(--vtint);
 }
 
-.inboxAnchor {
-	position: relative;
-	display: inline-flex;
+/* Projects 헤더의 아이콘 클러스터(Orca 참고) — 지금은 레포 추가 하나만 이 고스트 정사각 버튼을 쓴다
+   (일감 생성/태스크 추가는 아이콘만으로는 뭘 하는 버튼인지 안 보인다는 피드백으로 .taskAddBtn 분리). */
+.headIconBtn {
 	flex: none;
+	width: 26px;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: none;
+	border-radius: var(--radius-chip);
+	color: var(--t3);
+	cursor: pointer;
 }
-.inboxTrigger {
+.headIconBtn:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+.headIconBtn svg {
+	width: 16px;
+	height: 16px;
+}
+
+.taskAddBtn {
+	flex: none;
 	height: 26px;
 	padding: 0 9px;
-	border-radius: 7px;
 	display: flex;
 	align-items: center;
 	gap: 5px;
-	background: transparent;
-	border: 1px solid var(--line2);
-	color: var(--t2);
+	border: none;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+	color: var(--violet);
 	font-size: 11px;
 	font-weight: 700;
 	white-space: nowrap;
 	cursor: pointer;
 }
-.inboxTrigger:hover {
+.taskAddBtn:hover {
 	background: var(--card-hover);
-	color: var(--ink);
 }
-.inboxTrigger svg {
+.taskAddBtn svg {
 	width: 13px;
 	height: 13px;
+	flex: none;
+}
+
+.inboxAnchor {
+	position: relative;
+	display: inline-flex;
 	flex: none;
 }
 .inboxPanel {

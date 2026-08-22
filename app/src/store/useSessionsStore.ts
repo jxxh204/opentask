@@ -28,6 +28,7 @@ export interface SessionsState {
 	draft: string
 	draftBusy: boolean // "일감으로 추가" 클릭 → 실제로 목록에 뜨기까지의 공백 — 그동안 아무 표시가 없어 뭘 하는지 몰랐던 지점
 	classifying: Record<string, boolean> // taskId → repoClassify.cjs 자동배정이 아직 진행 중인지(멀티레포일 때만)
+	enrichingTitle: Record<string, boolean> // taskId → 링크 내용을 읽어 "○○ 링크 태스크" placeholder를 실제 제목으로 바꾸는 중인지
 	openFolders: Record<string, boolean>
 	openTasks: Record<string, boolean>
 	dragTaskId: string | null
@@ -49,6 +50,7 @@ export interface SessionsState {
 	createTaskInFolder(folderId: string | null, name: string): Promise<string | null>
 	renameFolder(id: string, name: string): Promise<void>
 	setFolderAutoMerge(id: string, on: boolean): Promise<void>
+	setFolderRepo(id: string, repoId: string | null): Promise<void>
 	renameTask(id: string, name: string): Promise<void>
 	toggleFolder(id: string): void
 	toggleTask(id: string): void
@@ -69,9 +71,9 @@ export interface SessionsState {
 	initRepo(input: { parentPath: string; name: string }): Promise<{ ok: boolean; error?: string }>
 	updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string }>): Promise<void>
 	removeRepo(id: string): Promise<void>
-	setTaskRepo(taskId: string, repoId: string | null): Promise<void>
 	/** 새 태스크 생성 직후, 백엔드가 백그라운드로 돌리는 자동배정(repo_id)이 끝날 때까지 잠깐 폴링 */
 	pollTaskRepoClassification(taskId: string): void
+	enrichTaskTitleInBackground(taskId: string, url: string): void
 	refreshOrchestration(folderId: string): Promise<void>
 	refreshAllOrchestrations(): Promise<void>
 	startOrchestration(folderId: string): Promise<void>
@@ -122,6 +124,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	draft: '',
 	draftBusy: false,
 	classifying: {},
+	enrichingTitle: {},
 	openFolders: {},
 	openTasks: {},
 	dragTaskId: null,
@@ -169,6 +172,9 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 			if (kind) {
 				const branch = await SessionsApi.createBranch({ taskId: task.id, name: '브랜치 미지정' })
 				await SessionsApi.addBranchLink(branch.id, kind, v)
+				// "○○ 링크 태스크" placeholder를 실제 링크 내용 기반 제목으로 — await 안 함(몇 초~170초
+				// 걸릴 수 있어 일감 추가 자체를 막으면 안 됨), enrichingTitle로 사이드바에 진행 상태만 표시.
+				get().enrichTaskTitleInBackground(task.id, v)
 			}
 			await get().loadBoard()
 			if (!task.repo_id) get().pollTaskRepoClassification(task.id)
@@ -236,21 +242,6 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}
 	},
 
-	// 사람이 직접 레포를 고르면(드롭다운) AI 자동배정 표시는 서버 쪽에서 해제됨(store/tasks.cjs update()).
-	setTaskRepo: async (taskId, repoId) => {
-		const patch = { repo_id: repoId, repo_auto: 0 as const }
-		set((s) => ({
-			inbox: s.inbox.map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
-			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)) })),
-		}))
-		try {
-			await SessionsApi.updateTask(taskId, { repoId })
-		} catch (e) {
-			set({ error: e instanceof Error ? e.message : String(e) })
-			await get().loadBoard()
-		}
-	},
-
 	pollTaskRepoClassification: (taskId) => {
 		if (get().repos.length < 2) return // 레포 1개 이하면 자동배정 자체가 안 뜸(서버도 스킵)
 		// 이전엔 폴링이 조용히 백그라운드에서만 돌아서, 일감함에 새로 뜬 항목이 "그냥 저러고 있는 건지
@@ -267,6 +258,19 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 			setTimeout(tick, 2000)
 		}
 		setTimeout(tick, 2000)
+	},
+
+	enrichTaskTitleInBackground: async (taskId, url) => {
+		set((s) => ({ enrichingTitle: { ...s.enrichingTitle, [taskId]: true } }))
+		try {
+			const r = await SessionsApi.enrichTaskTitle(taskId, url)
+			if ('ok' in r && r.ok) await get().loadBoard()
+			// 실패해도 조용히 무시 — placeholder 제목("○○ 링크 태스크")이 그대로 남을 뿐, 치명적이지 않다.
+		} catch (_) {
+			/* ignore */
+		} finally {
+			set((s) => ({ enrichingTitle: { ...s.enrichingTitle, [taskId]: false } }))
+		}
 	},
 
 	createFolder: async (name) => {
@@ -309,6 +313,17 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		set((s) => ({ folders: s.folders.map((f) => (f.id === id ? { ...f, auto_merge: on ? 1 : 0 } : f)) }))
 		try {
 			await SessionsApi.updateFolder(id, { autoMerge: on })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// 레포는 이제 폴더 단위 — 사람이 폴더 헤더에서 직접 바꾸면(예: AI 배정이 틀렸을 때) 이후 그 폴더의
+	// 새 서브태스크는 전부 이 값을 물려받는다(store/tasks.cjs create()).
+	setFolderRepo: async (id, repoId) => {
+		set((s) => ({ folders: s.folders.map((f) => (f.id === id ? { ...f, repo_id: repoId } : f)) }))
+		try {
+			await SessionsApi.updateFolder(id, { repoId })
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
 			await get().loadBoard()
@@ -368,7 +383,15 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		try {
 			let folderId = task.folder_id
 			if (!folderId) {
-				const folder = await SessionsApi.createFolder({ name: task.name, base: opts?.base, autoMerge: opts?.autoMerge, retryLimit: opts?.retryLimit })
+				// 레포는 폴더 단위로 한 번만 — 사람이 확인 화면에서 고른 값(opts.repoId) 우선, 안 골랐으면
+				// inbox 단계에서 이미 AI가 배정해둔 task.repo_id를 그대로 폴더로 승격.
+				const folder = await SessionsApi.createFolder({
+					name: task.name,
+					base: opts?.base,
+					autoMerge: opts?.autoMerge,
+					retryLimit: opts?.retryLimit,
+					repoId: opts?.repoId !== undefined ? opts.repoId : task.repo_id,
+				})
 				folderId = folder.id
 				await SessionsApi.moveTask(taskId, folderId, null)
 			}

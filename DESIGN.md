@@ -1,5 +1,5 @@
 ---
-name: OpenRM
+name: OpenTask
 description: 오퍼레이터의 터미널 — 라이트를 기본값으로, 다크를 완전 대응하는 신호 전용 콘솔
 colors:
   paper-white: "#f7f7f8"
@@ -11,8 +11,8 @@ colors:
   ghost-gray: "#8a8b91"
   rail-line: "#e4e4e7"
   divider-line: "#d6d7db"
-  signal-violet: "#6d5be8"
-  signal-violet-tint: "rgba(109, 91, 232, 0.1)"
+  signal-violet: "#5b6472"
+  signal-violet-tint: "rgba(91, 100, 114, 0.12)"
   link-blue: "#2f6fe0"
   link-blue-tint: "rgba(47, 111, 224, 0.1)"
   progress-green: "#1f9d6c"
@@ -142,7 +142,7 @@ OpenTask는 대시보드가 아니라 콘솔이다. 이 은유는 다크 전용 
 팔레트는 거의 무채색이다 — 배경과 표면은 라이트/다크 모두 그레이스케일이고, 오직 6개의 시그널 색만 의미를 나른다. 아래 각 색은 **라이트(기본값) / 다크** 순으로 표기한다.
 
 ### Primary (Signal Palette)
-- **시그널 바이올렛 Signal Violet** (라이트 `#6d5be8` / 다크 `#8b7cf0`): 에이전트 / 선택 상태 / 직렬 체인의 신호색. 시스템 전역의 기본 링크(anchor) 색이기도 하다.
+- **시그널 바이올렛 Signal Violet** (라이트 `#5b6472` / 다크 `#9ba4b3`): 에이전트 / 선택 상태 / 직렬 체인의 신호색. 시스템 전역의 기본 링크(anchor) 색이기도 하다. (2026-08-23: 좀 더 절제된 CLI 툴 인상을 위해 바이올렛→그레이스케일 계열로 교체 — 토큰 이름은 하위호환을 위해 유지.)
 - **링크 블루 Link Blue** (라이트 `#2f6fe0` / 다크 `#579dff`): PR과 외부 링크 전용. tint 배경과 짝을 이뤄 칩/배지에 쓰인다.
 - **프로그레스 그린 Progress Green** (라이트 `#1f9d6c` / 다크 `#3ecf8e`): 진행 중 / 성공 / 병렬 실행.
 - **코션 앰버 Caution Amber** (라이트 `#b9791a` / 다크 `#e0a436`): 대기 / 주의.

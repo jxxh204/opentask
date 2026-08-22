@@ -434,6 +434,38 @@ function finalizeEnrich(link, text) {
 	return { ok: true, key, ticket, title: e.title || null, summary: e.summary || null, counts: { notion: (links.notion || []).length, figma: (links.figma || []).length } }
 }
 
+// SQLite 기반 새 Task(store/tasks.cjs)용 — enrichThread와 달리 구 flat-JSON 레지스트리(loadReg/
+// saveReg/startClassify)엔 손대지 않고 {title,summary}만 뽑아 돌려준다. "스레드 링크 태스크" 같은
+// 제목 placeholder를 실제 링크 내용 기반 제목으로 바꾸는 용도(§ InboxPreview 일감 생성).
+async function readLinkForTitle(url) {
+	const m = String(url || '').match(/https?:\/\/[^\s)\]\}"'<>]+/)
+	const link = m ? m[0].replace(/[.,]+$/, '') : ''
+	if (!link) return { ok: false, error: '링크를 찾을 수 없습니다.' }
+	const r = await new Promise((resolve) => {
+		const child = execFile(CLAUDE_BIN, ['-p', ENRICH_PROMPT(link), '--output-format', 'json', '--model', Settings.modelFor('enrich')], { cwd: C.REPO, timeout: 170000, maxBuffer: 16 << 20, env: process.env }, (e, out, err) =>
+			resolve({ ok: !e, out: String(out || ''), err: String(err || (e && e.message) || '') }),
+		)
+		try {
+			child.stdin.end()
+		} catch (_) {}
+	})
+	if (!r.ok) return { ok: false, error: '링크 읽기 실패: ' + ((r.err.split('\n').find((l) => l.trim()) || '').slice(0, 160) || 'claude 실행 실패') }
+	let text = r.out
+	try {
+		const j = JSON.parse(r.out)
+		text = j.result || j.text || r.out
+	} catch (_) {}
+	const jm = String(text || '').match(/\{[\s\S]*\}/)
+	let data = null
+	if (jm) {
+		try {
+			data = JSON.parse(jm[0])
+		} catch (_) {}
+	}
+	if (!data || !data.title) return { ok: false, error: 'AI 응답에서 제목을 추출하지 못했어요.' }
+	return { ok: true, title: String(data.title).slice(0, 120), summary: data.summary ? String(data.summary).slice(0, 400) : null }
+}
+
 // 동기 경로(알림 → 업무 전환 등): 한 번에 실행 후 결과 반환
 async function enrichThread({ url }) {
 	const m = String(url || '').match(/https?:\/\/[^\s)\]\}"'<>]+/)
@@ -1808,4 +1840,4 @@ function setTitle({ ticket, title }) {
 	return { ok: true }
 }
 
-module.exports = { build, createFromLink, enrichThread, startEnrich, enrichStatus, startBacklog, listJobs, removeTask, mutateLink, setTitle, setGroup, setGroupBase, setDevServer, setMemo, setTc, setTaskModel, startClassify, setTaskClass, startOps, reorderGroup, setChain, applyChain, startGroupDevServer, createGroup, removeGroup, renameGroup, cleanupDone, startPrReview, startPrImprove, startPrApplyReview, startPrQuestion, listFailures, retryFailure, dismissFailure, translateToEnglishSlug, linkBacklogs, REVIEW_DIRECTIVE, extractLinks, linkKind }
+module.exports = { build, createFromLink, enrichThread, readLinkForTitle, startEnrich, enrichStatus, startBacklog, listJobs, removeTask, mutateLink, setTitle, setGroup, setGroupBase, setDevServer, setMemo, setTc, setTaskModel, startClassify, setTaskClass, startOps, reorderGroup, setChain, applyChain, startGroupDevServer, createGroup, removeGroup, renameGroup, cleanupDone, startPrReview, startPrImprove, startPrApplyReview, startPrQuestion, listFailures, retryFailure, dismissFailure, translateToEnglishSlug, linkBacklogs, REVIEW_DIRECTIVE, extractLinks, linkKind }

@@ -103,6 +103,9 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	const termStatus = useSessionsStore((s) => s.termStatus)
 	const archiveFolder = useSessionsStore((s) => s.archiveFolder)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy === folder.id)
+	const repos = useSessionsStore((s) => s.repos)
+	const setFolderRepo = useSessionsStore((s) => s.setFolderRepo)
+	const multiRepo = repos.length > 1
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const [confirmArchive, setConfirmArchive] = useState(false)
 	const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -222,6 +225,25 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					<span className={`m ${styles.autoMergeBadge}`} title="클린 판정이면 사람 확인 없이 자동으로 merge됩니다(우클릭으로 끌 수 있음)">
 						auto-merge
 					</span>
+				)}
+				{multiRepo && (
+					// 레포는 폴더 단위로 하나 — 여기서 정하면 이 폴더의 모든(이후 추가되는 것 포함) 서브태스크가
+					// 같은 레포를 쓴다(서브태스크별로 따로 고르던 예전 방식은 폐지, § 사용자 피드백).
+					<select
+						className="fin m"
+						title="이 태스크(폴더)의 레포 — 서브태스크가 전부 물려받습니다"
+						style={{ width: 'auto', height: 22, fontSize: 10 }}
+						value={folder.repo_id ?? ''}
+						onClick={(e) => e.stopPropagation()}
+						onChange={(e) => setFolderRepo(folder.id, e.target.value || null)}
+					>
+						<option value="">(선택 안 함)</option>
+						{repos.map((r) => (
+							<option key={r.id} value={r.id}>
+								{r.name}
+							</option>
+						))}
+					</select>
 				)}
 				{linkKinds.length > 0 && (
 					<span className={styles.linkAnchor}>

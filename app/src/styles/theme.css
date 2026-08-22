@@ -29,8 +29,8 @@
 	/* semantic accents — PRD §2 color discipline:
 	   violet=agent/selection/chain(serial), blue=PR/link, green=progress/success/parallel,
 	   amber=waiting/caution, red=failure/delete */
-	--violet: #6d5be8;
-	--vtint: rgba(109, 91, 232, 0.1);
+	--violet: #5b6472;
+	--vtint: rgba(91, 100, 114, 0.12);
 	--blue: #2f6fe0;
 	--btint: rgba(47, 111, 224, 0.1);
 	--green: #1f9d6c;
@@ -77,8 +77,8 @@
 		--line: #2f3037;
 		--line2: #393a42;
 
-		--violet: #8b7cf0;
-		--vtint: rgba(139, 124, 240, 0.16);
+		--violet: #9ba4b3;
+		--vtint: rgba(155, 164, 179, 0.18);
 		--blue: #579dff;
 		--btint: rgba(87, 157, 255, 0.16);
 		--green: #3ecf8e;
@@ -106,8 +106,8 @@
 	--line: #2f3037;
 	--line2: #393a42;
 
-	--violet: #8b7cf0;
-	--vtint: rgba(139, 124, 240, 0.16);
+	--violet: #9ba4b3;
+	--vtint: rgba(155, 164, 179, 0.18);
 	--blue: #579dff;
 	--btint: rgba(87, 157, 255, 0.16);
 	--green: #3ecf8e;

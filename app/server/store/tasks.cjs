@@ -25,6 +25,14 @@ function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
 	const maxOrder = fid
 		? db.prepare('SELECT COALESCE(MAX(order_idx), -1) AS m FROM tasks WHERE folder_id = ?').get(fid).m
 		: db.prepare('SELECT COALESCE(MAX(order_idx), -1) AS m FROM tasks WHERE folder_id IS NULL').get().m
+	// 레포는 이제 폴더 단위로 하나만 정한다 — 이미 폴더에 속한(=레포가 정해진) 서브태스크를 새로
+	// 만드는 거면 명시적 repoId가 없는 한 그 폴더의 repo_id를 그대로 물려받는다(다시 안 물어봄).
+	// inbox 단계(폴더 없음)는 여전히 repoId 없이 만들어지고 repoClassify.cjs가 나중에 채운다.
+	let rid = repoId || null
+	if (fid && !rid) {
+		const folder = db.prepare('SELECT repo_id FROM folders WHERE id = ?').get(fid)
+		if (folder && folder.repo_id) rid = folder.repo_id
+	}
 	db.prepare('INSERT INTO tasks (id, folder_id, order_idx, name, desc, kind, ticket, start_prompt, repo_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
 		id,
 		fid,
@@ -34,7 +42,7 @@ function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
 		kind || 'single',
 		ticket || null,
 		startPrompt || null,
-		repoId || null,
+		rid,
 		now,
 		now,
 	)

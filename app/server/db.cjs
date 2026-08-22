@@ -204,6 +204,35 @@ const MIGRATIONS = [
 	(db) => {
 		db.exec(`ALTER TABLE folders ADD COLUMN retry_limit INTEGER NOT NULL DEFAULT 3;`)
 	},
+	// v8 — Automations(§07 열린 항목 "크론잡 생성"). 스케줄러는 OpenRM 서버 프로세스가 켜져 있는 동안만
+	// 동작한다(orchestrator.cjs의 in-memory 상태·monitor.cjs의 setInterval 폴링과 같은 원칙 — 이 앱은
+	// 로컬에서만 쓰는 도구라 OS 레벨 cron/launchd 연동은 하지 않음, 과한 인프라).
+	(db) => {
+		db.exec(`
+			CREATE TABLE cron_jobs (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				schedule_type TEXT NOT NULL CHECK (schedule_type IN ('interval', 'daily', 'weekly')),
+				schedule_json TEXT NOT NULL,
+				action_type TEXT NOT NULL DEFAULT 'create_task' CHECK (action_type IN ('create_task')),
+				action_json TEXT NOT NULL,
+				enabled INTEGER NOT NULL DEFAULT 1,
+				last_run_at INTEGER,
+				next_run_at INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE INDEX idx_cron_jobs_next_run ON cron_jobs(enabled, next_run_at);
+		`)
+	},
+	// v9 — 레포는 서브태스크(tasks)가 아니라 폴더(전체 태스크) 단위로 하나만 정한다. 이전엔 서브태스크
+	// 마다 독립적으로 레포를 골라서, 같은 폴더 안에서 서로 다른 레포가 섞여도 아무 표시가 없었다.
+	// tasks.repo_id/repo_auto는 그대로 둔다 — inbox 단계(아직 폴더 없음)의 repoClassify.cjs 자동배정은
+	// 여전히 태스크 단위로 동작해야 하므로. 폴더로 승격되는 순간 그 값을 folders.repo_id로 복사해
+	// "이후로는 폴더가 정답"으로 넘긴다.
+	(db) => {
+		db.exec(`ALTER TABLE folders ADD COLUMN repo_id TEXT REFERENCES repos(id) ON DELETE SET NULL;`)
+	},
 ]
 
 function migrate() {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore'
-import { useTabsStore, TAB_LABEL } from '../../store/useTabsStore'
+import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, MODEL_POLICY_NODE_ID, wtPathFromNodeId } from '../../store/useTabsStore'
 import type { TabKind } from '../../store/useTabsStore'
 import type { Task } from '../../store/types'
 import { createTerm } from '../../api/term'
@@ -9,6 +9,8 @@ import ServerPane from './ServerPane'
 import BrowserPane from './BrowserPane'
 import SubagentStrip from './SubagentStrip'
 import OrchestratorPane from './OrchestratorPane'
+import CronJobsPane from './CronJobsPane'
+import ModelPolicyPane from './ModelPolicyPane'
 import styles from './TabWorkspace.module.css'
 
 // 오케스트레이터·태스크(서브태스크) 노드 둘 다 같은 탭 개념을 쓴다 — "+"로 열 수 있는 종류는 노드
@@ -53,6 +55,41 @@ function ClaudeSessionPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 	)
 }
 
+// 워크트리 목록에서 "미추적" 워크트리를 클릭했을 때 여는 즉석 셸(claude 명령 없이 plain tmux 세션).
+// OpenTask 태스크가 아니라 claudeSessionByTab/claudeModelByTab 저장소를 그대로 재사용 — 이름은
+// "클로드"지만 실제로는 tabId → tmux 세션명 매핑일 뿐이라 일반 터미널에도 그대로 쓸 수 있다.
+function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
+	const sessionName = useTabsStore((s) => s.claudeSessionByTab[tabId])
+	const setClaudeSession = useTabsStore((s) => s.setClaudeSession)
+	const [error, setError] = useState<string | null>(null)
+	const startedRef = useRef(false)
+
+	useEffect(() => {
+		if (sessionName || startedRef.current) return
+		startedRef.current = true
+		createTerm({ cwd, label: cwd.split('/').pop() })
+			.then((r) => {
+				if (r.ok) setClaudeSession(tabId, r.name, null)
+				else setError(r.error || '세션 생성 실패')
+			})
+			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
+	}, [tabId, cwd, sessionName, setClaudeSession])
+
+	if (sessionName) return <XTerm session={sessionName} cwd={cwd} modelLabel={null} />
+	if (error)
+		return (
+			<div className={styles.stub}>
+				<div className={styles.stubTitle}>세션을 시작하지 못했습니다</div>
+				<div className={styles.stubError}>{error}</div>
+			</div>
+		)
+	return (
+		<div className={styles.stub}>
+			<div className={styles.stubTitle}>터미널 시작 중…</div>
+		</div>
+	)
+}
+
 const KIND_OPT: { id: Task['kind']; label: string }[] = [
 	{ id: 'single', label: 'single' },
 	{ id: 'chain', label: 'chain(이어서)' },
@@ -73,7 +110,10 @@ function InboxPreview({ task }: { task: Task }) {
 	const multiRepo = repos.length > 1
 
 	const [open, setOpen] = useState(false)
-	const [base, setBase] = useState('main')
+	// 'main'으로 미리 채워두면 안 건드려도 그대로 전송돼 백엔드(worktrees.cjs)의 base 자동감지(레포
+	// 설정 → 현재 체크아웃 브랜치 → 최후수단 'main')를 항상 덮어써버렸다 — 손대지 않으면 빈 값을 보내
+	// 백엔드가 그 레포에 맞는 base를 스스로 찾게 둔다.
+	const [base, setBase] = useState('')
 	const [autoMerge, setAutoMerge] = useState(false)
 	const [retryLimit, setRetryLimit] = useState(3)
 	const [kind, setKind] = useState<Task['kind']>(task.kind || 'single')
@@ -91,7 +131,7 @@ function InboxPreview({ task }: { task: Task }) {
 			<div className={styles.stubTitle}>{task.name}</div>
 			<div className={styles.stubSub}>{task.desc || '설명 없음'}</div>
 			<div className={styles.confirmSummary} onClick={() => setOpen((o) => !o)}>
-				{repoName} · {base} · 자동머지 {autoMerge ? 'on' : 'off'} · N={retryLimit} {open ? '▾' : '▸ 자세히'}
+				{repoName} · {base || '자동감지'} · 자동머지 {autoMerge ? 'on' : 'off'} · N={retryLimit} {open ? '▾' : '▸ 자세히'}
 			</div>
 			{open && (
 				<div className={styles.confirmForm} onClick={(e) => e.stopPropagation()}>
@@ -110,7 +150,13 @@ function InboxPreview({ task }: { task: Task }) {
 					)}
 					<div className={styles.confirmRow}>
 						<span className={styles.confirmLabel}>base 브랜치</span>
-						<input className="fin m" style={{ width: 160, height: 26, fontSize: 10.5 }} value={base} onChange={(e) => setBase(e.target.value)} />
+						<input
+							className="fin m"
+							style={{ width: 160, height: 26, fontSize: 10.5 }}
+							value={base}
+							onChange={(e) => setBase(e.target.value)}
+							placeholder="자동감지"
+						/>
 					</div>
 					<div className={styles.confirmRow}>
 						<span className={styles.confirmLabel}>자동 머지 정책</span>
@@ -283,6 +329,38 @@ export default function TabWorkspace() {
 			</div>
 		)
 	}
+	// 크론잡/모델배정/미추적 워크트리 즉석 터미널은 태스크 트리에 속하지 않는 전역 가짜 노드라 found가
+	// 항상 null이다 — 아래 found 기반 렌더링(오케스트레이터/터미널/서버/브라우저 등)과는 무관하게 먼저 갈라낸다.
+	const wtPath = wtPathFromNodeId(activeNodeId)
+	if (activeNodeId === CRONJOBS_NODE_ID || activeNodeId === MODEL_POLICY_NODE_ID || wtPath) {
+		const activeTabInstance = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
+		return (
+			<div className={styles.wrap}>
+				<div className={styles.tabbar}>
+					{tabs.map((t) => (
+						<div key={t.id} className={`${styles.tab} ${t.id === activeTabId ? styles.tabActive : ''}`} onClick={() => setActiveTab(activeNodeId, t.id)}>
+							<span>{t.label || TAB_LABEL[t.kind]}</span>
+							<span
+								className={styles.tabClose}
+								onClick={(e) => {
+									e.stopPropagation()
+									closeTab(activeNodeId, t.id)
+								}}
+							>
+								×
+							</span>
+						</div>
+					))}
+				</div>
+				<div className={styles.body}>
+					{activeTabInstance?.kind === 'cronjobs' && <CronJobsPane />}
+					{activeTabInstance?.kind === 'modelPolicy' && <ModelPolicyPane />}
+					{wtPath && activeTabInstance?.kind === 'terminal' && <AdHocTerminalPane tabId={activeTabInstance.id} cwd={wtPath} />}
+				</div>
+			</div>
+		)
+	}
+
 	if (!found) return null
 	const isInboxItem = found.kind === 'task' && !found.task?.folder_id
 	const activeTabInstance = tabs.find((t) => t.id === activeTabId) ?? tabs[0]

@@ -96,7 +96,9 @@ async function start(folderId) {
 			// 워크트리 확보 (멱등 — 있으면 재사용, 없으면 base에서 생성). ticket 없으면 name을 raw로 → deriveNames가 슬러그화.
 			// 태스크가 레포를 지정했으면(멀티레포 프로젝트) 그 레포에, 아니면 지금처럼 단일 rootPath에 워크트리를 만든다.
 			const raw = (task.ticket && String(task.ticket).trim()) || task.name
-			const repo = StoreRepos.get(task.repo_id)
+			// 레포는 이제 폴더 단위 — folder.repo_id가 우선이고, 이 마이그레이션 이전에 만들어진 폴더라
+			// repo_id가 비어있으면 태스크에 남아있던 값으로 폴백(하위호환, 백필 없이도 계속 동작).
+			const repo = StoreRepos.get(folder.repo_id || task.repo_id)
 			if (task.repo_auto && repo && !repoAssignmentLooksRight(task, repo)) {
 				StoreDecisions.record({
 					folderId,
@@ -107,10 +109,24 @@ async function start(folderId) {
 				})
 				pushLog(s, `⚠️ 레포 배정 재확인 필요: "${task.name}" → ${repo.name} (키워드 안 겹침)`, 'amber')
 			}
-			const wt = await Worktrees.ensure({ ticket: raw, base: folder.base, desc: task.name, repoPath: repo && repo.path, repoBase: repo && repo.base })
+			// 워크트리 목록에서 "연결"로 입양된 태스크는 branches 레코드가 이미 실제 존재하는 워크트리를
+			// 가리킨다 — Worktrees.ensure로 새 경로를 derive해서 만들면 같은 브랜치가 이미 다른 경로에
+			// 체크아웃돼 있어 git이 거부한다("이미 워크트리로 사용 중"). 그 경로를 먼저 찾아 재사용한다.
+			const trackedBranch = StoreBranches.listByTask(task.id)[0] || null
+			const adoptedPath = trackedBranch ? await Worktrees.pathForBranch(trackedBranch.name, repo && repo.path) : null
+			const wt = adoptedPath
+				? { ok: true, path: adoptedPath, branch: trackedBranch.name, base: folder.base || null, attached: true }
+				: await Worktrees.ensure({ ticket: raw, base: folder.base, desc: task.name, repoPath: repo && repo.path, repoBase: repo && repo.base })
 			if (!wt.ok) {
 				pushLog(s, `워크트리 실패: "${task.name}" — ${wt.error}`, 'amber')
 				continue
+			}
+			// 폴더에 base가 아직 없으면(첫 태스크가 방금 자동감지로 정한 순간) 그 값을 폴더에 고정한다 —
+			// 안 그러면 같은 폴더의 다음 태스크가 그 사이 사람이 로컬에서 브랜치를 옮긴 결과로 서로 다른
+			// base에서 갈라질 수 있다. folder를 메모리에서도 갱신해 이 루프의 나머지 태스크도 바로 반영.
+			if (!folder.base && wt.base) {
+				StoreFolders.update(folderId, { base: wt.base })
+				folder.base = wt.base
 			}
 			// 실제 워크트리는 만들어졌는데 SQLite branches 테이블엔 아무도 기록을 안 남기고 있었다 —
 			// TaskRow의 ⎇ 브랜치 줄(과 PR 배지/ahead-behind)이 task.branches[0]에 의존하는데 항상

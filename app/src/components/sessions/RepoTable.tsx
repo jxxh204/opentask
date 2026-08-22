@@ -18,6 +18,7 @@ export default function RepoTable() {
 				<span className={styles.headCell}>경로</span>
 				<span className={styles.headCell}>기본 브랜치</span>
 				<span className={styles.headCell}>설명 (자동배정 판단 근거)</span>
+				<span className={styles.headCell}>워크트리</span>
 				<span />
 			</div>
 			{repos.map((repo) => (

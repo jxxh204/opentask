@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from '../../store/types'
 import type { OrchestrationSession } from '../../api/sessions'
+import { removeTask } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
@@ -65,8 +66,6 @@ export default function TaskRow({
 	const openReview = useSessionsStore((s) => s.openReview)
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 	const quickStartBusy = useSessionsStore((s) => s.quickStartBusy === task.id)
-	const repos = useSessionsStore((s) => s.repos)
-	const setTaskRepo = useSessionsStore((s) => s.setTaskRepo)
 	const gitStatus = useSessionsStore((s) => s.gitStatus)
 	const renameTask = useSessionsStore((s) => s.renameTask)
 	// term.cjs가 tmux 화면을 스크레이프해 매번 새로 계산하는 값(저장된 상태 아님) — 세션명으로 조인.
@@ -76,9 +75,6 @@ export default function TaskRow({
 	const [renaming, setRenaming] = useState(false)
 	const [nameDraft, setNameDraft] = useState(task.name)
 	const renameInputRef = useRef<HTMLInputElement>(null)
-
-	const multiRepo = repos.length > 1
-	const taskRepo = multiRepo ? repos.find((r) => r.id === task.repo_id) : null
 
 	const nb = task.branches.length
 	const primaryBranch = task.branches[0]
@@ -190,11 +186,6 @@ export default function TaskRow({
 								{openReviewCount > 0 ? `이슈 ${openReviewCount}` : '리뷰 완료'}
 							</span>
 						)}
-						{multiRepo && (
-							<span className="m" title={taskRepo ? (task.repo_auto ? 'AI가 자동배정' : '') : '자동배정 중…'} style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--t3)', flex: 'none' }}>
-								{taskRepo ? taskRepo.name : '…'}
-							</span>
-						)}
 						{nb === 0 && (
 							<span
 								className={styles.quickStart}
@@ -244,33 +235,25 @@ export default function TaskRow({
 						>
 							이름 변경
 						</div>
+						{/* 워크트리 목록에서 "연결"한 태스크를 다시 풀어놓는 자리 — 태스크·브랜치 레코드만
+						    지우고 실제 git worktree·브랜치는 그대로 둔다(server/store/tasks.cjs remove). */}
+						<div
+							className={styles.ctxMenuItem}
+							onClick={() => {
+								setMenuOpen(false)
+								if (confirm(`"${task.name}" 연결을 해제할까요? 워크트리·브랜치는 그대로 남습니다.`)) {
+									removeTask(task.id).then(() => useSessionsStore.getState().loadBoard())
+								}
+							}}
+						>
+							연결 해제 (워크트리 유지)
+						</div>
 					</div>
 				)}
 			</div>
 			{open && (
 				<div className={styles.detail}>
 					<p className={styles.desc}>{task.desc || '설명 없음'}</p>
-					{multiRepo && (
-						<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 10px' }}>
-							<span className={styles.promptLabel} style={{ margin: 0 }}>
-								📁 레포{task.repo_auto ? ' (자동)' : ''}
-							</span>
-							<select
-								className="fin m"
-								style={{ width: 'auto', height: 24, fontSize: 10.5 }}
-								value={task.repo_id ?? ''}
-								onClick={(e) => e.stopPropagation()}
-								onChange={(e) => setTaskRepo(task.id, e.target.value || null)}
-							>
-								<option value="">(선택 안 함)</option>
-								{repos.map((r) => (
-									<option key={r.id} value={r.id}>
-										{r.name}
-									</option>
-								))}
-							</select>
-						</div>
-					)}
 					{nb > 0 && <BranchChain branches={task.branches} kind={task.kind} groupBase={folderBase} />}
 				</div>
 			)}

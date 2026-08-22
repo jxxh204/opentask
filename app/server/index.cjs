@@ -27,6 +27,8 @@ const Cmux = require('./cmux.cjs')
 const Cockpit = require('./cockpit.cjs')
 const Term = require('./term.cjs')
 const Monitor = require('./monitor.cjs')
+const Scheduler = require('./scheduler.cjs')
+const StoreCronJobs = require('./store/cronJobs.cjs')
 const Sentry = require('./sentry.cjs')
 const Msw = require('./msw.cjs')
 const Prompts = require('./prompts.cjs')
@@ -604,6 +606,34 @@ const server = http.createServer((req, res) => {
     const r = StoreFolders.restore(id)
     return sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' })
   }
+  // Automations(§07 "크론잡 생성") — 스케줄대로 사람이 미리 정한 액션(지금은 새 일감 생성)을 실행.
+  if (url === '/api/cron-jobs' && req.method === 'GET') {
+    return sendJSON(res, 200, StoreCronJobs.list())
+  }
+  if (url === '/api/cron-jobs' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => { const r = StoreCronJobs.create(b || {}); sendJSON(res, r && r.ok === false ? 400 : 200, r) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/cron-jobs/') && url.endsWith('/run-now') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/cron-jobs/'.length, url.length - '/run-now'.length))
+    const job = StoreCronJobs.get(id)
+    if (!job) return sendJSON(res, 404, { ok: false, error: 'not found' })
+    return Scheduler.runJob(job)
+      .then(() => sendJSON(res, 200, { ok: true, job: StoreCronJobs.get(id) }))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/cron-jobs/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/cron-jobs/'.length))
+    return readBody(req)
+      .then((b) => { const r = StoreCronJobs.update(id, b || {}); sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' }) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/cron-jobs/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/cron-jobs/'.length))
+    return sendJSON(res, 200, StoreCronJobs.remove(id))
+  }
+
   // repos (멀티레포 프로젝트 — 레포 레지스트리)
   if (url === '/api/repos' && req.method === 'GET') {
     return sendJSON(res, 200, StoreRepos.list())
@@ -622,6 +652,43 @@ const server = http.createServer((req, res) => {
   if (url.startsWith('/api/repos/') && req.method === 'DELETE') {
     const id = decodeURIComponent(url.slice('/api/repos/'.length))
     return sendJSON(res, 200, StoreRepos.remove(id))
+  }
+  // 레포 관리 테이블의 워크트리 개수 배지 — list()의 무거운 per-worktree git 호출 없이 개수만.
+  if (url.startsWith('/api/repos/') && url.endsWith('/worktrees/count') && req.method === 'GET') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length, url.length - '/worktrees/count'.length))
+    const repo = StoreRepos.get(id)
+    if (!repo) return sendJSON(res, 404, { ok: false, error: 'repo not found' })
+    return Worktrees.count(repo.path)
+      .then((count) => sendJSON(res, 200, { count }))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // 이 레포의 실제 git worktree 전부(git worktree list --porcelain) — OpenTask가 만들지 않은
+  // 것(다른 도구·다른 사람이 만든 것)도 전부 잡힌다. 사이드바 "워크트리" 섹션이 씀.
+  if (url.startsWith('/api/repos/') && url.endsWith('/worktrees') && req.method === 'GET') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length, url.length - '/worktrees'.length))
+    const repo = StoreRepos.get(id)
+    if (!repo) return sendJSON(res, 404, { ok: false, error: 'repo not found' })
+    return Worktrees.list(repo.path)
+      .then((d) => sendJSON(res, 200, d))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // "연결" — OpenTask가 모르는 기존 워크트리를 태스크로 입양. 새 워크트리를 만들지 않고(이미 있으니)
+  // 그 브랜치를 가리키는 Folder/Task/Branch 레코드만 생성 — 실제 git 상태는 손대지 않는다.
+  // orchestrator.start()가 이 태스크를 시작할 때 branches 레코드로 기존 경로를 재사용한다.
+  if (url.startsWith('/api/repos/') && url.endsWith('/worktrees/adopt') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length, url.length - '/worktrees/adopt'.length))
+    const repo = StoreRepos.get(id)
+    if (!repo) return sendJSON(res, 404, { ok: false, error: 'repo not found' })
+    return readBody(req)
+      .then((b) => {
+        const branch = b && String(b.branch || '').trim()
+        if (!branch) return sendJSON(res, 400, { ok: false, error: 'branch 필요' })
+        const folder = StoreFolders.create({ name: branch })
+        const task = StoreTasks.create({ folderId: folder.id, name: branch, repoId: repo.id })
+        StoreBranches.create({ taskId: task.id, name: branch, repo: repo.name })
+        sendJSON(res, 200, { ok: true, folderId: folder.id, taskId: task.id })
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
   // "레포 추가" 모달의 Clone from URL / Create new project — 폴더 찾아보기(기존 폴더 등록)는
   // FolderPicker가 이미 쓰는 /api/setup/fs/* 로 충분해서 별도 라우트 없음.
@@ -664,6 +731,22 @@ const server = http.createServer((req, res) => {
           StoreTasks.move(id, targetFolder, b.beforeTaskId)
         }
         sendJSON(res, 200, StoreTasks.composeTask(StoreTasks.get(id)))
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // 스레드/노션/피그마 링크로 만든 일감의 제목이 "스레드 링크 태스크" 같은 종류명 placeholder로만
+  // 남아있던 문제 — 링크 내용을 실제로 읽어(claude -p + Slack/Notion/Figma MCP) 제목·요약을 얻어와
+  // 태스크에 반영한다. 몇 초~170초 걸릴 수 있어 draft 제출 자체는 막지 않고 백그라운드에서 호출됨.
+  if (url.startsWith('/api/tasks/') && url.endsWith('/enrich-title') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/tasks/'.length, url.length - '/enrich-title'.length))
+    const cur = StoreTasks.get(id)
+    if (!cur) return sendJSON(res, 404, { ok: false, error: 'not found' })
+    return readBody(req)
+      .then(async (b) => {
+        const r = await Tasks.readLinkForTitle((b && b.url) || '')
+        if (!r.ok) return sendJSON(res, 200, r) // 실패해도 200 — placeholder 제목 그대로 두면 됨(치명적 아님)
+        StoreTasks.update(id, { name: r.title, desc: r.summary || undefined })
+        sendJSON(res, 200, { ok: true, task: StoreTasks.composeTask(StoreTasks.get(id)) })
       })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
@@ -2246,7 +2329,9 @@ function startServer(opts = {}) {
       console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
       Aws.startExpiryWatch() // AWS MFA 세션 만료 감시 — 인증 풀리면 맥 알림 (읽기전용 STS 호출만, aws.cjs 참고)
       require('./notify.cjs').start() // 에이전트 완료/질문/인증 → 맥 알림
-      console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작\n')
+      console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작')
+      Scheduler.start() // Automations(§07 "크론잡 생성") — 30초마다 due job 확인
+      console.log('   🗓  Automations: 스케줄러 시작\n')
       resolve({ port, host, server })
     })
   })

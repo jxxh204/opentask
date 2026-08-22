@@ -5,10 +5,10 @@ export function getBoard() {
 	return api.get<SessionsBoard>('/api/sessions/board')
 }
 
-export function createFolder(input: { name: string; base?: string | null; autoMerge?: boolean; retryLimit?: number }) {
+export function createFolder(input: { name: string; base?: string | null; autoMerge?: boolean; retryLimit?: number; repoId?: string | null }) {
 	return api.post<Folder>('/api/folders', input)
 }
-export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean }>) {
+export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean; repoId: string | null }>) {
 	return api.patch<Folder>(`/api/folders/${id}`, patch)
 }
 export function removeFolder(id: string) {
@@ -35,6 +35,12 @@ export function updateTask(id: string, patch: Partial<{ name: string; desc: stri
 }
 export function removeTask(id: string) {
 	return api.delete<{ ok: boolean }>(`/api/tasks/${id}`)
+}
+// 스레드/노션/피그마 링크로 만든 일감의 "○○ 링크 태스크" placeholder 제목을, 링크 내용을 실제로
+// 읽어(claude -p + MCP) 얻은 제목·요약으로 교체 — 몇 초~170초 걸릴 수 있어 호출부는 await하지 않고
+// 백그라운드로 던진다.
+export function enrichTaskTitle(id: string, url: string) {
+	return api.post<{ ok: true; task: Task } | { ok: false; error: string }>(`/api/tasks/${id}/enrich-title`, { url })
 }
 
 // 멀티레포 프로젝트 — 연결된 레포 레지스트리 (0~1개면 단일 rootPath로 동작, 기존과 동일)

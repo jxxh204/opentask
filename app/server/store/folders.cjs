@@ -14,17 +14,18 @@ function get(id) {
 	return db.prepare('SELECT * FROM folders WHERE id = ?').get(id)
 }
 
-function create({ name, base, autoMerge, retryLimit }) {
+function create({ name, base, autoMerge, retryLimit, repoId }) {
 	const id = randomUUID()
 	const now = Date.now()
 	const maxOrder = db.prepare('SELECT COALESCE(MAX(order_idx), -1) AS m FROM folders').get().m
-	db.prepare('INSERT INTO folders (id, name, base, order_idx, auto_merge, retry_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+	db.prepare('INSERT INTO folders (id, name, base, order_idx, auto_merge, retry_limit, repo_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
 		id,
 		name || '새 폴더',
 		base || null,
 		maxOrder + 1,
 		autoMerge ? 1 : 0,
 		Math.max(1, Number(retryLimit) || 3),
+		repoId || null,
 		now,
 		now,
 	)
@@ -42,12 +43,15 @@ function update(id, patch) {
 	// 재시도 횟수(N) — mainTask 생성 확인 단계(§12)의 AI 기본값+사람 오버라이드 필드. 재요청 에스컬레이션
 	// 사다리(prReview.cjs)가 "몇 회차부터 새 세션+모델 상향"인지 여기 값을 기준으로 판단한다.
 	const retryLimit = 'retryLimit' in patch ? Math.max(1, Number(patch.retryLimit) || 3) : cur.retry_limit
-	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, updated_at = ? WHERE id = ?').run(
+	// 레포는 이제 폴더 단위로 하나만 — 'repoId' in patch로 명시적 null(선택 해제)도 받는다.
+	const repoId = 'repoId' in patch ? patch.repoId || null : cur.repo_id
+	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, repo_id = ?, updated_at = ? WHERE id = ?').run(
 		name,
 		base,
 		order_idx,
 		autoMerge,
 		retryLimit,
+		repoId,
 		Date.now(),
 		id,
 	)
