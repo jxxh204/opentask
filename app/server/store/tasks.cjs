@@ -18,7 +18,7 @@ function listByFolder(folderId) {
 	return db.prepare('SELECT * FROM tasks WHERE folder_id = ? ORDER BY order_idx ASC').all(folderId)
 }
 
-function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
+function create({ folderId, name, desc, kind, ticket, startPrompt, repoId, dueDate }) {
 	const id = randomUUID()
 	const now = Date.now()
 	const fid = folderId || null
@@ -33,7 +33,7 @@ function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
 		const folder = db.prepare('SELECT repo_id FROM folders WHERE id = ?').get(fid)
 		if (folder && folder.repo_id) rid = folder.repo_id
 	}
-	db.prepare('INSERT INTO tasks (id, folder_id, order_idx, name, desc, kind, ticket, start_prompt, repo_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+	db.prepare('INSERT INTO tasks (id, folder_id, order_idx, name, desc, kind, ticket, start_prompt, repo_id, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
 		id,
 		fid,
 		maxOrder + 1,
@@ -43,6 +43,7 @@ function create({ folderId, name, desc, kind, ticket, startPrompt, repoId }) {
 		ticket || null,
 		startPrompt || null,
 		rid,
+		dueDate || null,
 		now,
 		now,
 	)
@@ -59,13 +60,19 @@ function update(id, patch) {
 	const repoId = 'repoId' in patch ? patch.repoId || null : cur.repo_id
 	// repoId를 사람이 직접 지정/변경하면 자동배정 표시(repo_auto)는 해제 — AI 추천이 아니라 확정값이 됨.
 	const repoAuto = 'repoAuto' in patch ? (patch.repoAuto ? 1 : 0) : 'repoId' in patch ? 0 : cur.repo_auto
-	db.prepare('UPDATE tasks SET name = ?, desc = ?, kind = ?, start_prompt = ?, repo_id = ?, repo_auto = ?, updated_at = ? WHERE id = ?').run(
+	const dueDate = 'dueDate' in patch ? patch.dueDate || null : cur.due_date
+	const durationDays = 'durationDays' in patch ? patch.durationDays || null : cur.duration_days
+	const completedAt = 'completedAt' in patch ? patch.completedAt || null : cur.completed_at
+	db.prepare('UPDATE tasks SET name = ?, desc = ?, kind = ?, start_prompt = ?, repo_id = ?, repo_auto = ?, due_date = ?, duration_days = ?, completed_at = ?, updated_at = ? WHERE id = ?').run(
 		name,
 		desc,
 		kind,
 		startPrompt,
 		repoId,
 		repoAuto,
+		dueDate,
+		durationDays,
+		completedAt,
 		Date.now(),
 		id,
 	)

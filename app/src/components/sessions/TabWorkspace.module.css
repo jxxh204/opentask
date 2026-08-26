@@ -5,14 +5,16 @@
 	background: var(--bg);
 }
 
+/* VSCode 표준 탭 문법: 탭은 바 전체 높이를 여백 없이 채우고(딱 붙은 사각형, 알약/카드처럼 안 뜸),
+   탭 사이는 얇은 구분선으로만 나뉜다. 탭바 자체는 재킷(--card2)처럼 콘텐츠보다 한 단 가라앉은
+   톤이고, 활성 탭만 콘텐츠와 같은 --card로 밝게 떠서 아래와 이어진다 — 라이트/다크 둘 다 이 관계로
+   자동 성립(고정 다크 하드코딩 아님; ActivityBar가 없어진 지금은 그걸 기준 삼을 이유도 없다). */
 .tabbar {
 	flex: 0 0 auto;
 	display: flex;
-	align-items: center;
-	gap: 4px;
-	height: 42px;
-	padding: 0 10px;
-	background: var(--card);
+	align-items: stretch;
+	height: 36px;
+	background: var(--card2);
 	border-bottom: 1px solid var(--line);
 }
 
@@ -20,12 +22,11 @@
 	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	height: 30px;
+	gap: 7px;
 	padding: 0 12px;
-	border-radius: var(--radius-chip);
+	border-right: 1px solid var(--line);
 	font-size: 12px;
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--t3);
 	cursor: pointer;
 }
@@ -34,16 +35,33 @@
 	background: var(--card-hover);
 }
 .tabActive {
-	color: var(--violet);
-	background: var(--vtint);
+	color: var(--ink);
+	background: var(--card);
+	border-right-color: transparent;
+	margin-bottom: -1px;
+}
+.tabActive:hover {
+	background: var(--card);
 }
 
 .tabClose {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
 	font-size: 13px;
-	color: var(--t3);
 	line-height: 1;
+	color: var(--t3);
+	opacity: 0;
+}
+.tab:hover .tabClose,
+.tabActive .tabClose {
+	opacity: 1;
 }
 .tabClose:hover {
+	background: var(--rtint);
 	color: var(--red);
 }
 
@@ -69,7 +87,7 @@
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-control);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	box-shadow: var(--shadow-popover);
 	padding: 5px;
 	cursor: default;
 }
@@ -87,14 +105,15 @@
 
 .cmdkAnchor {
 	position: relative;
-	margin-left: 2px;
+	align-self: center;
+	margin-left: 4px;
 }
 .cmdkBtn {
-	width: 26px;
-	height: 26px;
-	border-radius: var(--radius-chip);
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
 	background: transparent;
-	border: 1px solid var(--line2);
+	border: none;
 	color: var(--t3);
 	font-size: 15px;
 	line-height: 1;
@@ -113,7 +132,7 @@
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	box-shadow: var(--shadow-popover);
 	padding: 6px;
 }
 .cmdkItem {

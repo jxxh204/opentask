@@ -92,76 +92,17 @@ const StoreRepos = require('./store/repos.cjs') // 멀티레포 프로젝트용 
 const StoreDecisions = require('./store/decisions.cjs') // AI 판정 감사 로그(§12) — feed와 달리 재시작에도 안 날아감
 const RepoAdd = require('./repoAdd.cjs') // "레포 추가" 모달의 clone/새 프로젝트
 const RepoClassify = require('./repoClassify.cjs') // 새 태스크 → 레포 자동배정(헤드리스 claude)
+const DurationEstimate = require('./durationEstimate.cjs') // 태스크 설명 → 예상 소요 영업일 추정(헤드리스 claude, 제안만)
 const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
+const Control = require('./control.cjs') // "관제" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)
 const PrReview = require('./prReview.cjs') // PR 리뷰 코멘트 fetch/apply/dispute (Phase 3.3)
 // Debug(디버깅) — Playwright 실브라우저 세션 (Phase 4b). playwright는 이 모듈들 안에서 lazy require라 부팅엔 영향 없음.
 const BrowserPool = require('./debug/browserPool.cjs')
 const Inspector = require('./debug/inspector.cjs')
-// GitHub 통계 + Monitor 배포 커넥터 (Phase 5.1) — 읽기 전용 집계.
-const GithubStats = require('./githubStats.cjs')
-const DeployStatus = require('./deployStatus.cjs')
-const Architecture = require('./architecture.cjs') // 아키텍처 페이지 백엔드 (Phase 5b, read-only). pg는 dbConnect 안에서 lazy require.
 
 // 프로젝트 루트를 정하면(개발실 게이트·설정 어디서든) 아키텍처의 API/Next 레이어를 흔한 컨벤션으로
 // 자동 스캔 — 사용자가 아키텍처 페이지에 따로 들어가 경로를 안 적어도 그래프가 채워지게. DB는 접속 정보가
 // 없어 자동화 불가(그대로 수동 연결). 존재하는 폴더가 하나도 없으면 조용히 스킵 — 실패해도 무해(read-only).
-async function autoScanArchitecture(rootPath) {
-  const apiCandidates = ['src/features', 'src/api', 'features', 'api']
-  const nextCandidates = [
-    { dir: 'src/app', router: 'app' },
-    { dir: 'app', router: 'app' },
-    { dir: 'src/pages', router: 'pages' },
-    { dir: 'pages', router: 'pages' },
-  ]
-  const isDir = (rel) => {
-    try { return fs.statSync(path.join(rootPath, rel)).isDirectory() } catch (_) { return false }
-  }
-  const apiHit = apiCandidates.find(isDir)
-  if (apiHit) await Architecture.apiScan({ root: apiHit }).catch(() => {})
-  const nextHit = nextCandidates.find((c) => isDir(c.dir))
-  if (nextHit) await Architecture.nextScan({ root: nextHit.dir, router: nextHit.router }).catch(() => {})
-}
-
-// Monitor 페이지 health 집계. 실 소스 있는 필드만 실제값, 없는 필드는 null(지어내지 않음).
-async function buildMonitorHealth() {
-  const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
-  let deploysToday = 0
-  try { const { db } = require('./db.cjs'); deploysToday = db.prepare('SELECT COUNT(*) AS c FROM deploys WHERE created_at >= ?').get(startOfToday).c } catch (_) {}
-  let prsAwaitingReview = 0
-  try {
-    const prData = await Prs.list('open').catch(() => ({ prs: [] }))
-    // 내 오픈 PR 중 아직 리뷰 결정 안 난 것(prs.cjs가 --author @me라 '내 PR' 기준 — 프론트 shape 한계 반영).
-    prsAwaitingReview = (prData.prs || []).filter((p) => !p.draft && (p.review === 'REVIEW_REQUIRED' || !p.review)).length
-  } catch (_) {}
-  let sentryRecentIssues1h = null
-  if (Sentry.configured()) { try { sentryRecentIssues1h = (await Sentry.recentIssues({ statsPeriod: '1h' })).length } catch (_) {} }
-  return {
-    ok: true,
-    prod: { status: null, uptimePct: null }, // placeholder — 합성 모니터링 대상 없음(Phase 6 전까지 null)
-    errorRate1h: null, // placeholder — 진짜 error rate엔 이벤트량 소스 필요(Phase 6). 지어내지 않고 null.
-    deploysToday, // real — store deploys 테이블(오늘 자정 이후)
-    prsAwaitingReview, // real — 내 오픈 PR 중 리뷰 대기
-    sentry: { configured: Sentry.configured(), recentIssues1h: sentryRecentIssues1h }, // recentIssues1h: 설정 시 실제 이슈 개수(프록시, rate 아님)
-    builtAt: new Date().toISOString(),
-  }
-}
-// Monitor 커넥터 카드 상태. sentry/pr-ci/aws-deploy는 실제 설정 여부, 나머지 셋은 백엔드 없어 항상 미연결.
-async function buildMonitorConnectors() {
-  const aws = await DeployStatus.status().catch(() => ({ id: 'aws-deploy', label: 'AWS·배포', connected: false, configured: false }))
-  return {
-    ok: true,
-    connectors: [
-      { id: 'sentry', label: 'Sentry', connected: Sentry.configured() },
-      { id: 'pr-ci', label: 'PR·CI', connected: AppCfg.prRepos().length > 0 },
-      aws,
-      { id: 'slack', label: 'Slack 알림', connected: !!AppCfg.getAppConfig().slackAlertChannel },
-      { id: 'vitals', label: 'Web Vitals', connected: false }, // 백엔드 없음 — placeholder 미연결
-      { id: 'bundle', label: 'Bundle', connected: false }, // 동일
-      { id: 'lighthouse', label: 'Lighthouse', connected: false }, // 동일
-    ],
-  }
-}
-
 // Setup 온보딩 스텝(id) → 각 필드의 저장 위치. config: AppConfig 필드명, secret: secrets 키명.
 // (프론트 src/pages/SetupPage.tsx의 STEPS/OPTS fieldDefs key와 1:1 대응. 'paths'는 rootPath/wtPath/branchPrefix로 직접 매핑.)
 // ⚠️ 'sentry'는 여기 없다 — Sentry는 이미 완전한 자체 설정 API(/api/sentry/config, 레거시
@@ -524,7 +465,6 @@ const server = http.createServer((req, res) => {
           else if (dest.secret) Secrets.set(dest.secret, String(v == null ? '' : v))
         }
         if (Object.keys(cfgPatch).length) AppCfg.updateAppConfig(cfgPatch)
-        if (cfgPatch.rootPath) autoScanArchitecture(cfgPatch.rootPath).catch(() => {}) // fire-and-forget, 응답을 막지 않음
         sendJSON(res, 200, { ...setupStatus(), skipped })
       })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
@@ -634,9 +574,27 @@ const server = http.createServer((req, res) => {
     return sendJSON(res, 200, StoreCronJobs.remove(id))
   }
 
+  // 관제(control) — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)를 대화로 조작하는 최상위 에이전트.
+  if (url === '/api/control/state' && req.method === 'GET') {
+    return Control.getState()
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/control/start' && req.method === 'POST') {
+    return Control.start()
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/control/stop' && req.method === 'POST') {
+    return Control.stop()
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+
   // repos (멀티레포 프로젝트 — 레포 레지스트리)
   if (url === '/api/repos' && req.method === 'GET') {
-    return sendJSON(res, 200, StoreRepos.list())
+    const list = StoreRepos.list().map((r) => ({ ...r, ownerAvatarUrl: StoreRepos.deriveOwnerAvatar(r.path) }))
+    return sendJSON(res, 200, list)
   }
   if (url === '/api/repos' && req.method === 'POST') {
     return readBody(req)
@@ -723,8 +681,8 @@ const server = http.createServer((req, res) => {
         b = b || {}
         const cur = StoreTasks.get(id)
         if (!cur) return sendJSON(res, 404, { ok: false, error: 'not found' })
-        // 편집(rename/desc/kind/시작 프롬프트/레포) — 해당 키가 있을 때만
-        if ('name' in b || 'desc' in b || 'kind' in b || 'startPrompt' in b || 'repoId' in b) StoreTasks.update(id, b)
+        // 편집(rename/desc/kind/시작 프롬프트/레포/예정일/기간/완료) — 해당 키가 있을 때만
+        if ('name' in b || 'desc' in b || 'kind' in b || 'startPrompt' in b || 'repoId' in b || 'dueDate' in b || 'durationDays' in b || 'completedAt' in b) StoreTasks.update(id, b)
         // refile/reorder — folderId 키가 있으면(명시적 null=inbox 포함) 그 값으로, 없고 beforeTaskId만 있으면 현재 폴더 유지
         if ('folderId' in b || 'beforeTaskId' in b) {
           const targetFolder = 'folderId' in b ? b.folderId : cur.folder_id
@@ -749,6 +707,29 @@ const server = http.createServer((req, res) => {
         sendJSON(res, 200, { ok: true, task: StoreTasks.composeTask(StoreTasks.get(id)) })
       })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // 태스크 상세의 "AI 추정" 버튼 — 설명 + 실제 코드를 읽는 동안 30~60초+ 걸릴 수 있어("오래 걸리는데
+  // 토큰/프로그레스바를 보여줘야" 피드백) tasks.cjs의 stream-json 잡 패턴처럼 즉시 jobId만 돌려주고
+  // 프론트가 폴링한다. 적용은 별도로 PATCH .../durationDays를 호출해야 반영되며, 이 라우트 자체는 저장 안 함.
+  if (url.startsWith('/api/tasks/') && url.endsWith('/estimate-duration/start') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/tasks/'.length, url.length - '/estimate-duration/start'.length))
+    const r = DurationEstimate.startEstimate(id)
+    return sendJSON(res, r.ok ? 200 : 400, r)
+  }
+  if (url.startsWith('/api/tasks/') && url.includes('/estimate-duration/status') && req.method === 'GET') {
+    const jobId = new URL(req.url, 'http://x').searchParams.get('jobId') || ''
+    return sendJSON(res, 200, DurationEstimate.getStatus(jobId))
+  }
+  // "상세 결과를 html로 뽑아주고 링크로 제공" — 좁은 드로어에 못 넣는 전체 서술+토큰/비용을 별도 페이지로.
+  if (url.startsWith('/api/tasks/') && url.includes('/estimate-duration/report') && req.method === 'GET') {
+    const jobId = new URL(req.url, 'http://x').searchParams.get('jobId') || ''
+    const html = DurationEstimate.getReportHtml(jobId)
+    if (!html) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      return res.end('리포트를 찾을 수 없습니다(만료됐을 수 있음)')
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    return res.end(html)
   }
   if (url.startsWith('/api/tasks/') && req.method === 'DELETE') {
     const id = decodeURIComponent(url.slice('/api/tasks/'.length))
@@ -905,44 +886,6 @@ const server = http.createServer((req, res) => {
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
     }
-  }
-
-  // ── GitHub / Monitor (Phase 5.1) — 읽기 전용 집계 ──
-  if (url === '/api/github/repos' && req.method === 'GET') {
-    return sendJSON(res, 200, { ok: true, repos: GithubStats.repos() })
-  }
-  if (url === '/api/github/stats' && req.method === 'GET') {
-    const range = Number(new URL(req.url, 'http://x').searchParams.get('range')) || 30
-    return GithubStats.getStats({ rangeDays: range })
-      .then((r) => sendJSON(res, 200, r))
-      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-  }
-  if (url === '/api/monitor/health' && req.method === 'GET') {
-    return buildMonitorHealth().then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-  }
-  if (url === '/api/monitor/connectors' && req.method === 'GET') {
-    return buildMonitorConnectors().then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-  }
-  if (url === '/api/monitor/actions/dispatch' && req.method === 'POST') {
-    readBody(req).then((b) => Monitor.dispatchAction(b || {})).then((r) => sendJSON(res, r.ok ? 200 : 400, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-    return
-  }
-
-  // ── Architecture / 아키텍처 (Phase 5b) — DB introspection + API/Next 스캔 (전부 read-only) ──
-  if (url === '/api/architecture/config' && req.method === 'GET') {
-    return sendJSON(res, 200, Architecture.config())
-  }
-  if (url === '/api/architecture/graph' && req.method === 'GET') {
-    return sendJSON(res, 200, Architecture.graph())
-  }
-  if (url === '/api/architecture/db/connect' && req.method === 'POST') {
-    return readBody(req).then((b) => Architecture.dbConnect(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-  }
-  if (url === '/api/architecture/api/scan' && req.method === 'POST') {
-    return readBody(req).then((b) => Architecture.apiScan(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-  }
-  if (url === '/api/architecture/next/scan' && req.method === 'POST') {
-    return readBody(req).then((b) => Architecture.nextScan(b || {})).then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
 
   if (url === '/api/templates') {
@@ -1941,10 +1884,6 @@ const server = http.createServer((req, res) => {
   if (url === '/api/monitor/aws') {
     const force = /[?&]force=1/.test(req.url || '')
     Aws.status(force).then((d) => sendJSON(res, 200, d)).catch((e) => sendJSON(res, 500, { error: String(e.message || e) }))
-    return
-  }
-  if (url === '/api/monitor/aws/mfa' && req.method === 'POST') {
-    readBody(req).then((b) => Aws.renew(b && b.code).then((d) => sendJSON(res, d.ok ? 200 : 400, d))).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
     return
   }
   if (url === '/api/monitor/alerts') {

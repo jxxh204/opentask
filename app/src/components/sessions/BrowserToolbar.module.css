@@ -132,7 +132,7 @@
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	box-shadow: var(--shadow-popover);
 	overflow: hidden;
 }
 .envEmpty {
@@ -149,7 +149,7 @@
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	box-shadow: var(--shadow-popover);
 	width: 200px;
 	padding: 8px;
 }

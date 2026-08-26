@@ -1,5 +1,13 @@
 .row {
 	border-radius: var(--radius-chip);
+	transition: box-shadow 0.1s ease, background 0.1s ease;
+}
+/* 다른 태스크를 드래그해서 이 위로 올렸을 때(하위 태스크 가벼운 버전 — 같은 폴더로 합류 + 이 태스크
+   앞에 삽입) — "하위로 들어가는듯한" 시각 피드백. 실제로는 트리 부모/자식이 아니라 같은 폴더의
+   chain 순서 재배치지만, 이 태스크 자리에 끼워 넣는다는 느낌은 그대로 전달한다. */
+.rowDropTarget {
+	background: var(--vtint);
+	box-shadow: inset 0 0 0 1.5px var(--violet);
 }
 
 .head {
@@ -44,7 +52,7 @@
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-control);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+	box-shadow: var(--shadow-popover);
 	padding: 5px;
 	cursor: default;
 }

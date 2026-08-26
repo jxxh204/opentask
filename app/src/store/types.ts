@@ -50,6 +50,9 @@ export interface Task {
 	start_prompt: string | null
 	repo_id: string | null
 	repo_auto: 0 | 1
+	due_date: number | null
+	duration_days: number | null
+	completed_at: number | null
 	created_at: number
 	updated_at: number
 	branches: Branch[]
@@ -65,6 +68,8 @@ export interface Repo {
 	description: string
 	order_idx: number
 	created_at: number
+	ownerAvatarUrl?: string | null
+	color: string | null
 }
 
 export interface Folder {

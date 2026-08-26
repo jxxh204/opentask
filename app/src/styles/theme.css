@@ -52,13 +52,19 @@
 	--font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 	--font-sans: 'Pretendard', 'Pretendard Variable', -apple-system, 'Apple SD Gothic Neo', system-ui, sans-serif;
 
-	/* §10 재검토 — GitHub Primer(카드 상한 8px)/Vercel Geist(카드 12px) 대비 14px가 유독 컸다. 12px로
-	   낮추고, 이미 컴포넌트마다 흩어져 있던 9px(버튼·인풋)/16px(모달)에 이름을 붙여 4단계로 정리:
-	   chip:8(기존) / control:9(신규, 기존 값 그대로) / card:12(14→축소) / modal:16(신규, 기존 값 그대로). */
-	--radius-card: 12px;
-	--radius-chip: 8px;
-	--radius-control: 9px;
-	--radius-modal: 16px;
+	/* §redesign — VSCode/Orca canon(CLI 툴 기준)으로 재조정. 이전 4단계(12/8/9/16)는 SaaS 대시보드
+	   급으로 둥글었다 — 에디터/터미널 계열은 구조적 요소(행·패널·버튼)를 거의 각지게, 뜨는 오버레이
+	   (드롭다운·모달)만 살짝 둥글게 처리한다. 절대값은 낮췄지만 4단계 위계 자체는 유지. */
+	--radius-card: 6px;
+	--radius-chip: 6px;
+	--radius-control: 4px;
+	--radius-modal: 8px;
+
+	/* 드롭다운/컨텍스트메뉴/모달 그림자 — 예전엔 컴포넌트마다 0 20px 44px rgba(0,0,0,.4~.5)를 따로
+	   박아 썼다(8곳 중복, blur 44px는 SaaS 대시보드용 두꺼운 플로트). VSCode류 에디터 오버레이는
+	   훨씬 타이트하게 붙는다 — 두 단계만: popover(드롭다운·컨텍스트메뉴), modal(진짜 모달, 한 단계 더). */
+	--shadow-popover: 0 6px 20px rgba(0, 0, 0, 0.28);
+	--shadow-modal: 0 12px 32px rgba(0, 0, 0, 0.32);
 }
 
 @media (prefers-color-scheme: dark) {

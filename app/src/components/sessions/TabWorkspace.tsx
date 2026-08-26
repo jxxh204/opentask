@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore'
-import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, MODEL_POLICY_NODE_ID, wtPathFromNodeId } from '../../store/useTabsStore'
+import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, MODEL_POLICY_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, wtPathFromNodeId } from '../../store/useTabsStore'
 import type { TabKind } from '../../store/useTabsStore'
 import type { Task } from '../../store/types'
 import { createTerm } from '../../api/term'
@@ -11,6 +11,8 @@ import SubagentStrip from './SubagentStrip'
 import OrchestratorPane from './OrchestratorPane'
 import CronJobsPane from './CronJobsPane'
 import ModelPolicyPane from './ModelPolicyPane'
+import CalendarPane from './CalendarPane'
+import ControlPane from './ControlPane'
 import styles from './TabWorkspace.module.css'
 
 // 오케스트레이터·태스크(서브태스크) 노드 둘 다 같은 탭 개념을 쓴다 — "+"로 열 수 있는 종류는 노드
@@ -329,10 +331,25 @@ export default function TabWorkspace() {
 			</div>
 		)
 	}
-	// 크론잡/모델배정/미추적 워크트리 즉석 터미널은 태스크 트리에 속하지 않는 전역 가짜 노드라 found가
-	// 항상 null이다 — 아래 found 기반 렌더링(오케스트레이터/터미널/서버/브라우저 등)과는 무관하게 먼저 갈라낸다.
+	// 크론잡/모델배정/캘린더/관제는 태스크 트리 밖의 "최상위 페이지"다 — 사이드바에서 바로 꽂히는 진입점이지
+	// 여러 개를 나란히 열어두고 오가는 탭 개념이 아니라, 탭바(닫기 ×, 다른 탭과 나란히) 자체를 안 보여주고
+	// 페이지 내용만 꽉 채운다. 미추적 워크트리 즉석 터미널(wtPath)은 여러 개를 동시에 열 수 있어 탭바를 유지.
+	if (activeNodeId === CRONJOBS_NODE_ID || activeNodeId === MODEL_POLICY_NODE_ID || activeNodeId === CALENDAR_NODE_ID || activeNodeId === CONTROL_NODE_ID) {
+		return (
+			<div className={styles.wrap}>
+				<div className={styles.body}>
+					{activeNodeId === CRONJOBS_NODE_ID && <CronJobsPane />}
+					{activeNodeId === MODEL_POLICY_NODE_ID && <ModelPolicyPane />}
+					{activeNodeId === CALENDAR_NODE_ID && <CalendarPane />}
+					{activeNodeId === CONTROL_NODE_ID && <ControlPane />}
+				</div>
+			</div>
+		)
+	}
+	// 미추적 워크트리 즉석 터미널은 태스크 트리에 속하지 않는 전역 가짜 노드라 found가 항상 null이다 —
+	// 아래 found 기반 렌더링(오케스트레이터/터미널/서버/브라우저 등)과는 무관하게 먼저 갈라낸다.
 	const wtPath = wtPathFromNodeId(activeNodeId)
-	if (activeNodeId === CRONJOBS_NODE_ID || activeNodeId === MODEL_POLICY_NODE_ID || wtPath) {
+	if (wtPath) {
 		const activeTabInstance = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
 		return (
 			<div className={styles.wrap}>
@@ -352,11 +369,7 @@ export default function TabWorkspace() {
 						</div>
 					))}
 				</div>
-				<div className={styles.body}>
-					{activeTabInstance?.kind === 'cronjobs' && <CronJobsPane />}
-					{activeTabInstance?.kind === 'modelPolicy' && <ModelPolicyPane />}
-					{wtPath && activeTabInstance?.kind === 'terminal' && <AdHocTerminalPane tabId={activeTabInstance.id} cwd={wtPath} />}
-				</div>
+				<div className={styles.body}>{activeTabInstance?.kind === 'terminal' && <AdHocTerminalPane tabId={activeTabInstance.id} cwd={wtPath} />}</div>
 			</div>
 		)
 	}

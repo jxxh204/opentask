@@ -8,6 +8,7 @@ import styles from './ModelPolicyPane.module.css'
 const MODEL_ACTIONS: { id: string; label: string }[] = [
 	{ id: 'design', label: '설계·아키텍처' },
 	{ id: 'orchestrator', label: '지휘자(그룹 지휘/교차검증)' },
+	{ id: 'control', label: '관제 에이전트(캘린더·크론잡·설정)' },
 	{ id: 'dev', label: '▶진행 제품 코딩' },
 	{ id: 'review', label: 'PR 코드 리뷰' },
 	{ id: 'improve', label: '리뷰대로 코드 개선' },

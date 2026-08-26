@@ -7,7 +7,7 @@ import { create } from 'zustand'
 //
 // VSCode처럼 탭은 종류당 하나가 아니다 — "+"를 누를 때마다 항상 새 탭 인스턴스가 생기고(TabInstance.id
 // 로 구분), ×로 닫으면 사라진다. TabKind는 그 탭이 무슨 콘텐츠를 보여줄지만 정할 뿐 유일 키가 아니다.
-export type TabKind = 'orchestrator' | 'terminal' | 'server' | 'browser' | 'claude' | 'cronjobs' | 'modelPolicy'
+export type TabKind = 'orchestrator' | 'terminal' | 'server' | 'browser' | 'claude' | 'cronjobs' | 'modelPolicy' | 'calendar' | 'control'
 
 export const TAB_LABEL: Record<TabKind, string> = {
 	orchestrator: '오케스트레이터',
@@ -17,13 +17,19 @@ export const TAB_LABEL: Record<TabKind, string> = {
 	claude: '클로드 세션',
 	cronjobs: '크론잡',
 	modelPolicy: '모델 배정',
+	calendar: '캘린더',
+	control: '관제',
 }
 
-// 크론잡/모델배정처럼 태스크·워크트리에 속하지 않는 전역 메뉴는 트리 노드와 같은 탭 인프라
+// 크론잡/모델배정/캘린더처럼 태스크·워크트리에 속하지 않는 전역 메뉴는 트리 노드와 같은 탭 인프라
 // (tabsByNode 등)를 재사용하기 위해 실제 노드 id가 아닌 고정 가짜 id를 하나씩 배정해 쓴다("규칙:
 // 모든 메뉴는 탭에서 나온다" — 별도 라우트/레거시 듀얼레일 Shell·모달 안 서브섹션으로 넣지 않는다).
 export const CRONJOBS_NODE_ID = '__cronjobs__'
 export const MODEL_POLICY_NODE_ID = '__modelPolicy__'
+export const CALENDAR_NODE_ID = '__calendar__'
+// 태스크 지휘자(orchestrator)와 이름·자리를 분리한 "관제" 에이전트 — 태스크 하나가 아니라 앱
+// 전체(캘린더/크론잡/설정)를 대화로 조작한다(server/control.cjs).
+export const CONTROL_NODE_ID = '__control__'
 
 // 워크트리 목록에서 "미추적" 워크트리를 클릭하면 여는 즉석 터미널 탭 — OpenTask가 태스크로 추적하지
 // 않는 경로라 UUID 노드가 없다. 경로 자체를 가짜 노드 id로 삼는다(경로마다 별도 탭 세트 유지).

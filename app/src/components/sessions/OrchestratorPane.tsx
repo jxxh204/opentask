@@ -68,11 +68,18 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 		startConductor(folderId)
 	}, [folderId, orch.conductor, busy, startConductor])
 
+	// orch.running은 서버(orchestrator.cjs)가 "서브태스크 세션이 하나라도 떴는가"만 보는 값이라
+	// (▶ 진행/advance가 헛돌지 않게 하려는 의도적 정의), 지휘자가 막 시작해 계획을 세우는 중이라
+	// 서브태스크를 아직 하나도 안 띄운 구간엔 running=false다 — 그 상태를 그대로 "대기"로 보여주면
+	// 터미널에선 지휘자가 뻔히 살아서 "Considering…" 중인데 헤더만 "대기"라고 해서 어색해 보였다
+	// (사용자가 스크린샷으로 신고). 지휘자 생존 여부(orch.conductor)를 더해 3단계로 구분한다.
+	const isActive = orch.running || !!orch.conductor
+	const stateLabel = orch.running ? '조율 중' : orch.conductor ? '지휘자 작업 중' : '대기'
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
-				<StatusDot color={orch.running ? 'green' : 'muted'} pulse={orch.running} />
-				<span className={styles.state}>{orch.running ? '조율 중' : '대기'}</span>
+				<StatusDot color={isActive ? 'green' : 'muted'} pulse={isActive} />
+				<span className={styles.state}>{stateLabel}</span>
 				<span className={`m ${styles.meta}`}>{orch.sessions.length}개 세션 · 웨이브 {orch.currentWaveIndex + 1}</span>
 				<div style={{ flex: 1 }} />
 				{orch.running && (

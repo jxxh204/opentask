@@ -23,16 +23,18 @@ export interface SessionsState {
 	termStatus: Record<string, TermStatus> // tmux 세션명 → 질문대기/인증필요(term.cjs status() 실데이터, 저장값 아님)
 	cockpitSummary: CockpitSummary | null // 사이드바 하단 상태바 요약 (dev/스트림/dirty/PR 총계, 메인 브랜치)
 	apiAddress: string | null // "host:port" — 상태바 우측의 실제 백엔드 주소
-	rootPath: string | null // 단일 레포 모드의 루트 경로 — 오케스트레이터/지휘자가 아직 없어도 클로드 세션을 띄울 기본 cwd
+	rootPath: string | null // 프로젝트 루트 경로 — 오케스트레이터/지휘자가 아직 없어도 클로드 세션을 띄울 기본 cwd
 
-	draft: string
-	draftBusy: boolean // "일감으로 추가" 클릭 → 실제로 목록에 뜨기까지의 공백 — 그동안 아무 표시가 없어 뭘 하는지 몰랐던 지점
 	classifying: Record<string, boolean> // taskId → repoClassify.cjs 자동배정이 아직 진행 중인지(멀티레포일 때만)
 	enrichingTitle: Record<string, boolean> // taskId → 링크 내용을 읽어 "○○ 링크 태스크" placeholder를 실제 제목으로 바꾸는 중인지
 	openFolders: Record<string, boolean>
 	openTasks: Record<string, boolean>
 	dragTaskId: string | null
 	overFolderId: string | null // 'inbox' | folder id | null
+	// 태스크를 다른 태스크 위로 드래그하면 그 태스크의 폴더로 합류(chain 순서로 그 앞에 삽입) —
+	// "하위 태스크" 가벼운 버전(§ 사용자 확인: 새 스키마 없이 기존 폴더 오케스트레이션 재사용).
+	// 드롭 대상에 시각 피드백을 주기 위한 hover 태스크 id.
+	overTaskId: string | null
 	orchestration: Record<string, OrchestrationState>
 	orchBusy: Record<string, boolean>
 
@@ -42,20 +44,33 @@ export interface SessionsState {
 	confirmingApplyId: string | null
 	reviewBusy: boolean
 
+	// TaskDetailModal의 열림 상태 — 캘린더 칩 클릭뿐 아니라 사이드바의 "AI 검토" 진행 목록에서도
+	// 같은 드로어를 열어야 해서(§ "사이드바에서 진행상황을 보여주고 클릭하면 상세로") CalendarPane
+	// 로컬 state였던 걸 여기로 끌어올렸다 — SessionShell 최상위에서 한 번만 렌더.
+	detailTaskId: string | null
+
 	loadBoard(): Promise<void>
-	setDraft(v: string): void
-	addTaskFromDraft(): Promise<void>
+	// 사이드바 "태스크 추가"와 캘린더 빈 칸 추가가 공유하는 단일 생성 경로(NewTaskModal) — 제목을 쓰거나
+	// Figma·스레드·Notion·PR 링크를 붙여넣으면 자동감지해 링크가 붙은 일감을 만든다. dueDate는 캘린더에서
+	// 열렸을 때만 채워짐.
+	createTaskFromDraft(text: string, dueDate?: number | null): Promise<{ ok: boolean; error?: string }>
 	createFolder(name: string): Promise<void>
 	/** cmdk "새 워크트리" — 지금 보고 있는 태스크와 같은 폴더(없으면 미분류)에 새 태스크를 만들고 연다 */
 	createTaskInFolder(folderId: string | null, name: string): Promise<string | null>
 	renameFolder(id: string, name: string): Promise<void>
 	setFolderAutoMerge(id: string, on: boolean): Promise<void>
-	setFolderRepo(id: string, repoId: string | null): Promise<void>
 	renameTask(id: string, name: string): Promise<void>
+	updateTaskDesc(id: string, desc: string): Promise<void>
+	updateTaskRepo(id: string, repoId: string | null): Promise<void>
+	setFolderRepo(id: string, repoId: string | null): Promise<void>
+	updateTaskDueDate(id: string, dueDate: number | null): Promise<void>
+	updateTaskDuration(id: string, durationDays: number | null): Promise<void>
+	setTaskDone(id: string, done: boolean): Promise<void>
 	toggleFolder(id: string): void
 	toggleTask(id: string): void
 	setDragTask(id: string | null): void
 	setOverFolder(id: string | null): void
+	setOverTask(id: string | null): void
 	moveTask(taskId: string, toFolderId: string | null, beforeTaskId?: string | null): Promise<void>
 	updateTaskPrompt(taskId: string, startPrompt: string): Promise<void>
 	quickStartTask(
@@ -69,7 +84,7 @@ export interface SessionsState {
 	createRepo(input: { name: string; path: string; base?: string; description?: string }): Promise<void>
 	cloneRepo(input: { url: string; parentPath: string; name?: string }): Promise<{ ok: boolean; error?: string }>
 	initRepo(input: { parentPath: string; name: string }): Promise<{ ok: boolean; error?: string }>
-	updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string }>): Promise<void>
+	updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string; color: string | null }>): Promise<void>
 	removeRepo(id: string): Promise<void>
 	/** 새 태스크 생성 직후, 백엔드가 백그라운드로 돌리는 자동배정(repo_id)이 끝날 때까지 잠깐 폴링 */
 	pollTaskRepoClassification(taskId: string): void
@@ -93,6 +108,8 @@ export interface SessionsState {
 
 	openReview(taskId: string): void
 	closeReview(): void
+	openTaskDetail(taskId: string): void
+	closeTaskDetail(): void
 	setDisputeText(v: string): void
 	startDispute(reviewId: string): void
 	cancelDispute(): void
@@ -121,14 +138,13 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	apiAddress: null,
 	rootPath: null,
 
-	draft: '',
-	draftBusy: false,
 	classifying: {},
 	enrichingTitle: {},
 	openFolders: {},
 	openTasks: {},
 	dragTaskId: null,
 	overFolderId: null,
+	overTaskId: null,
 	quickStartBusy: null,
 	orchestration: {},
 	orchBusy: {},
@@ -138,6 +154,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	disputeText: '',
 	confirmingApplyId: null,
 	reviewBusy: false,
+	detailTaskId: null,
 
 	loadBoard: async () => {
 		set({ loading: true, error: null })
@@ -156,19 +173,18 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}
 	},
 
-	setDraft: (v) => set({ draft: v }),
-
-	addTaskFromDraft: async () => {
-		const v = get().draft.trim()
-		if (!v) return
+	// 사이드바 "태스크 추가"와 캘린더 빈 칸 추가가 공유하는 단일 생성 경로(NewTaskModal) — 예전엔
+	// 사이드바 드롭다운 패널(draft/draftBusy 전역 상태)과 캘린더 인라인 입력이 각자 따로 구현돼 있었다.
+	// 폼 자체의 진행 중 상태는 모달 로컬 state로 관리하므로 여기선 순수 함수형으로 결과만 돌려준다.
+	createTaskFromDraft: async (text, dueDate) => {
+		const v = text.trim()
+		if (!v) return { ok: false, error: '내용을 입력하세요.' }
 		const kind = detectLink(v)
 		const name = kind ? `${LINK_LABEL[kind]} 링크 태스크` : v
-		const desc = kind ? `붙여넣은 링크: ${v}` : ''
-		// draft는 제출 직후 바로 비웠었다 — 그래서 버튼을 눌러도 아무 반응이 없어 보였다(요청이 실제로
-		// 끝날 때까지 1~2초는 걸리는데 그동안 화면에 아무 신호가 없었음). draftBusy로 그 공백을 채운다.
-		set({ draft: '', draftBusy: true })
+		// 링크는 addBranchLink로 따로 저장돼 BranchChain/FolderCard에 LINK_LABEL 칩으로 이미 표시된다 —
+		// desc에 "붙여넣은 링크: <url>"을 원문 그대로 또 넣으면 같은 정보가 중복 노출된다.
 		try {
-			const task = await SessionsApi.createTask({ folderId: null, name, desc })
+			const task = await SessionsApi.createTask({ folderId: null, name, desc: '', dueDate: dueDate ?? null })
 			if (kind) {
 				const branch = await SessionsApi.createBranch({ taskId: task.id, name: '브랜치 미지정' })
 				await SessionsApi.addBranchLink(branch.id, kind, v)
@@ -178,10 +194,17 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 			}
 			await get().loadBoard()
 			if (!task.repo_id) get().pollTaskRepoClassification(task.id)
+			// 내용이 있냐(=링크) 없냐(=순수 텍스트)로 자동 시작 여부를 가른다 — 링크는 그 자체로 실제
+			// 내용(피그마 화면·노션 문서·슬랙 스레드·PR)을 담고 있어 곧장 승격+오케스트레이션 시작까지
+			// 이어가도 안전하지만, 순수 텍스트는 제목 한 줄뿐이라 레포·base·kind 등을 사람이 확인해야
+			// 한다("AI 제안 + 사람이 자유롭게 덮어쓰기", §12) — 미분류에 담아두고 InboxPreview의
+			// "태스크로 등록"을 거치게 둔다. 예전엔 링크·텍스트 구분 없이 항상 곧장 시작했었다.
+			if (kind) await get().quickStartTask(task.id)
+			return { ok: true }
 		} catch (e) {
-			set({ error: e instanceof Error ? e.message : String(e) })
-		} finally {
-			set({ draftBusy: false })
+			const error = e instanceof Error ? e.message : String(e)
+			set({ error })
+			return { ok: false, error }
 		}
 	},
 
@@ -318,8 +341,45 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 			await get().loadBoard()
 		}
 	},
-	// 레포는 이제 폴더 단위 — 사람이 폴더 헤더에서 직접 바꾸면(예: AI 배정이 틀렸을 때) 이후 그 폴더의
-	// 새 서브태스크는 전부 이 값을 물려받는다(store/tasks.cjs create()).
+	renameTask: async (id, name) => {
+		// inbox 태스크는 안 바뀌던 버그 — folders 쪽만 patch해서 미분류에서 이름 바꾸면 다음
+		// loadBoard 전까지 화면에 반영이 안 됐다(TaskDetailModal에서 처음 발견).
+		set((s) => ({
+			inbox: s.inbox.map((t) => (t.id === id ? { ...t, name } : t)),
+			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, name } : t)) })),
+		}))
+		try {
+			await SessionsApi.updateTask(id, { name })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	updateTaskDesc: async (id, desc) => {
+		set((s) => ({
+			inbox: s.inbox.map((t) => (t.id === id ? { ...t, desc } : t)),
+			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, desc } : t)) })),
+		}))
+		try {
+			await SessionsApi.updateTask(id, { desc })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// 미분류(inbox) 태스크 전용 — 폴더로 승격된 태스크는 레포가 폴더 단위(folder.repo_id)라 이걸 쓰지
+	// 않고 setFolderRepo를 쓴다(TaskDetailModal이 folder 유무로 갈라 호출).
+	updateTaskRepo: async (id, repoId) => {
+		set((s) => ({ inbox: s.inbox.map((t) => (t.id === id ? { ...t, repo_id: repoId, repo_auto: 0 } : t)) }))
+		try {
+			await SessionsApi.updateTask(id, { repoId })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// 레포는 폴더 단위로 하나만 — 사람이 태스크 상세에서 직접 바꾸면(예: AI 배정이 틀렸을 때) 이후
+	// 그 폴더의 모든 서브태스크가 이 값을 기준으로 워크트리를 만든다(orchestrator.cjs).
 	setFolderRepo: async (id, repoId) => {
 		set((s) => ({ folders: s.folders.map((f) => (f.id === id ? { ...f, repo_id: repoId } : f)) }))
 		try {
@@ -329,10 +389,44 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 			await get().loadBoard()
 		}
 	},
-	renameTask: async (id, name) => {
-		set((s) => ({ folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, name } : t)) })) }))
+	// 캘린더 칸 드래그로 예정일 재배치 — inbox 항목도 포함해야 하므로 renameTask와 달리 inbox도 함께 patch.
+	updateTaskDueDate: async (id, dueDate) => {
+		set((s) => ({
+			inbox: s.inbox.map((t) => (t.id === id ? { ...t, due_date: dueDate } : t)),
+			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, due_date: dueDate } : t)) })),
+		}))
 		try {
-			await SessionsApi.updateTask(id, { name })
+			await SessionsApi.updateTask(id, { dueDate })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// 소요 기간(영업일) — due_date로부터 종료일을 계산하는 데 쓴다(utils/businessDays.ts). AI 추정은
+	// 별도 API(estimateTaskDuration)로 제안만 받고, 사용자가 받아들일 때 이 액션으로 실제 저장한다.
+	updateTaskDuration: async (id, durationDays) => {
+		set((s) => ({
+			inbox: s.inbox.map((t) => (t.id === id ? { ...t, duration_days: durationDays } : t)),
+			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, duration_days: durationDays } : t)) })),
+		}))
+		try {
+			await SessionsApi.updateTask(id, { durationDays })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// "일감 완료 체크... 그걸하면 그냥 완료로 보이는거야" — 레코드는 지우지 않는다. 사이드바 태스크
+	// 트리는 completed_at이 있으면 걸러내 안 보이게 하지만(SessionShell.tsx visibleInbox/visibleFolders),
+	// 캘린더는 이 필드를 무시하고 그대로 계속 보여준다.
+	setTaskDone: async (id, done) => {
+		const completedAt = done ? Date.now() : null
+		set((s) => ({
+			inbox: s.inbox.map((t) => (t.id === id ? { ...t, completed_at: completedAt } : t)),
+			folders: s.folders.map((f) => ({ ...f, tasks: f.tasks.map((t) => (t.id === id ? { ...t, completed_at: completedAt } : t)) })),
+		}))
+		try {
+			await SessionsApi.updateTask(id, { completedAt })
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
 			await get().loadBoard()
@@ -343,9 +437,10 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	toggleTask: (id) => set((s) => ({ openTasks: { ...s.openTasks, [id]: !s.openTasks[id] } })),
 	setDragTask: (id) => set({ dragTaskId: id }),
 	setOverFolder: (id) => set({ overFolderId: id }),
+	setOverTask: (id) => set({ overTaskId: id }),
 
 	moveTask: async (taskId, toFolderId, beforeTaskId) => {
-		set({ dragTaskId: null, overFolderId: null })
+		set({ dragTaskId: null, overFolderId: null, overTaskId: null })
 		try {
 			await SessionsApi.moveTask(taskId, toFolderId, beforeTaskId ?? null)
 			await get().loadBoard() // re-fetch for authoritative order rather than hand-rolling the splice
@@ -562,6 +657,8 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 
 	openReview: (taskId) => set({ reviewTaskId: taskId, disputingReviewId: null, disputeText: '', confirmingApplyId: null }),
 	closeReview: () => set({ reviewTaskId: null, disputingReviewId: null, disputeText: '', confirmingApplyId: null }),
+	openTaskDetail: (taskId) => set({ detailTaskId: taskId }),
+	closeTaskDetail: () => set({ detailTaskId: null }),
 	setDisputeText: (v) => set({ disputeText: v }),
 	startDispute: (reviewId) => set({ disputingReviewId: reviewId, disputeText: '' }),
 	cancelDispute: () => set({ disputingReviewId: null, disputeText: '' }),

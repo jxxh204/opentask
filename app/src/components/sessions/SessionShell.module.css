@@ -52,7 +52,7 @@
 	font-size: 9.5px;
 	font-weight: 700;
 	padding: 2px 8px;
-	border-radius: 999px;
+	border-radius: var(--radius-chip);
 	background: var(--btint);
 	color: var(--blue);
 }
@@ -130,25 +130,98 @@
 	min-width: 220px;
 	max-height: 70vh;
 	overflow-y: auto;
+	/* overflow-y만 auto로 두면 overflow-x가 암묵적으로 auto(=클리핑)가 돼, 행 밖으로 튀어나가는
+	   .repoColorPanel(색상 스와치)이 이 컨테이너 오른쪽 경계에서 잘려 보였다 — 세로 스크롤은
+	   유지하되 가로만 명시적으로 visible 처리. */
+	overflow-x: visible;
 	background: var(--card2);
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+	box-shadow: var(--shadow-popover);
 	padding: 5px;
 }
 .repoSelectOpt {
+	display: flex;
+	align-items: center;
+	gap: 7px;
 	padding: 7px 9px;
 	border-radius: var(--radius-chip);
 	cursor: pointer;
 	font-size: 12.5px;
 	font-weight: 600;
 	color: var(--ink);
+}
+.repoSelectOpt:hover {
+	background: var(--card-hover);
+}
+.repoSelectOptName {
+	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.repoSelectOpt:hover {
-	background: var(--card-hover);
+
+/* 레포 실제 GitHub 아바타 — 원형(계정 아바타의 관례적 형태)으로 "이건 진짜 그 계정의 아이콘"임을
+   드러낸다. 폴백은 같은 자리·크기의 폴더 윤곽 아이콘(연동 안 된 레포용). */
+.repoIconImg,
+.repoIconFallback {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+.repoIconImg {
+	border-radius: 50%;
+	object-fit: cover;
+}
+.repoIconFallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t3);
+}
+.repoIconFallback svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* 레포 식별 컬러 점 — 상태 신호 색과 겹치지 않는 별도 팔레트(utils/repoColor.ts). 드롭다운 행
+   오른쪽 끝에 원으로 표시, 누르면 팔레트 스와치를 고르는 Modal이 뜬다(드롭다운 스크롤 컨테이너에
+   중첩된 팝오버였을 땐 조상 overflow에 계속 잘렸다 — Modal은 그 클리핑과 무관). */
+.repoColorDot {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: 0 0 0 1px var(--line2);
+}
+.repoColorModalTitle {
+	padding: 14px 14px 0;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.repoColorGrid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 10px;
+	padding: 14px;
+}
+.repoColorSwatch {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	cursor: pointer;
+}
+.repoColorSwatch:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--line2);
+}
+.repoColorSwatchActive {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
+}
+.repoColorSwatchActive:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
 }
 
 /* 레포 드롭다운 안, 레포 목록 아래 — "레포 관리"로 가는 진입점(전엔 이 자리에 워크트리 목록이
@@ -194,7 +267,7 @@
 	color: var(--t3);
 	background: var(--card2);
 	padding: 1px 6px;
-	border-radius: 999px;
+	border-radius: var(--radius-chip);
 }
 .sidebarWtList {
 	flex: 1 1 auto;
@@ -353,8 +426,8 @@
 	background: var(--vtint);
 }
 
-/* Projects 헤더의 아이콘 클러스터(Orca 참고) — 지금은 레포 추가 하나만 이 고스트 정사각 버튼을 쓴다
-   (일감 생성/태스크 추가는 아이콘만으로는 뭘 하는 버튼인지 안 보인다는 피드백으로 .taskAddBtn 분리). */
+/* Projects 헤더의 아이콘 클러스터(Orca 참고) — 레포 추가는 고스트 정사각, 태스크 추가는 같은
+   정사각 크기에 violet tint로 우선순위만 구분(§redesign — CLI 툴 헤더처럼 아이콘 전용으로 통일). */
 .headIconBtn {
 	flex: none;
 	width: 26px;
@@ -379,89 +452,26 @@
 
 .taskAddBtn {
 	flex: none;
+	width: 26px;
 	height: 26px;
-	padding: 0 9px;
 	display: flex;
 	align-items: center;
-	gap: 5px;
+	justify-content: center;
 	border: none;
 	border-radius: var(--radius-chip);
 	background: var(--vtint);
 	color: var(--violet);
-	font-size: 11px;
-	font-weight: 700;
-	white-space: nowrap;
 	cursor: pointer;
 }
 .taskAddBtn:hover {
 	background: var(--card-hover);
 }
 .taskAddBtn svg {
-	width: 13px;
-	height: 13px;
+	width: 15px;
+	height: 15px;
 	flex: none;
 }
 
-.inboxAnchor {
-	position: relative;
-	display: inline-flex;
-	flex: none;
-}
-.inboxPanel {
-	position: absolute;
-	top: 32px;
-	right: 0;
-	z-index: 30;
-	width: 260px;
-	background: var(--card2);
-	border: 1px solid var(--line2);
-	border-radius: var(--radius-card);
-	box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
-	padding: 10px;
-}
-.inboxPanelLabel {
-	font-size: 11px;
-	font-weight: 700;
-	color: var(--ink);
-	margin-bottom: 6px;
-}
-.inboxInput {
-	width: 100%;
-	min-height: 58px;
-	resize: vertical;
-	background: var(--card);
-	color: var(--ink);
-	border: 1px solid var(--line2);
-	border-radius: 8px;
-	font-size: 12px;
-	padding: 8px 9px;
-	margin-bottom: 8px;
-}
-.inboxInput::placeholder {
-	color: var(--t3);
-}
-.inboxSubmit {
-	width: 100%;
-	padding: 7px 0;
-	border-radius: var(--radius-chip);
-	border: none;
-	background: var(--violet);
-	color: #fff;
-	font-size: 12px;
-	font-weight: 700;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-}
-.inboxSubmit:hover {
-	opacity: 0.9;
-}
-.inboxSubmit:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
 /* 일감 추가/레포 분류가 실제로 진행 중이라는 걸 보여주는 자리 — 이전엔 이 공백에 아무 표시가 없었다. */
 .inboxSubmitSpinner {
 	width: 10px;
@@ -488,12 +498,6 @@
 .inboxClassifying .inboxSubmitSpinner {
 	border-color: var(--vtint);
 	border-top-color: var(--violet);
-}
-.inboxPanelHint {
-	margin-top: 8px;
-	font-size: 10px;
-	line-height: 1.5;
-	color: var(--t3);
 }
 
 .taskCount {
@@ -654,6 +658,89 @@
 }
 .archiveRowActive .archiveCount {
 	color: var(--violet);
+}
+
+/* "사이드바에서 진행상황을 보여주고 클릭하면 상세로" — TaskDetailModal 안 "일감 검토"가 백그라운드
+   (useReviewStore)에서 도는 동안 드로어를 닫아도 여기서 계속 보인다. */
+.reviewSection {
+	flex: none;
+	border-top: 1px solid var(--line);
+	padding: 8px 0;
+}
+.reviewSectionTitle {
+	padding: 4px 14px 6px;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.reviewRow {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 6px 14px;
+	font-size: 11.5px;
+	color: var(--t2);
+	cursor: pointer;
+}
+.reviewRow:hover {
+	background: var(--card-hover);
+}
+.reviewRow:hover .reviewDismiss {
+	opacity: 1;
+}
+.reviewDot {
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+}
+.reviewDotBusy {
+	background: var(--violet);
+	animation: reviewPulse 1.4s ease-in-out infinite;
+}
+@keyframes reviewPulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+.reviewDotDone {
+	background: var(--green);
+}
+.reviewDotWarn {
+	background: var(--amber);
+}
+.reviewDotFail {
+	background: var(--red);
+}
+.reviewName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.reviewStatus {
+	flex: none;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+}
+.reviewDismiss {
+	flex: none;
+	opacity: 0;
+	color: var(--t3);
+	font-size: 13px;
+	line-height: 1;
+	padding: 0 2px;
+}
+.reviewDismiss:hover {
+	color: var(--ink);
 }
 
 .archiveDateLabel {

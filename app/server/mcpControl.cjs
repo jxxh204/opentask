@@ -1,0 +1,229 @@
+#!/usr/bin/env node
+// mcpControl.cjs — "관제" 에이전트 전용 로컬 MCP 서버(§control.cjs). mcpDispatch.cjs(지휘자 전용,
+// 서브태스크 dispatch)와 같은 발상·같은 구현 패턴(공식 SDK, stdio, Claude Code가 세션마다 직접
+// spawn)이지만 대상이 다르다 — 폴더 하나가 아니라 OpenTask 앱 전체(캘린더/크론잡/운영 설정).
+// 등록: control.cjs의 registerControlMcp()가 세션을 띄우기 직전 ~/.claude.json에 등록.
+'use strict'
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
+const { z } = require('zod')
+
+const PORT = process.env.OPENTASK_PORT || process.env.OPENRM_PORT || 8770
+const IS_CONTROL = process.env.OPENTASK_CONTROL === '1'
+// 비밀값(토큰/연결문자열/서명키)이 걸린 커넥터는 이 툴로 못 건드리게 화이트리스트로 막는다 — 관제
+// 에이전트가 프롬프트 인젝션이나 실수로 GitHub 토큰·DB 연결문자열을 읽거나 덮어쓰는 사고를 막기
+// 위함(§control.cjs controlSeed에도 이 제약을 사람이 읽는 문장으로 명시). 그 값들은 설정 화면에서
+// 사람이 직접 넣어야 한다.
+const SAFE_CONNECTORS = new Set(['paths', 'app', 'aws', 'vitals', 'deploy'])
+
+async function apiGet(path) {
+	const res = await fetch(`http://127.0.0.1:${PORT}${path}`)
+	return res.json()
+}
+async function apiPost(path, body) {
+	const res = await fetch(`http://127.0.0.1:${PORT}${path}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body || {}),
+	})
+	return res.json()
+}
+async function apiPatch(path, body) {
+	const res = await fetch(`http://127.0.0.1:${PORT}${path}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body || {}),
+	})
+	return res.json()
+}
+async function apiDelete(path) {
+	const res = await fetch(`http://127.0.0.1:${PORT}${path}`, { method: 'DELETE' })
+	return res.json()
+}
+function requireControl() {
+	if (IS_CONTROL) return null
+	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 관제 에이전트 세션 전용입니다.' }], isError: true }
+}
+function ok(data) {
+	return { content: [{ type: 'text', text: JSON.stringify(data) }], isError: data && data.ok === false }
+}
+
+const server = new McpServer({ name: 'opentask-control', version: '1.0.0' })
+
+server.registerTool(
+	'list_tasks',
+	{ title: '전체 보드 조회', description: '모든 폴더(태스크)·서브태스크·마감일(캘린더 날짜)을 조회한다.', inputSchema: {} },
+	async () => {
+		const guard = requireControl()
+		if (guard) return guard
+		return ok(await apiGet('/api/sessions/board'))
+	},
+)
+
+server.registerTool(
+	'reschedule_task',
+	{
+		title: '태스크 마감일 변경',
+		description: '태스크의 마감일(캘린더 날짜)을 바꾼다. dueDate는 로컬 자정 epoch ms 또는 "YYYY-MM-DD"(자동 변환). null이면 마감일 제거.',
+		inputSchema: { taskId: z.string(), dueDate: z.union([z.string(), z.number(), z.null()]) },
+	},
+	async ({ taskId, dueDate }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const ms = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00').getTime() : dueDate
+		return ok(await apiPatch(`/api/tasks/${taskId}`, { dueDate: ms }))
+	},
+)
+
+server.registerTool(
+	'create_task',
+	{
+		title: '태스크 생성',
+		description: '새 태스크를 만든다(일감함/inbox에 들어감 — 아직 오케스트레이션 시작 전). 바로 시작까지 하려면 이어서 start_task를 불러라. 레포를 안 정하면 서버가 자동 분류를 시도한다.',
+		inputSchema: {
+			name: z.string(),
+			desc: z.string().optional(),
+			dueDate: z.union([z.string(), z.number(), z.null()]).optional().describe('"YYYY-MM-DD" 또는 epoch ms'),
+			repoId: z.string().optional(),
+		},
+	},
+	async ({ name, desc, dueDate, repoId }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const ms = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00').getTime() : dueDate
+		return ok(await apiPost('/api/tasks', { folderId: null, name, desc, dueDate: ms, repoId }))
+	},
+)
+
+server.registerTool(
+	'update_task',
+	{
+		title: '태스크 상세정보 수정',
+		description: '태스크의 이름/설명/진행방식(kind)/시작프롬프트/레포/마감일을 수정한다. 필요한 필드만 넘기면 된다.',
+		inputSchema: {
+			taskId: z.string(),
+			name: z.string().optional(),
+			desc: z.string().optional(),
+			kind: z.enum(['single', 'chain', 'parallel']).optional(),
+			startPrompt: z.string().nullable().optional(),
+			repoId: z.string().nullable().optional(),
+			dueDate: z.union([z.string(), z.number(), z.null()]).optional(),
+		},
+	},
+	async ({ taskId, dueDate, ...patch }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const ms = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00').getTime() : dueDate
+		return ok(await apiPatch(`/api/tasks/${taskId}`, dueDate !== undefined ? { ...patch, dueDate: ms } : patch))
+	},
+)
+
+server.registerTool('delete_task', { title: '태스크 삭제', description: '태스크를 삭제한다. 되돌릴 수 없다 — 확실할 때만.', inputSchema: { taskId: z.string() } }, async ({ taskId }) => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiDelete(`/api/tasks/${taskId}`))
+})
+
+server.registerTool(
+	'start_task',
+	{
+		title: '태스크 시작(폴더 승격 + 오케스트레이션 개시)',
+		description:
+			'일감함(inbox)에 있는 태스크를 실제로 착수시킨다 — 그 태스크 이름으로 폴더를 만들고, 태스크를 그 폴더의 첫 서브태스크로 옮긴 뒤, 오케스트레이션(지휘자 세션)을 시작한다. 사이드바 "시작" 버튼과 동일한 동작.',
+		inputSchema: { taskId: z.string(), taskName: z.string().describe('폴더 이름으로 쓸 이름 — 보통 태스크 이름과 동일') },
+	},
+	async ({ taskId, taskName }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const folder = await apiPost('/api/folders', { name: taskName })
+		if (!folder || folder.ok === false) return ok({ ok: false, error: 'folder 생성 실패', detail: folder })
+		const moved = await apiPatch(`/api/tasks/${taskId}`, { folderId: folder.id })
+		if (moved && moved.ok === false) return ok(moved)
+		const started = await apiPost(`/api/folders/${folder.id}/orchestrate/start`)
+		return ok({ ok: true, folderId: folder.id, orchestration: started })
+	},
+)
+
+server.registerTool('list_cron_jobs', { title: '크론잡 목록', description: '등록된 자동화(크론잡) 전체를 조회한다.', inputSchema: {} }, async () => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiGet('/api/cron-jobs'))
+})
+
+server.registerTool(
+	'create_cron_job',
+	{
+		title: '크론잡 생성',
+		description: '새 자동화(정해진 시각에 태스크 자동 생성)를 만든다. scheduleType: interval(분 단위)/daily/weekly. scheduleJson/actionJson은 각각 그 형식에 맞는 JSON 문자열.',
+		inputSchema: {
+			name: z.string(),
+			scheduleType: z.enum(['interval', 'daily', 'weekly']),
+			scheduleJson: z.string().describe('예: {"hour":9,"minute":0} 또는 {"minutes":30}'),
+			actionJson: z.string().describe('예: {"name":"9시 배포","desc":""}'),
+		},
+	},
+	async (args) => {
+		const guard = requireControl()
+		if (guard) return guard
+		return ok(await apiPost('/api/cron-jobs', args))
+	},
+)
+
+server.registerTool(
+	'update_cron_job',
+	{
+		title: '크론잡 수정',
+		description: '기존 크론잡을 수정하거나 켜기/끄기(enabled)한다.',
+		inputSchema: { id: z.string(), name: z.string().optional(), enabled: z.boolean().optional(), scheduleJson: z.string().optional(), actionJson: z.string().optional() },
+	},
+	async ({ id, ...patch }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		return ok(await apiPatch(`/api/cron-jobs/${id}`, patch))
+	},
+)
+
+server.registerTool('delete_cron_job', { title: '크론잡 삭제', description: '크론잡을 삭제한다.', inputSchema: { id: z.string() } }, async ({ id }) => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiDelete(`/api/cron-jobs/${id}`))
+})
+
+server.registerTool('run_cron_job_now', { title: '크론잡 즉시 실행', description: '스케줄을 기다리지 않고 지금 바로 한 번 실행한다.', inputSchema: { id: z.string() } }, async ({ id }) => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiPost(`/api/cron-jobs/${id}/run-now`))
+})
+
+server.registerTool(
+	'read_settings',
+	{ title: '설정 조회', description: '현재 운영 설정(경로/앱/배포 등)과 등록된 비밀값의 키 이름(값 자체는 아님)을 조회한다.', inputSchema: {} },
+	async () => {
+		const guard = requireControl()
+		if (guard) return guard
+		return ok(await apiGet('/api/setup/status'))
+	},
+)
+
+server.registerTool(
+	'update_setting',
+	{
+		title: '설정 변경',
+		description: `운영 설정을 바꾼다. connectorId는 다음 중 하나만 허용: ${[...SAFE_CONNECTORS].join(', ')}. GitHub 토큰/DB 연결문자열처럼 비밀값이 걸린 커넥터(github/db/slackSign)는 여기서 못 건드린다 — 안전장치.`,
+		inputSchema: { connectorId: z.string(), fields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])) },
+	},
+	async ({ connectorId, fields }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		if (!SAFE_CONNECTORS.has(connectorId)) {
+			return { content: [{ type: 'text', text: `connectorId "${connectorId}"는 허용되지 않습니다(비밀값 보호). 허용: ${[...SAFE_CONNECTORS].join(', ')}` }], isError: true }
+		}
+		return ok(await apiPost(`/api/setup/connectors/${connectorId}`, { fields }))
+	},
+)
+
+const transport = new StdioServerTransport()
+server.connect(transport).catch((e) => {
+	console.error('[opentask-control] MCP 서버 시작 실패:', (e && e.stack) || e)
+	process.exit(1)
+})

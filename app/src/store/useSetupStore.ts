@@ -197,12 +197,6 @@ export const useSetupStore = create<SetupState>()(
 export function isSetupConfigured(s: Pick<SetupState, 'rootPath' | 'wtPath'>) {
 	return !!s.rootPath && !!s.wtPath
 }
-export function isGithubConfigured(s: Pick<SetupState, 'githubRepo'>) {
-	return !!s.githubRepo
-}
-export function isDebugConfigured(s: Pick<SetupState, 'devServerUrl'>) {
-	return !!s.devServerUrl
-}
 
 useSetupStore.subscribe(() => {
 	try {

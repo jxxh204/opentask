@@ -18,5 +18,5 @@
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-modal);
 	overflow: hidden;
-	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+	box-shadow: var(--shadow-modal);
 }

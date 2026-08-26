@@ -63,11 +63,14 @@ export default function TaskRow({
 	const toggleTask = useSessionsStore((s) => s.toggleTask)
 	const setDragTask = useSessionsStore((s) => s.setDragTask)
 	const dragTaskId = useSessionsStore((s) => s.dragTaskId)
+	const overTaskId = useSessionsStore((s) => s.overTaskId)
+	const setOverTask = useSessionsStore((s) => s.setOverTask)
 	const openReview = useSessionsStore((s) => s.openReview)
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 	const quickStartBusy = useSessionsStore((s) => s.quickStartBusy === task.id)
 	const gitStatus = useSessionsStore((s) => s.gitStatus)
 	const renameTask = useSessionsStore((s) => s.renameTask)
+	const setTaskDone = useSessionsStore((s) => s.setTaskDone)
 	// term.cjs가 tmux 화면을 스크레이프해 매번 새로 계산하는 값(저장된 상태 아님) — 세션명으로 조인.
 	const termStatus = useSessionsStore((s) => (session ? s.termStatus[session.tmuxSession] : undefined))
 
@@ -125,7 +128,7 @@ export default function TaskRow({
 
 	return (
 		<div
-			className={styles.row}
+			className={`${styles.row} ${overTaskId === task.id && dragTaskId !== task.id ? styles.rowDropTarget : ''}`}
 			draggable
 			style={{ opacity: dragTaskId === task.id ? 0.4 : 1 }}
 			onDragStart={(e) => {
@@ -133,9 +136,21 @@ export default function TaskRow({
 				e.dataTransfer.setData('text/plain', task.id)
 				setDragTask(task.id)
 			}}
-			onDragEnd={() => setDragTask(null)}
-			onDragOver={(e) => e.preventDefault()}
-			onDrop={dragBeforeTaskId}
+			onDragEnd={() => {
+				setDragTask(null)
+				setOverTask(null)
+			}}
+			onDragOver={(e) => {
+				e.preventDefault()
+				if (dragTaskId && dragTaskId !== task.id && overTaskId !== task.id) setOverTask(task.id)
+			}}
+			onDragLeave={() => {
+				if (overTaskId === task.id) setOverTask(null)
+			}}
+			onDrop={(e) => {
+				setOverTask(null)
+				dragBeforeTaskId(e)
+			}}
 		>
 			<div
 				className={`${styles.head} ${open ? styles.headSelected : ''} ${flash ? styles.flash : ''}`}
@@ -234,6 +249,18 @@ export default function TaskRow({
 							}}
 						>
 							이름 변경
+						</div>
+						{/* "일감 완료 체크가 있으면 좋겠어. 그걸하면 그냥 완료로 보이는거야" — 레코드는 안
+						    지우고 completed_at만 찍는다. 이 트리에서는 사라지지만(SessionShell.tsx
+						    visibleInbox/visibleFolders) 캘린더에는 그대로 남는다. */}
+						<div
+							className={styles.ctxMenuItem}
+							onClick={() => {
+								setMenuOpen(false)
+								setTaskDone(task.id, true)
+							}}
+						>
+							완료 처리
 						</div>
 						{/* 워크트리 목록에서 "연결"한 태스크를 다시 풀어놓는 자리 — 태스크·브랜치 레코드만
 						    지우고 실제 git worktree·브랜치는 그대로 둔다(server/store/tasks.cjs remove). */}

@@ -233,6 +233,33 @@ const MIGRATIONS = [
 	(db) => {
 		db.exec(`ALTER TABLE folders ADD COLUMN repo_id TEXT REFERENCES repos(id) ON DELETE SET NULL;`)
 	},
+	// v10 — 주/월 캘린더(§ "캘린더에 일감이 관리되어야해"). 태스크에 예정일 하나를 붙여 그 날짜 칸에
+	// 표시·드래그 재배치한다. 날짜만 의미가 있어(시:분 없음) 로컬 자정 epoch ms로 저장 — created_at처럼
+	// 정밀 타임스탬프가 아니라 "그 날"을 가리키는 값이라 UTC 자정이 아니라 클라이언트가 계산한 로컬
+	// 자정을 그대로 저장한다(서버는 그냥 통과시키는 값이라 타임존 변환을 하지 않음).
+	(db) => {
+		db.exec(`ALTER TABLE tasks ADD COLUMN due_date INTEGER;`)
+	},
+	// v11 — 레포 식별 컬러(레포 피커 드롭다운의 색 점). null이면 프론트가 repo.id를 해시해 고정
+	// 팔레트에서 자동 배정하고(store/repos.cjs와 무관 — 서버는 명시적으로 고른 값만 저장), 사용자가
+	// 점을 눌러 팔레트에서 고르면 그 값이 이 컬럼에 저장돼 자동 배정을 덮어쓴다.
+	(db) => {
+		db.exec(`ALTER TABLE repos ADD COLUMN color TEXT;`)
+	},
+	// v12 — 태스크 소요 기간(영업일). due_date(시작일)로부터 며칠짜리 일감인지 — 캘린더에 종료일을
+	// 계산해 보여주는 데 쓴다("각 태스크는 몇일이 걸릴지... 영업일 기준"). 1이면 당일 완료(=기본과 동일),
+	// null이면 기간 미지정. 종료일 자체는 저장하지 않고 프론트(utils/businessDays.ts)가 매번 계산 —
+	// due_date가 나중에 바뀌어도 별도 재계산 로직 없이 항상 정합.
+	(db) => {
+		db.exec(`ALTER TABLE tasks ADD COLUMN duration_days INTEGER;`)
+	},
+	// v13 — 태스크 완료 체크("일감 완료 체크가 있으면 좋겠어. 그걸하면 그냥 완료로 보이는거야"). 완료해도
+	// 레코드는 삭제하지 않는다 — 사이드바 태스크 트리에서는 걸러내 안 보이게 하지만("태스크에서는
+	// 없어져도 되나"), 캘린더는 지난 일정의 기록이라 완료 여부와 무관하게 계속 보여야 한다("캘린더에는
+	// 남아있어야함"). null이면 미완료, 값이 있으면 완료 처리한 시각.
+	(db) => {
+		db.exec(`ALTER TABLE tasks ADD COLUMN completed_at INTEGER;`)
+	},
 ]
 
 function migrate() {

@@ -7,6 +7,7 @@ const FILE = process.env.OPENRM_SETTINGS_FILE || path.join(__dirname, '..', '.op
 const MODEL_POLICY = {
 	design: 'claude-fable-5', // 설계·아키텍처 (고복잡도, 비싼 만큼 여기만)
 	orchestrator: 'claude-fable-5', // 그룹 지휘/교차검증 (복잡도 최상)
+	control: 'claude-fable-5', // 관제 에이전트(앱 전체: 캘린더/크론잡/설정 조작) — 지휘자와 동급 복잡도
 	dev: 'claude-opus-4-8', // ▶진행 제품 코딩
 	qa: 'claude-sonnet-4-6', // QA TC 생성
 	verify: 'claude-sonnet-4-6', // TC 검증(playwright)
@@ -21,6 +22,11 @@ const MODEL_POLICY = {
 	link: 'claude-sonnet-4-6', // 배포 백로그 연결 — Notion relation 읽고 병합(안전)
 	translate: 'claude-haiku-4-5', // 브랜치명 번역(초경량 — haiku 적합)
 	ppt: 'claude-sonnet-4-6', // PPT 제작 — 발표 덱 초안 생성(구조화 JSON, 품질 필요 → sonnet)
+	// 태스크 기간 추정 — "탐색은 단순 모델, 판단은 무거운 모델" 2단계 분리(사용자 제안).
+	// grep/read는 패턴 매칭 수준이라 haiku로 충분하고, 반복되는 탐색 턴마다 무거운 모델을 쓰는 게
+	// 그동안의 시간·토큰 낭비의 핵심이었다 — 판단(추론)은 단 한 번만 무거운 모델을 태운다.
+	estimateExplore: 'claude-haiku-4-5', // 1단계 — 코드 탐색(grep/read/bash), 속도 우선
+	estimateJudge: 'claude-opus-4-8', // 2단계 — 조사 결과로 실제 일정 판단, review와 동급 추론력 필요
 }
 // operatorName — 이 인스턴스의 운영자(리뷰어) 이름. 오픈소스 배포라 특정인에 하드코딩 금지 → 설정으로 노출.
 // 기본값 '운영자'는 프롬프트/피드에 그대로 넣어도 조사(가/에게)가 자연스럽게 붙는 일반 명사.

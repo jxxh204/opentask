@@ -24,17 +24,62 @@ export function listArchivedFolders() {
 	return api.get<{ folders: Folder[] }>('/api/folders/archived')
 }
 
-export function createTask(input: { folderId: string | null; name: string; desc?: string; kind?: Task['kind']; repoId?: string | null }) {
+export function createTask(input: { folderId: string | null; name: string; desc?: string; kind?: Task['kind']; repoId?: string | null; dueDate?: number | null }) {
 	return api.post<Task>('/api/tasks', input)
 }
 export function moveTask(id: string, folderId: string | null, beforeTaskId?: string | null) {
 	return api.patch<Task>(`/api/tasks/${id}`, { folderId, beforeTaskId })
 }
-export function updateTask(id: string, patch: Partial<{ name: string; desc: string; kind: Task['kind']; startPrompt: string | null; repoId: string | null }>) {
+export function updateTask(
+	id: string,
+	patch: Partial<{ name: string; desc: string; kind: Task['kind']; startPrompt: string | null; repoId: string | null; dueDate: number | null; durationDays: number | null; completedAt: number | null }>,
+) {
 	return api.patch<Task>(`/api/tasks/${id}`, patch)
 }
 export function removeTask(id: string) {
 	return api.delete<{ ok: boolean }>(`/api/tasks/${id}`)
+}
+export interface DurationEstimateItem {
+	item: string
+	days: number
+	note: string
+}
+export interface DurationEstimateTokens {
+	input: number
+	output: number
+	cacheRead: number
+	cacheCreation: number
+}
+export interface DurationEstimateStatus {
+	ok: true
+	percent: number
+	label: string
+	done: boolean
+	tokens: DurationEstimateTokens
+	costUsd: number | null
+	elapsedMs: number
+	// tooVague: 설명+조사 결과만으로는 무엇을 만드는 태스크인지 특정할 수 없을 때 — 억지 숫자 대신
+	// "설명을 채워달라"는 경고로 취급한다("설명이 불확실하면 취소하고 채워달라는 경고를 띄워줘").
+	// plan/changes: "조사 결과로 개발 계획까지" — plan은 "계획 적용" 버튼으로 task.start_prompt에 반영
+	// 가능한 순서 있는 문장 배열. changes(AS-IS/TO-BE 코드 스케치)는 좁은 드로어에선 안 쓰고 HTML
+	// 리포트에서만 렌더링하므로 여기 타입엔 넣지 않는다(드로어 쪽 화면에서 참조하지 않음).
+	// betterDesc: "일감 내용 자체를 변경해버리면" — "설명 적용"으로 desc 필드를 통째로 교체 가능.
+	result: ({ ok: true; days: number; breakdown: DurationEstimateItem[]; detail: string; plan: string[]; betterDesc: string } | { ok: false; error: string; tooVague?: boolean }) | null
+}
+// 태스크 상세 "AI 추정" 버튼 — 설명+실제 코드 기반 항목별(화면/로직/설계/영향범위) 예상 소요 영업일.
+// 코드 탐색 때문에 30초~수 분 걸릴 수 있어("토큰/프로그레스바를 보여줘야" 피드백) 잡 방식으로 바뀜 —
+// start로 jobId만 받고 status를 폴링. 응답은 제안일 뿐 저장되지 않는다 — 사용자가 받아들이면 별도로
+// updateTask(id, {durationDays})를 호출해야 실제로 반영된다. days는 서버가 breakdown 합으로 계산.
+export function startDurationEstimate(id: string) {
+	return api.post<{ ok: true; jobId: string } | { ok: false; error: string }>(`/api/tasks/${id}/estimate-duration/start`)
+}
+export function getDurationEstimateStatus(id: string, jobId: string) {
+	return api.get<DurationEstimateStatus | { ok: false; notFound: true; error: string }>(`/api/tasks/${id}/estimate-duration/status?jobId=${encodeURIComponent(jobId)}`)
+}
+// "결과를 html로 뽑아주고 링크로 제공" — fetch가 아니라 <a href target="_blank">로 직접 열림
+// (Electron의 setWindowOpenHandler가 시스템 기본 브라우저로 넘겨준다, electron/main.cjs 참고).
+export function durationEstimateReportUrl(id: string, jobId: string) {
+	return `/api/tasks/${id}/estimate-duration/report?jobId=${encodeURIComponent(jobId)}`
 }
 // 스레드/노션/피그마 링크로 만든 일감의 "○○ 링크 태스크" placeholder 제목을, 링크 내용을 실제로
 // 읽어(claude -p + MCP) 얻은 제목·요약으로 교체 — 몇 초~170초 걸릴 수 있어 호출부는 await하지 않고
@@ -50,7 +95,7 @@ export function listRepos() {
 export function createRepo(input: { name: string; path: string; base?: string; description?: string }) {
 	return api.post<Repo>('/api/repos', input)
 }
-export function updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string }>) {
+export function updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string; color: string | null }>) {
 	return api.patch<Repo>(`/api/repos/${id}`, patch)
 }
 export function removeRepo(id: string) {

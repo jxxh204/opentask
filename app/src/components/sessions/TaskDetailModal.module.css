@@ -1,0 +1,500 @@
+/* "모달 말고 오른쪽에서 슬라이드인" 피드백 — DESIGN.md에 이미 문서화된 "드로어 플로트" 패턴
+   (디버그 InspectorDrawer와 동일 셰이프: 오른쪽 고정, -16px 0 40px 그림자, translateX 트랜지션).
+   오버레이는 모달보다 가볍게(블러 없이 옅은 딤만) — 옆에서 슬라이드인하는 패널은 뒤 맥락을 완전히
+   가리지 않는 편이 자연스럽다. */
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 90;
+	background: rgba(6, 7, 9, 0.28);
+	transition: opacity 0.22s ease;
+}
+.drawer {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 440px;
+	max-width: 90%;
+	background: var(--card);
+	border-left: 1px solid var(--line2);
+	box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
+	display: flex;
+	flex-direction: column;
+	transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.head {
+	flex: none;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 18px 14px 14px 20px;
+	border-bottom: 1px solid var(--line);
+}
+/* "일감 완료 체크가 있으면 좋겠어" — 되돌릴 수 있는 유일한 자리라 제목 옆에 항상 보이게. */
+.doneToggle {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 4px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--t3);
+	cursor: pointer;
+}
+.doneToggle input {
+	cursor: pointer;
+}
+.closeBtn {
+	flex: none;
+	width: 26px;
+	height: 26px;
+	border: none;
+	border-radius: var(--radius-chip);
+	background: none;
+	color: var(--t3);
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+.closeBtn:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+
+.nameInput {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	background: none;
+	color: var(--ink);
+	font-size: 16px;
+	font-weight: 800;
+	letter-spacing: -0.01em;
+	padding: 2px 0;
+}
+.nameInput:focus {
+	outline: none;
+}
+
+.body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 16px 20px;
+}
+
+.metaRow {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin-bottom: 10px;
+}
+.metaLabel {
+	flex: none;
+	width: 48px;
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--t2);
+}
+.metaClear {
+	flex: none;
+	border: none;
+	background: none;
+	color: var(--t3);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	padding: 4px 2px;
+}
+.metaClear:hover {
+	color: var(--ink);
+}
+.metaHint {
+	font-size: 10.5px;
+	color: var(--t3);
+}
+
+.repoDot {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+
+/* 레포 드롭다운 — 네이티브 <select> 대신 사이드바 레포 피커(SessionShell.module.css의
+   .repoSelect/.repoSelectPanel)와 같은 커스텀 드롭다운 모양을 재사용. 색점은 트리거 버튼과 각
+   옵션 행 "안"에 둔다(밖에 따로 떠 있던 이전 버전과 다른 점 — "레포 색상은 내부에 있어야해"). */
+.repoSelect {
+	position: relative;
+	display: inline-flex;
+}
+.repoSelectBtn {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	height: 30px;
+	padding: 0 9px;
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	background: var(--card2);
+	color: var(--ink);
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.repoSelectBtn:hover {
+	background: var(--card-hover);
+}
+.repoSelectLabel {
+	max-width: 130px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repoSelectChev {
+	flex: none;
+	display: flex;
+	color: var(--t3);
+	transition: transform 0.12s;
+}
+.repoSelectChev svg {
+	width: 12px;
+	height: 12px;
+}
+.repoSelectChevOpen {
+	transform: rotate(180deg);
+}
+.repoSelectPanel {
+	position: absolute;
+	top: 34px;
+	left: 0;
+	z-index: 30;
+	min-width: 190px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-popover);
+	padding: 5px;
+}
+.repoSelectOpt {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 7px 9px;
+	border-radius: var(--radius-chip);
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+}
+.repoSelectOpt:hover {
+	background: var(--card-hover);
+}
+.repoSelectOptSelected {
+	color: var(--violet);
+	background: var(--vtint);
+}
+.repoSelectOptName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* "설명란을 보고 태스크 사이즈 체크... 자동으로 기간 잡아주는거지" — 버튼을 눌러야만 호출되고,
+   결과는 바로 저장되지 않고 아래 박스로 제안만 뜬다("적용"을 눌러야 실제 반영, § durationDays). */
+/* "일감 검토로... 제목 근처 라인으로 버튼 옮기고" — 태스크를 열자마자 가장 먼저 보이는 자리(마감일
+   위)로 옮겨 첫 액션으로 삼는다. 아래 구분선으로 나머지 필드들과 분리. */
+.reviewBlock {
+	margin-bottom: 14px;
+	padding-bottom: 14px;
+	border-bottom: 1px solid var(--line);
+}
+.reviewBtn {
+	height: 30px;
+	padding: 0 14px;
+	border-radius: var(--radius-control);
+	border: 1px solid var(--violet);
+	background: var(--vtint);
+	color: var(--violet);
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.reviewBtn:hover:not(:disabled) {
+	background: var(--violet);
+	color: #fff;
+}
+.reviewBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+	border-color: var(--line2);
+	background: transparent;
+	color: var(--t3);
+}
+/* "여러 항목들이 어떻게 추정됐는지 보여줬으면" — 한 줄 요약 대신 화면/로직/설계/영향범위 4항목을
+   각각 한 행씩. 근거(note)는 실제로 확인한 파일/모듈명 위주라 짧지만 줄바꿈 없이 다 보일 정도로만. */
+.aiSuggestBox {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	background: var(--card2);
+}
+.aiSuggestError {
+	font-size: 10.5px;
+	color: var(--red);
+}
+/* "설명이 불확실하면 취소하고 채워달라는 경고" — 진짜 실행 오류(red)와 구분되는 안내성 경고라
+   caution 시맨틱(amber)을 쓴다(TaskRow.module.css의 .waiting과 같은 톤 — 실패가 아니라 "대기/확인 필요"). */
+.aiSuggestWarn {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 10.5px;
+	color: var(--amber);
+}
+.aiSuggestWarnFocus {
+	flex: none;
+	height: 20px;
+	padding: 0 8px;
+	border: none;
+	border-radius: var(--radius-chip);
+	background: var(--atint);
+	color: var(--amber);
+	font-size: 10px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.aiSuggestWarnFocus:hover {
+	background: var(--amber);
+	color: #fff;
+}
+.aiSuggestHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+.aiSuggestTotal {
+	flex: 1;
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--violet);
+}
+.aiSuggestApply {
+	flex: none;
+	height: 20px;
+	padding: 0 8px;
+	border: none;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+	color: var(--violet);
+	font-size: 10px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.aiSuggestApply:hover {
+	background: var(--violet);
+	color: #fff;
+}
+/* "결과를 html로 뽑아주고 링크로 제공" — 좁은 드로어엔 못 넣는 전체 서술+토큰/비용 상세를 별도
+   페이지로. target=_blank는 Electron의 setWindowOpenHandler가 시스템 브라우저로 넘겨준다. */
+.aiReportLink {
+	flex: none;
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--t3);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.aiReportLink:hover {
+	color: var(--violet);
+}
+/* "오래 걸리는데 토큰을 보여주고 프로그레스바도 보여줘야" — 실제 도구 호출(grep/read)마다 올라가는
+   percent + 지금 뭘 하고 있는지 라벨 + 누적 토큰 수를 실시간 폴링으로 보여준다. */
+.aiProgressLabel {
+	display: flex;
+	justify-content: space-between;
+	font-size: 10.5px;
+	color: var(--t2);
+	margin-bottom: 6px;
+}
+.aiProgressTrack {
+	height: 5px;
+	border-radius: 3px;
+	background: var(--line2);
+	overflow: hidden;
+}
+/* width 애니메이션은 레이아웃 리플로우를 유발한다 — 트랙 전체 너비로 고정해두고 transform:scaleX만
+   바꾼다(compositor 단계에서만 처리, 리플로우 없음). 왼쪽부터 차야 하니 origin은 left로 고정. */
+.aiProgressFill {
+	height: 100%;
+	width: 100%;
+	background: var(--violet);
+	transform-origin: left center;
+	transition: transform 0.35s ease;
+}
+.aiProgressTokens {
+	margin-top: 7px;
+	font-size: 10px;
+	color: var(--t3);
+	font-variant-numeric: tabular-nums;
+}
+.aiBreakdownList {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.aiBreakdownRow {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+}
+.aiBreakdownItem {
+	flex: none;
+	width: 44px;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--t2);
+}
+.aiBreakdownDays {
+	flex: none;
+	width: 22px;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.aiBreakdownNote {
+	flex: 1;
+	min-width: 0;
+	font-size: 10.5px;
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* "조사 결과로 개발 계획까지" — 전체 계획 원문은 좁은 드로어 대신 HTML 리포트에서 보고, 여기선
+   "적용"만 할 수 있게 압축(누르면 task.start_prompt에 반영 — 오케스트레이터가 실제 시작할 때 씀). */
+.aiPlanRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--line2);
+}
+.aiPlanHint {
+	flex: 1;
+	min-width: 0;
+	font-size: 10px;
+	color: var(--t3);
+}
+/* "태스크 등록 버튼이 나와서... 태스크 등록과 해당 일정이 캘린더에도 등록되는거지" — 검토 결과의
+   기간·계획을 한 번에 적용하고 오케스트레이션까지 시작하는 CTA라 .aiSuggestApply보다 무게감 있게. */
+.aiRegisterRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--line2);
+}
+.aiRegisterBtn {
+	flex: none;
+	height: 26px;
+	padding: 0 12px;
+	border: none;
+	border-radius: var(--radius-control);
+	background: var(--violet);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.aiRegisterBtn:hover:not(:disabled) {
+	opacity: 0.9;
+}
+.aiRegisterBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.descLabel {
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--t2);
+	margin: 14px 0 6px;
+}
+.descInput {
+	width: 100%;
+	min-height: 110px;
+	resize: vertical;
+	background: var(--card2);
+	color: var(--ink);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	font-size: 12.5px;
+	padding: 10px 11px;
+}
+.descInput::placeholder {
+	color: var(--t3);
+}
+
+.branchSection {
+	margin-top: 4px;
+}
+
+.actions {
+	flex: none;
+	display: flex;
+	align-items: center;
+	padding: 14px 20px;
+	border-top: 1px solid var(--line);
+}
+.actionsSpacer {
+	flex: 1;
+}
+.primaryBtn {
+	height: 32px;
+	padding: 0 16px;
+	border-radius: var(--radius-control);
+	border: none;
+	background: var(--violet);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.primaryBtn:hover {
+	opacity: 0.9;
+}
+.primaryBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.deleteBtn {
+	height: 32px;
+	padding: 0 12px;
+	border-radius: var(--radius-control);
+	border: 1px solid var(--line2);
+	background: none;
+	color: var(--t3);
+	font-size: 11.5px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.deleteBtn:hover {
+	color: var(--red);
+	border-color: var(--red);
+}
+.deleteBtn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}

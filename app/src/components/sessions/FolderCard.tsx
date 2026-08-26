@@ -103,9 +103,6 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	const termStatus = useSessionsStore((s) => s.termStatus)
 	const archiveFolder = useSessionsStore((s) => s.archiveFolder)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy === folder.id)
-	const repos = useSessionsStore((s) => s.repos)
-	const setFolderRepo = useSessionsStore((s) => s.setFolderRepo)
-	const multiRepo = repos.length > 1
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const [confirmArchive, setConfirmArchive] = useState(false)
 	const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -118,6 +115,10 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 
 	const isOver = overFolderId === folder.id
 	const selected = activeNodeId === folder.id
+	// quickStartTask는 인박스 태스크를 그 텍스트 그대로 폴더명으로 승격하고, 그 태스크 자신을 첫
+	// 서브태스크로 옮긴다 — 서브태스크가 딱 하나고 이름이 폴더와 같으면(가장 흔한 "태스크 하나만"
+	// 케이스) 펼쳐도 똑같은 이름이 한 번 더 나올 뿐이라 펼치기 자체를 없애고 한 줄로 보여준다.
+	const isSimple = folder.tasks.length === 1 && folder.tasks[0].name === folder.name
 
 	// 이 태스크 산하 모든 서브태스크·브랜치의 링크를 종류별로 모은다 — Figma/Notion/Slack/PR 실데이터.
 	const linksByKind = new Map<LinkKind, string[]>()
@@ -173,7 +174,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	}
 
 	function toggle() {
-		toggleFolder(folder.id)
+		if (!isSimple) toggleFolder(folder.id)
 		useTabsStore.getState().setActiveNode(folder.id, 'orchestrator')
 	}
 
@@ -199,9 +200,13 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					setMenuOpen(true)
 				}}
 			>
-				<svg className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-					<path d="M9 6l6 6-6 6" />
-				</svg>
+				{isSimple ? (
+					<span className={styles.chevron} style={{ width: 9, height: 9 }} />
+				) : (
+					<svg className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+						<path d="M9 6l6 6-6 6" />
+					</svg>
+				)}
 				<span className={`${styles.statusIcon} ${orch.running ? styles.running : styles.waiting}`}>
 					{orch.running ? <span className={styles.spinner} /> : CLOCK}
 				</span>
@@ -225,25 +230,6 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					<span className={`m ${styles.autoMergeBadge}`} title="클린 판정이면 사람 확인 없이 자동으로 merge됩니다(우클릭으로 끌 수 있음)">
 						auto-merge
 					</span>
-				)}
-				{multiRepo && (
-					// 레포는 폴더 단위로 하나 — 여기서 정하면 이 폴더의 모든(이후 추가되는 것 포함) 서브태스크가
-					// 같은 레포를 쓴다(서브태스크별로 따로 고르던 예전 방식은 폐지, § 사용자 피드백).
-					<select
-						className="fin m"
-						title="이 태스크(폴더)의 레포 — 서브태스크가 전부 물려받습니다"
-						style={{ width: 'auto', height: 22, fontSize: 10 }}
-						value={folder.repo_id ?? ''}
-						onClick={(e) => e.stopPropagation()}
-						onChange={(e) => setFolderRepo(folder.id, e.target.value || null)}
-					>
-						<option value="">(선택 안 함)</option>
-						{repos.map((r) => (
-							<option key={r.id} value={r.id}>
-								{r.name}
-							</option>
-						))}
-					</select>
 				)}
 				{linkKinds.length > 0 && (
 					<span className={styles.linkAnchor}>
@@ -312,7 +298,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					</div>
 				)}
 			</div>
-			{open && (
+			{open && !isSimple && (
 				<div className={styles.taskBody}>
 					{folder.tasks.length > 0 && (
 						<div className={styles.subtaskList}>
@@ -337,7 +323,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					{folder.tasks.length === 0 && <div className={styles.emptyDrop}>여기로 서브태스크를 드래그</div>}
 				</div>
 			)}
-			{!open && folder.tasks.length > 0 && (
+			{!open && !isSimple && folder.tasks.length > 0 && (
 				<div className={styles.previewChips}>
 					{folder.tasks
 						.map((t) => ({ t, u: taskUrgency(t, orch.sessions, gitStatus, termStatus) }))

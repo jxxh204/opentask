@@ -3,7 +3,24 @@
 // 이 테이블은 2개 이상의 레포를 오갈 때만 의미가 생기는 선택 기능.
 'use strict'
 const { randomUUID } = require('crypto')
+const { execFileSync } = require('child_process')
 const { db } = require('../db.cjs')
+
+// origin 리모트에서 GitHub 계정(owner)을 뽑아 그 계정의 실제 GitHub 아바타를 "레포 아이콘"으로 쓴다 —
+// GitHub는 레포 단위 아이콘이 따로 없어서, 소유자 아바타가 사용자가 실제로 아는 "그 레포의 얼굴"에 가장 가깝다.
+// git@host-alias:owner/repo.git 형태(멀티 계정 SSH config alias)도 owner만 뽑아내면 되므로 host는 무시한다.
+function deriveOwnerAvatar(repoPath) {
+	try {
+		const url = execFileSync('git', ['-C', repoPath, 'remote', 'get-url', 'origin'], { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
+			.toString()
+			.trim()
+		const m = url.match(/^(?:git@[^:]+:|https?:\/\/[^/]+\/)([^/]+)\//)
+		if (!m) return null
+		return `https://github.com/${m[1]}.png?size=64`
+	} catch (_) {
+		return null
+	}
+}
 
 function list() {
 	return db.prepare('SELECT * FROM repos ORDER BY order_idx ASC, created_at ASC').all()
@@ -37,7 +54,8 @@ function update(id, patch) {
 	const repoPath = patch.path ?? cur.path
 	const base = 'base' in patch ? patch.base || null : cur.base
 	const description = patch.description ?? cur.description
-	db.prepare('UPDATE repos SET name = ?, path = ?, base = ?, description = ? WHERE id = ?').run(name, repoPath, base, description, id)
+	const color = 'color' in patch ? patch.color || null : cur.color
+	db.prepare('UPDATE repos SET name = ?, path = ?, base = ?, description = ?, color = ? WHERE id = ?').run(name, repoPath, base, description, color, id)
 	return get(id)
 }
 
@@ -46,4 +64,4 @@ function remove(id) {
 	return { ok: true }
 }
 
-module.exports = { list, get, create, update, remove }
+module.exports = { list, get, create, update, remove, deriveOwnerAvatar }

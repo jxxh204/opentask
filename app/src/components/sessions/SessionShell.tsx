@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
-import { useTabsStore, CRONJOBS_NODE_ID, wtNodeId } from '../../store/useTabsStore'
+import { useReviewStore } from '../../store/useReviewStore'
+import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, wtNodeId } from '../../store/useTabsStore'
 import { listRepoWorktrees, adoptWorktree } from '../../api/worktrees'
 import type { RealWorktree } from '../../api/worktrees'
+import type { Repo } from '../../store/types'
+import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
 import PrReviewModal from './PrReviewModal'
+import TaskDetailModal from './TaskDetailModal'
 import SettingsModal from './SettingsModal'
 import Modal from '../common/Modal'
 import RepoTable from './RepoTable'
 import AddRepoModal from './AddRepoModal'
+import NewTaskModal from './NewTaskModal'
 import styles from './SessionShell.module.css'
 
 const ARCHIVE_ICON = (
@@ -39,14 +44,82 @@ const AUTOMATIONS_ICON = (
 		<path d="M15.5 14v1.6l1.1.9" />
 	</svg>
 )
+// AUTOMATIONS_ICON에서 시계(예약 실행)를 뺀 순수 달력 — "정해진 시각에 자동 실행"이 아니라
+// "날짜별로 일감을 훑어보고 재배치"하는 캘린더라 시계 배지를 붙이면 크론잡과 혼동된다.
+const CALENDAR_ICON = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<rect x="3" y="5" width="18" height="16" rx="2.5" />
+		<path d="M3 10h18M8 3v4M16 3v4" />
+		<path d="M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17.5h1M11.5 17.5h1" />
+	</svg>
+)
 // "+ 새 레포 추가"가 텍스트 "+"만 있어서 뭘 하는 액션인지 한눈에 안 들어왔다 — 폴더+플러스 아이콘으로
 // (Orca 사이드바의 "새 프로젝트" 아이콘 참고).
+// 관제(§control.cjs) — PRODUCT.md의 자기소개("관제탑")를 그대로 시각화. 안테나 기둥 + 신호 아치 두
+// 겹으로 "여러 곳을 한 번에 내려다보며 지시"하는 느낌(크론잡/캘린더 아이콘과 겹치지 않는 모양).
+const CONTROL_ICON = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M12 3v6" />
+		<circle cx="12" cy="11" r="2" />
+		<path d="M12 13v8M8.5 21h7" />
+		<path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.7a9 9 0 0 1 13 0" />
+	</svg>
+)
 const FOLDER_ADD_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
 		<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
 		<path d="M12 12v5M9.5 14.5h5" />
 	</svg>
 )
+// origin 리모트가 없거나(GitHub가 아니거나) 아바타를 못 찾은 레포용 대체 아이콘 — FOLDER_ADD_ICON에서
+// "+" 획만 뺀 순수 폴더 윤곽.
+const REPO_FALLBACK_ICON = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+	</svg>
+)
+function RepoIcon({ repo }: { repo: Repo }) {
+	const [failed, setFailed] = useState(false)
+	if (!repo.ownerAvatarUrl || failed) return <span className={styles.repoIconFallback}>{REPO_FALLBACK_ICON}</span>
+	return <img src={repo.ownerAvatarUrl} alt="" className={styles.repoIconImg} onError={() => setFailed(true)} />
+}
+// 레포 식별 컬러 점 — 기본은 repo.id 해시로 자동 배정(getRepoColor), 눌러서 팔레트 중 하나를 고르면
+// repo.color로 저장돼 자동 배정을 덮어쓴다. 원래는 점 바로 아래 뜨는 인라인 팝오버였는데, 드롭다운
+// 스크롤 컨테이너(.repoSelectPanel) 안에 중첩된 absolute 요소라 조상 어딘가의 overflow에 계속
+// 잘려 보였다(overflow-x:visible을 줘도 재발 — 사용자가 스크린샷으로 두 번 신고). 조상 클리핑과
+// 무관한 Modal(position:fixed 오버레이)로 바꿔 근본적으로 해결.
+function RepoColorDot({ repo, open, onToggle, onClose }: { repo: Repo; open: boolean; onToggle(): void; onClose(): void }) {
+	const current = getRepoColor(repo)
+	return (
+		<>
+			<span
+				className={styles.repoColorDot}
+				style={{ background: current }}
+				title="레포 색상"
+				onClick={(e) => {
+					e.stopPropagation()
+					onToggle()
+				}}
+			/>
+			<Modal open={open} onClose={onClose} width={220}>
+				<div className={styles.repoColorModalTitle}>{repo.name} 색상</div>
+				<div className={styles.repoColorGrid}>
+					{REPO_COLOR_PALETTE.map((c) => (
+						<span
+							key={c}
+							className={`${styles.repoColorSwatch} ${c === current ? styles.repoColorSwatchActive : ''}`}
+							style={{ background: c }}
+							onClick={() => {
+								useSessionsStore.getState().updateRepo(repo.id, { color: c })
+								onClose()
+							}}
+						/>
+					))}
+				</div>
+			</Modal>
+		</>
+	)
+}
 const SEARCH_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
 		<circle cx="11" cy="11" r="7" />
@@ -79,16 +152,17 @@ export default function SessionShell() {
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const folders = useSessionsStore((s) => s.folders)
 	const inbox = useSessionsStore((s) => s.inbox)
+	const detailTaskId = useSessionsStore((s) => s.detailTaskId)
+	const closeTaskDetail = useSessionsStore((s) => s.closeTaskDetail)
+	const openTaskDetail = useSessionsStore((s) => s.openTaskDetail)
+	const reviewJobs = useReviewStore((s) => s.jobs)
+	const clearReview = useReviewStore((s) => s.clearReview)
 	const repos = useSessionsStore((s) => s.repos)
 	const openTasks = useSessionsStore((s) => s.openTasks)
 	const openFolders = useSessionsStore((s) => s.openFolders)
 	const toggleFolder = useSessionsStore((s) => s.toggleFolder)
-	const draft = useSessionsStore((s) => s.draft)
-	const draftBusy = useSessionsStore((s) => s.draftBusy)
 	const classifying = useSessionsStore((s) => s.classifying)
 	const enrichingTitle = useSessionsStore((s) => s.enrichingTitle)
-	const setDraft = useSessionsStore((s) => s.setDraft)
-	const addTaskFromDraft = useSessionsStore((s) => s.addTaskFromDraft)
 	const archive = useSessionsStore((s) => s.archive)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy)
 	const loadArchive = useSessionsStore((s) => s.loadArchive)
@@ -102,7 +176,7 @@ export default function SessionShell() {
 
 	const [repoFilter, setRepoFilter] = useState<string | null>(null)
 	const [repoPickerOpen, setRepoPickerOpen] = useState(false)
-	const [ticketOpen, setTicketOpen] = useState(false)
+	const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
 	const [sidebarQuery, setSidebarQuery] = useState('')
 	const [treeCollapsed, setTreeCollapsed] = useState(false)
 	const [archiveView, setArchiveView] = useState(false)
@@ -112,6 +186,7 @@ export default function SessionShell() {
 	const [worktrees, setWorktrees] = useState<RealWorktree[] | null>(null)
 	const [worktreesError, setWorktreesError] = useState<string | null>(null)
 	const [worktreeBusy, setWorktreeBusy] = useState<string | null>(null)
+	const [colorPickerFor, setColorPickerFor] = useState<string | null>(null)
 	const multiRepo = repos.length > 1
 	const rootRef = useRef<HTMLDivElement>(null)
 
@@ -162,17 +237,24 @@ export default function SessionShell() {
 		const onClick = (e: MouseEvent) => {
 			if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
 				setRepoPickerOpen(false)
-				setTicketOpen(false)
+				setColorPickerFor(null)
 			}
 		}
 		document.addEventListener('click', onClick)
 		return () => document.removeEventListener('click', onClick)
 	}, [])
 
-	const visibleInbox = repoFilter ? inbox.filter((t) => t.repo_id === repoFilter) : inbox
-	const visibleFolders = repoFilter ? folders.map((f) => ({ ...f, tasks: f.tasks.filter((t) => t.repo_id === repoFilter) })).filter((f) => f.tasks.length > 0) : folders
+	// "일감 완료 체크... 태스크에서는 없어져도 되나 캘린더에는 남아있어야함" — 완료 처리한 태스크는
+	// 이 사이드바 트리에서만 걸러낸다. 캘린더(CalendarPane)는 completed_at을 보지 않고 그대로 보여준다.
+	const visibleInbox = (repoFilter ? inbox.filter((t) => t.repo_id === repoFilter) : inbox).filter((t) => !t.completed_at)
+	const visibleFolders = (repoFilter ? folders.map((f) => ({ ...f, tasks: f.tasks.filter((t) => t.repo_id === repoFilter) })) : folders)
+		.map((f) => ({ ...f, tasks: f.tasks.filter((t) => !t.completed_at) }))
+		.filter((f) => !repoFilter || f.tasks.length > 0)
 	const totalTasks = visibleInbox.length + visibleFolders.reduce((n, f) => n + f.tasks.length, 0)
-	const activeRepoLabel = repoFilter ? repos.find((r) => r.id === repoFilter)?.name ?? '전체 레포' : repos[0]?.name ?? '전체 레포'
+	// 버튼 라벨은 실제 선택 상태를 정직하게 반영한다 — repoFilter가 없으면(= "전체 레포" 선택) repos[0]
+	// 이름으로 대체하지 않는다(드롭다운에선 "전체 레포"가 선택 표시되는데 버튼엔 "gongbiz"만 뜨던 버그).
+	const activeRepo = repoFilter ? repos.find((r) => r.id === repoFilter) : undefined
+	const activeRepoLabel = activeRepo?.name ?? '전체 레포'
 	// "전체 레포"(멀티레포에서 repoFilter 미지정)일 땐 워크트리 목록이 어느 레포 것인지 모호해서
 	// 첫 번째 레포로 대체 — 드롭다운에서 구체적인 레포를 고르면 바로 그 레포로 바뀐다.
 	const activeRepoId = repoFilter || repos[0]?.id || null
@@ -222,14 +304,6 @@ export default function SessionShell() {
 			byDate.get(label)!.push(f)
 		}
 		archiveGroups.push(...byDate.entries())
-	}
-
-	async function submitTicket() {
-		if (!draft.trim()) return
-		// 이전엔 클릭하자마자 패널부터 닫아버려서, 실제로 등록되는 중인지 실패했는지 알 방법이 없었다 —
-		// 이제 요청이 실제로 끝난 뒤에만 패널을 닫는다(그동안은 버튼이 "추가 중…"으로 바뀜).
-		await addTaskFromDraft()
-		setTicketOpen(false)
 	}
 
 	function collapseAll() {
@@ -286,6 +360,30 @@ export default function SessionShell() {
 						<span className={styles.navLinkIcon}>{AUTOMATIONS_ICON}</span>
 						크론잡
 					</button>
+					<button
+						className={styles.navLink}
+						type="button"
+						onClick={() => {
+							const s = useTabsStore.getState()
+							if (!s.tabsByNode[CALENDAR_NODE_ID]?.length) s.openTab(CALENDAR_NODE_ID, 'calendar')
+							s.setActiveNode(CALENDAR_NODE_ID, 'calendar')
+						}}
+					>
+						<span className={styles.navLinkIcon}>{CALENDAR_ICON}</span>
+						캘린더
+					</button>
+					<button
+						className={styles.navLink}
+						type="button"
+						onClick={() => {
+							const s = useTabsStore.getState()
+							if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
+							s.setActiveNode(CONTROL_NODE_ID, 'control')
+						}}
+					>
+						<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
+						관제
+					</button>
 				</div>
 				<label className={styles.sidebarSearch}>
 					<span className={styles.sidebarSearchIcon}>{SEARCH_ICON}</span>
@@ -299,7 +397,8 @@ export default function SessionShell() {
 				</label>
 				<div className={styles.head}>
 					<span className={`${styles.repoPicker} ${repoPickerOpen ? styles.open : ''}`}>
-						<button className={styles.repoSelect} type="button" onClick={(e) => { e.stopPropagation(); setRepoPickerOpen((o) => !o) }}>
+						<button className={styles.repoSelect} type="button" onClick={(e) => { e.stopPropagation(); setRepoPickerOpen((o) => !o); setColorPickerFor(null) }}>
+							{activeRepo && <RepoIcon repo={activeRepo} />}
 							<span className={styles.repoSelectLabel}>{activeRepoLabel}</span>
 							<span className={styles.repoSelectChev}>
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -316,7 +415,14 @@ export default function SessionShell() {
 								)}
 								{repos.map((r) => (
 									<div key={r.id} className={`${styles.repoSelectOpt} ${repoFilter === r.id ? styles.selected : ''}`} onClick={() => { setRepoFilter(r.id); setRepoPickerOpen(false) }}>
-										{r.name}
+										<RepoIcon repo={r} />
+										<span className={styles.repoSelectOptName}>{r.name}</span>
+										<RepoColorDot
+											repo={r}
+											open={colorPickerFor === r.id}
+											onToggle={() => setColorPickerFor((id) => (id === r.id ? null : r.id))}
+											onClose={() => setColorPickerFor(null)}
+										/>
 									</div>
 								))}
 								<div className={styles.wtDivider} />
@@ -335,36 +441,9 @@ export default function SessionShell() {
 					<button className={styles.headIconBtn} type="button" onClick={(e) => { e.stopPropagation(); setRepoPickerOpen(false); setAddRepoOpen(true) }} title="새 레포 추가">
 						{FOLDER_ADD_ICON}
 					</button>
-					<span className={styles.inboxAnchor}>
-						<button className={styles.taskAddBtn} type="button" onClick={(e) => { e.stopPropagation(); setTicketOpen((o) => !o) }}>
-							{PLUS_ICON}
-							<span>태스크 추가</span>
-						</button>
-						{ticketOpen && (
-							<div className={styles.inboxPanel}>
-								<div className={styles.inboxPanelLabel}>일감 생성</div>
-								<textarea
-									className={styles.inboxInput}
-									autoFocus
-									disabled={draftBusy}
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
-									onKeyDown={(e) => {
-										if (e.key === 'Enter' && !e.shiftKey) {
-											e.preventDefault()
-											submitTicket()
-										}
-									}}
-									placeholder="제목을 쓰거나 Figma·스레드·Notion·PR 링크를 붙여넣으세요"
-								/>
-								<button className={styles.inboxSubmit} disabled={draftBusy} onClick={submitTicket}>
-									{draftBusy ? <span className={styles.inboxSubmitSpinner} /> : null}
-									{draftBusy ? '추가 중…' : '일감으로 추가'}
-								</button>
-								<div className={styles.inboxPanelHint}>새 일감은 미분류에 담깁니다 — 필요할 때 태스크로 드래그해 옮기세요.</div>
-							</div>
-						)}
-					</span>
+					<button className={styles.taskAddBtn} type="button" onClick={(e) => { e.stopPropagation(); setNewTaskModalOpen(true) }} title="태스크 추가">
+						{PLUS_ICON}
+					</button>
 				</div>
 
 				{!archiveView && (
@@ -507,6 +586,43 @@ export default function SessionShell() {
 					<span className={styles.livedot} />
 					<span>{cockpitSummary?.mainBranch ? `${cockpitSummary.mainBranch} · ` : ''}{totalTasks} 작업</span>
 				</div>
+				{/* "다른 걸 하고 있어도 백그라운드에서 돌아서 다 되면 확인할 수 있게, 사이드바에서 진행상황을
+				    보여주고 클릭하면 상세로" — useReviewStore는 드로어 마운트 여부와 무관하게 계속 폴링하므로
+				    여기서도 같은 상태를 그대로 구독만 하면 된다. */}
+				{Object.values(reviewJobs).length > 0 && (
+					<div className={styles.reviewSection}>
+						<div className={styles.reviewSectionTitle}>AI 검토</div>
+						{Object.values(reviewJobs).map((j) => {
+							const result = j.status?.result
+							const done = !!j.status?.done
+							const failed = !!j.error || (done && !!result && !result.ok && !result.tooVague)
+							const vague = done && !!result && !result.ok && !!result.tooVague
+							return (
+								<div key={j.taskId} className={styles.reviewRow} onClick={() => openTaskDetail(j.taskId)}>
+									<span
+										className={`${styles.reviewDot} ${
+											!done ? styles.reviewDotBusy : failed ? styles.reviewDotFail : vague ? styles.reviewDotWarn : styles.reviewDotDone
+										}`}
+									/>
+									<span className={styles.reviewName}>{j.taskName}</span>
+									<span className={styles.reviewStatus}>
+										{!done ? `${j.status?.percent ?? 5}%` : failed ? '실패' : vague ? '설명 필요' : result && result.ok ? `${result.days}일` : ''}
+									</span>
+									<span
+										className={styles.reviewDismiss}
+										onClick={(e) => {
+											e.stopPropagation()
+											clearReview(j.taskId)
+										}}
+										title="닫기"
+									>
+										×
+									</span>
+								</div>
+							)
+						})}
+					</div>
+				)}
 				<div className={`${styles.archiveRow} ${archiveView ? styles.archiveRowActive : ''}`} onClick={() => setArchiveView((v) => !v)}>
 					<span className={styles.archiveIcon}>{ARCHIVE_ICON}</span>
 					<span style={{ flex: 1 }}>보관함</span>
@@ -547,11 +663,13 @@ export default function SessionShell() {
 			</div>
 
 			<PrReviewModal />
+			<TaskDetailModal taskId={detailTaskId} onClose={closeTaskDetail} />
 			<SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 			<Modal open={reposModalOpen} onClose={() => setReposModalOpen(false)}>
 				<RepoTable />
 			</Modal>
 			<AddRepoModal open={addRepoOpen} onClose={() => setAddRepoOpen(false)} onManage={() => setReposModalOpen(true)} />
+			<NewTaskModal open={newTaskModalOpen} onClose={() => setNewTaskModalOpen(false)} />
 		</div>
 	)
 }
