@@ -5,6 +5,7 @@ import { removeTask } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
+import TaskColorDot from './TaskColorDot'
 import styles from './TaskRow.module.css'
 
 const CLOCK = (
@@ -65,11 +66,20 @@ export default function TaskRow({
 	const dragTaskId = useSessionsStore((s) => s.dragTaskId)
 	const overTaskId = useSessionsStore((s) => s.overTaskId)
 	const setOverTask = useSessionsStore((s) => s.setOverTask)
+	const dragSubtaskId = useSessionsStore((s) => s.dragSubtaskId)
+	const dragSubtaskTaskId = useSessionsStore((s) => s.dragSubtaskTaskId)
+	const overSubtaskId = useSessionsStore((s) => s.overSubtaskId)
+	const setDragSubtask = useSessionsStore((s) => s.setDragSubtask)
+	const setOverSubtask = useSessionsStore((s) => s.setOverSubtask)
+	const reorderSubtasks = useSessionsStore((s) => s.reorderSubtasks)
+	// "진행중 표기도 안돼" — subChain 점의 진행 중/세션 종료 색(§ FolderCard와 동일 패턴).
+	const subtaskWork = useSessionsStore((s) => s.subtaskWork[task.id])
 	const openReview = useSessionsStore((s) => s.openReview)
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 	const quickStartBusy = useSessionsStore((s) => s.quickStartBusy === task.id)
 	const gitStatus = useSessionsStore((s) => s.gitStatus)
 	const renameTask = useSessionsStore((s) => s.renameTask)
+	const updateTaskColor = useSessionsStore((s) => s.updateTaskColor)
 	const setTaskDone = useSessionsStore((s) => s.setTaskDone)
 	// term.cjs가 tmux 화면을 스크레이프해 매번 새로 계산하는 값(저장된 상태 아님) — 세션명으로 조인.
 	const termStatus = useSessionsStore((s) => (session ? s.termStatus[session.tmuxSession] : undefined))
@@ -80,6 +90,9 @@ export default function TaskRow({
 	const renameInputRef = useRef<HTMLInputElement>(null)
 
 	const nb = task.branches.length
+	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 태스크 트리와 같은 원칙으로
+	// 이 목록에서 걸러낸다(§ SessionShell.tsx visibleInbox/visibleFolders, 캘린더에는 그대로 남음).
+	const visibleSubtasks = task.subtasks.filter((st) => !st.completed_at)
 	const primaryBranch = task.branches[0]
 	const git = primaryBranch ? gitStatus[primaryBranch.name] : undefined
 	const openReviewCount = task.reviews.filter((r) => r.state === 'open').length
@@ -185,7 +198,10 @@ export default function TaskRow({
 								}}
 							/>
 						) : (
-							<span className={styles.title}>{task.name}</span>
+							<>
+								<TaskColorDot color={task.color} onPick={(color) => updateTaskColor(task.id, color)} />
+								<span className={styles.title}>{task.name}</span>
+							</>
 						)}
 						{git?.pr && (
 							<span className={`m ${styles.pill} ${git.pr.draft ? styles.pillPrDraft : styles.pillPr}`}>{git.pr.draft ? 'PR draft' : PR_LABEL[git.pr.state]}</span>
@@ -214,7 +230,7 @@ export default function TaskRow({
 								{quickStartBusy ? '…' : '시작'}
 							</span>
 						)}
-						<span className={`m ${styles.subTime}`} title={lastActivityAt ? '지휘자와 마지막으로 주고받은 대화 시각' : undefined}>
+						<span className={`m ${styles.subTime}`} title={lastActivityAt ? '태스크 매니저와 마지막으로 주고받은 대화 시각' : undefined}>
 							{lastActivityAt && lastActivityAt > task.updated_at ? timeAgo(lastActivityAt) : timeAgo(task.updated_at)}
 						</span>
 					</div>
@@ -235,7 +251,7 @@ export default function TaskRow({
 					)}
 					{session?.worktreePath && (
 						<div onClick={(e) => e.stopPropagation()}>
-							<SubagentStrip cwd={session.worktreePath} compact />
+							<SubagentStrip cwd={session.worktreePath} sessionName={session.tmuxSession} compact />
 						</div>
 					)}
 				</div>
@@ -280,7 +296,81 @@ export default function TaskRow({
 			</div>
 			{open && (
 				<div className={styles.detail}>
-					<p className={styles.desc}>{task.desc || '설명 없음'}</p>
+					{visibleSubtasks.length > 0 && (
+						// "서브태스크 이전처럼 브랜치 이어지는 UI로" — BranchChain의 레일+노드 언어를 빌리되
+						// "서브태스크가 메인태스크만큼 눈에 띄면 안 돼" 피드백으로 작고 옅은 전용 변형(subChain*)을
+						// 쓴다(진짜 BranchChain 크기는 그대로 유지). 누르면 서브태스크 상세 패널이 열린다.
+						<div
+							className={styles.subChainWrap}
+							onDragOver={(e) => {
+								if (dragSubtaskTaskId !== task.id) return
+								e.preventDefault()
+								e.stopPropagation()
+							}}
+							onDrop={(e) => {
+								if (dragSubtaskTaskId !== task.id || !dragSubtaskId) return
+								e.preventDefault()
+								e.stopPropagation()
+								reorderSubtasks(task.id, dragSubtaskId, null)
+							}}
+						>
+							<div className={styles.subChainRail} />
+							{visibleSubtasks.map((st) => (
+								<div
+									key={st.id}
+									className={styles.subChainNode}
+									draggable
+									style={{ opacity: dragSubtaskId === st.id ? 0.4 : 1 }}
+									onDragStart={(e) => {
+										e.stopPropagation()
+										e.dataTransfer.effectAllowed = 'move'
+										e.dataTransfer.setData('text/plain', st.id)
+										setDragSubtask(st.id, task.id)
+									}}
+									onDragEnd={(e) => {
+										e.stopPropagation()
+										setDragSubtask(null, null)
+										setOverSubtask(null)
+									}}
+								>
+									<span
+										className={`${styles.subChainDot} ${
+											subtaskWork?.find((w) => w.id === st.id)?.alive
+												? styles.subChainDotAlive
+												: subtaskWork?.find((w) => w.id === st.id)?.started
+													? styles.subChainDotDone
+													: ''
+										}`}
+									/>
+									<div
+										className={`${styles.subChainCard} ${overSubtaskId === st.id && dragSubtaskId !== st.id ? styles.subChainCardDropTarget : ''}`}
+										onClick={(e) => {
+											e.stopPropagation()
+											useSessionsStore.getState().openSubtaskDetail(st.id, task.id)
+										}}
+										onDragOver={(e) => {
+											if (dragSubtaskTaskId !== task.id || dragSubtaskId === st.id) return
+											e.preventDefault()
+											e.stopPropagation()
+											if (overSubtaskId !== st.id) setOverSubtask(st.id)
+										}}
+										onDragLeave={(e) => {
+											e.stopPropagation()
+											if (overSubtaskId === st.id) setOverSubtask(null)
+										}}
+										onDrop={(e) => {
+											if (dragSubtaskTaskId !== task.id || !dragSubtaskId) return
+											e.preventDefault()
+											e.stopPropagation()
+											reorderSubtasks(task.id, dragSubtaskId, st.id)
+										}}
+									>
+										<span className={styles.subChainName}>{st.name}</span>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
 					{nb > 0 && <BranchChain branches={task.branches} kind={task.kind} groupBase={folderBase} />}
 				</div>
 			)}

@@ -59,6 +59,30 @@
 .sbSpacer {
 	flex: 1;
 }
+/* "이거 조금만 더 눈에 띄게 해주고 복사 기능도" — 상태바에 그냥 묻혀 있던 백엔드 주소를 칩으로
+   띄우고 클릭하면 복사되게(§ SessionShell.tsx copyApiAddress). */
+.apiAddress {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 8px;
+	border-radius: var(--radius-chip);
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	cursor: pointer;
+}
+.apiAddress:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+	border-color: var(--violet);
+}
+.apiAddressCopied {
+	color: var(--green);
+	border-color: color-mix(in srgb, var(--green) 40%, var(--line2));
+}
 
 .sidebar {
 	width: 268px;
@@ -160,6 +184,25 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* "각 레포별로 볼 수 있는 체크박스가 있으면 좋겠어" — 라디오(전체 or 딱 하나)에서 체크박스로 바뀌며
+   생긴 표시. 체크 해제 상태도 명확히 보여야 "이것만 빼고 다 보기"(예외처리)가 직관적이다. */
+.repoCheckbox {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	border-radius: 4px;
+	border: 1.5px solid var(--line2);
+	background: transparent;
+}
+.repoCheckbox[data-checked='true'] {
+	border-color: var(--violet);
+	background: var(--violet);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 10px 10px;
 }
 
 /* 레포 실제 GitHub 아바타 — 원형(계정 아바타의 관례적 형태)으로 "이건 진짜 그 계정의 아이콘"임을
@@ -788,6 +831,56 @@
 }
 .archiveRestoreBtn:hover {
 	opacity: 0.85;
+}
+
+/* "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — .inboxList와 같은
+   고정 높이 + 자체 스크롤 패턴(트리 영역의 공간을 뺏지 않음). 행 자체는 TaskRow.subChain* 재사용. */
+.notesSection {
+	flex: none;
+	max-height: 168px;
+	overflow-y: auto;
+	border-bottom: 1px solid var(--line);
+}
+.notesHeader {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px 4px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: var(--t3);
+}
+.notesCount {
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--t3);
+	background: var(--card2);
+	padding: 1px 6px;
+	border-radius: var(--radius-chip);
+}
+.notesAddBtn {
+	margin-left: auto;
+	width: 18px;
+	height: 18px;
+}
+.notesAddBtn svg {
+	width: 13px;
+	height: 13px;
+}
+.notesAddInput {
+	display: block;
+	width: calc(100% - 20px);
+	margin: 0 10px 4px;
+	padding: 5px 9px;
+	border-radius: var(--radius-chip);
+	border: 1px solid var(--line);
+	background: var(--card2);
+	color: var(--ink);
+	font-size: 10.5px;
+}
+.notesList {
+	padding: 0 10px 6px;
 }
 
 

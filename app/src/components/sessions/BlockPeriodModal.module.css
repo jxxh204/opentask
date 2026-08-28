@@ -1,0 +1,95 @@
+.pad {
+	padding: 20px 22px;
+}
+
+.title {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+	margin-bottom: 12px;
+}
+
+.nameRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.input {
+	flex: 1;
+	min-width: 0;
+	height: 34px;
+	background: var(--card2);
+	color: var(--ink);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	font-size: 12.5px;
+	padding: 0 11px;
+}
+.input::placeholder {
+	color: var(--t3);
+}
+
+.dateRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
+.dateLabel {
+	flex: none;
+	width: 32px;
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--t2);
+}
+
+.error {
+	margin-top: 10px;
+	font-size: 11.5px;
+	color: var(--red);
+}
+
+.submit {
+	width: 100%;
+	margin-top: 14px;
+	padding: 9px 0;
+	border-radius: var(--radius-control);
+	border: none;
+	background: var(--violet);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+}
+.submit:hover {
+	opacity: 0.9;
+}
+.submit:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.spinner {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1.5px solid rgba(255, 255, 255, 0.4);
+	border-top-color: #fff;
+	animation: blockPeriodSpin 0.7s linear infinite;
+	flex: none;
+}
+@keyframes blockPeriodSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.hint {
+	margin-top: 10px;
+	font-size: 10px;
+	line-height: 1.5;
+	color: var(--t3);
+}

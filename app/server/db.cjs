@@ -260,6 +260,144 @@ const MIGRATIONS = [
 	(db) => {
 		db.exec(`ALTER TABLE tasks ADD COLUMN completed_at INTEGER;`)
 	},
+	// v14 — "검토한 일감은... 사라지면안돼. 항상 불러와야해". AI 일감 검토(durationEstimate.cjs)는
+	// 예전엔 서버 메모리(jobs 맵)에만 진행률·결과를 들고 있어서, 새로고침이나 서버 재시작 한 번이면
+	// 완료된 검토 결과까지 통째로 날아갔다. agent_jobs(이미 monitor.cjs가 같은 용도로 씀)에 태워
+	// SQLite에 영구 저장하고, ref_type='task'/ref_id=taskId로 나중에 다시 찾는다. meta_json은 percent/
+	// label처럼 done 전에도 실시간으로 갱신되는 부가 상태(토큰·비용 누적치) — result_json과 별개로 둔
+	// 이유는 done=0인 동안엔 result_json이 아직 없어서다.
+	(db) => {
+		db.exec(`ALTER TABLE agent_jobs ADD COLUMN meta_json TEXT;`)
+	},
+	// v15 — 일정 막기("일정 막기 기능이 필요해. 중간에 QA기간같은게 있어서 다른걸 못할 수 있거든").
+	// 태스크가 아니라 캘린더 자체의 제약(그 기간엔 새 일을 넣기 어렵다)이라 tasks 테이블과 분리한
+	// 별도 테이블 — 시작~종료일(둘 다 로컬 자정 epoch ms, inclusive) 안의 모든 날짜 칸을 캘린더가
+	// 줄무늬로 표시한다.
+	(db) => {
+		db.exec(`
+			CREATE TABLE blocked_periods (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				start_date INTEGER NOT NULL,
+				end_date INTEGER NOT NULL,
+				created_at INTEGER NOT NULL
+			);
+		`)
+	},
+	// v16 — 태스크 커스텀 색상("레포 색상은... 뭔가 다른걸로 표시해야할것같아" — 배경은 이 색이 쓰고,
+	// 레포 색은 텍스트색 등 다른 채널로 옮긴다). null이면 레포색/기본 배경 그대로.
+	(db) => {
+		db.exec(`ALTER TABLE tasks ADD COLUMN color TEXT;`)
+	},
+	// v17 — 서브태스크("태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든"). 태스크
+	// 설명과 별개로 서브태스크마다 자기 설명·예정일·기간을 독립적으로 가지고 캘린더에서 태스크처럼
+	// 자유롭게 옮길 수 있다("서브태스크 일정은... 각각 일정이 별도"). 색은 없다 — 캘린더에서 전부 부모
+	// 태스크 색 하나로 통일해서 보여주므로(§ CalendarPane) 서브태스크 자체엔 색 컬럼이 필요 없다.
+	(db) => {
+		db.exec(`
+			CREATE TABLE subtasks (
+				id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+				name TEXT NOT NULL,
+				desc TEXT NOT NULL DEFAULT '',
+				due_date INTEGER,
+				duration_days INTEGER,
+				order_idx INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE INDEX idx_subtasks_task ON subtasks(task_id);
+		`)
+	},
+	// v18 — "코드작업은 무조건 서브태스크를 만들고 그 서브태스크에 워크트리를 만들어서 개발을
+	// 들어가야해... 순차로... pr도 체이닝으로". 서브태스크 단위 워크트리+클로드 세션 이력을 SQLite에
+	// 영구 저장한다 — "클로드 세션이나 태스크나 켜놓은 창은 컴퓨터가 꺼져도 지워지면안돼" 요청대로,
+	// 실제 tmux 세션은 컴퓨터가 꺼지면 같이 죽어도 "어느 서브태스크가 어느 워크트리/브랜치까지 진행됐는지"
+	// 기록은 남아 다시 이어갈 수 있다(기존 orchestrator.cjs의 폴더/지휘자 세션은 여전히 인메모리 — 이번
+	// 범위 밖, 별도 후속 작업). branches.subtask_id로 브랜치도 태스크가 아니라 서브태스크에 붙을 수 있게 한다.
+	(db) => {
+		db.exec(`
+			ALTER TABLE branches ADD COLUMN subtask_id TEXT REFERENCES subtasks(id) ON DELETE CASCADE;
+			CREATE TABLE subtask_sessions (
+				id TEXT PRIMARY KEY,
+				subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+				task_id TEXT NOT NULL,
+				tmux_session TEXT NOT NULL,
+				worktree_path TEXT NOT NULL,
+				branch TEXT,
+				model TEXT,
+				model_label TEXT,
+				started_at INTEGER NOT NULL,
+				ended_at INTEGER
+			);
+			CREATE INDEX idx_subtask_sessions_subtask ON subtask_sessions(subtask_id);
+			CREATE INDEX idx_subtask_sessions_task ON subtask_sessions(task_id);
+		`)
+	},
+	// v19 — "서브태스크도 레포를 별도로 줄 수 있어야하지만. 기본적으로는 메인태스크와 동일하게 해야해."
+	// null(기본값)이면 launchSubtask가 폴더/태스크의 레포를 그대로 물려받고, 값이 있으면 그 서브태스크만
+	// 다른 레포에 워크트리를 만든다.
+	(db) => {
+		db.exec(`ALTER TABLE subtasks ADD COLUMN repo_id TEXT REFERENCES repos(id);`)
+	},
+	// v20 — "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — tasks.folder_id가
+	// nullable이라 폴더 없이도 "미분류" 태스크가 존재하듯, subtasks.task_id도 nullable로 풀어 메인
+	// 태스크 없는 독립 서브태스크(=메모, § store/subtasks.cjs listOrphans)를 허용한다. SQLite는
+	// 컬럼 제약(NOT NULL) 변경을 지원하지 않아 표준 12단계 절차대로 테이블을 다시 만든다.
+	(db) => {
+		db.exec(`
+			CREATE TABLE subtasks_new (
+				id TEXT PRIMARY KEY,
+				task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+				name TEXT NOT NULL,
+				desc TEXT NOT NULL DEFAULT '',
+				due_date INTEGER,
+				duration_days INTEGER,
+				order_idx INTEGER NOT NULL DEFAULT 0,
+				repo_id TEXT REFERENCES repos(id),
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			INSERT INTO subtasks_new (id, task_id, name, desc, due_date, duration_days, order_idx, repo_id, created_at, updated_at)
+				SELECT id, task_id, name, desc, due_date, duration_days, order_idx, repo_id, created_at, updated_at FROM subtasks;
+			DROP TABLE subtasks;
+			ALTER TABLE subtasks_new RENAME TO subtasks;
+			CREATE INDEX idx_subtasks_task ON subtasks(task_id);
+		`)
+	},
+	// v21 — "서브태스크 완료 버튼 필요". tasks.completed_at(§ v13)과 같은 패턴 — 레코드는 지우지 않고
+	// completed_at만 찍는다. null이면 미완료, 값이 있으면 완료 처리한 시각. 사이드바 트리(TaskRow/
+	// FolderCard의 subChain 목록)에서는 걸러내 안 보이게 하지만, 캘린더는 계속 보여준다(§ CalendarPane).
+	(db) => {
+		db.exec(`ALTER TABLE subtasks ADD COLUMN completed_at INTEGER;`)
+	},
+	// v22 — "팀 규칙"("브랜치 이름은 영문에 프리픽스가 있고, 브랜치를 만들기 전에 노션 문서를 써야
+	// 해... 이건 오픈소스로 풀 앱이라 외부에서 이런 설정을 할 수 있어야해"). 브랜치 네이밍이나 사전
+	// 문서 요구사항처럼 팀마다 다른 개발 관행을, 구조화된 필드가 아니라 레포당 자유 텍스트 4칸으로
+	// 저장한다 — 그 텍스트가 그대로 conductorSeed/launchSubtask의 에이전트 지시문에 얹힌다(OpenTask
+	// 코드는 내용을 파싱하지 않는다). 전부 비어있으면(기본값) 지금과 완전히 동일하게 동작.
+	(db) => {
+		db.exec(`
+			ALTER TABLE repos ADD COLUMN rule_general TEXT;
+			ALTER TABLE repos ADD COLUMN rule_task_writing TEXT;
+			ALTER TABLE repos ADD COLUMN rule_branch TEXT;
+			ALTER TABLE repos ADD COLUMN rule_predev TEXT;
+		`)
+	},
+	// v23 — "팀규칙에 현재 태스크 규칙도 추가해줬으면 좋겠어. 이건 태스크의 유니크한 규칙이야." 위
+	// 4칸(§v22)은 레포 전체에 적용되는 팀 공통 규칙이고, 이건 그중 딱 이 메인 태스크(폴더)에만 해당하는
+	// 예외/특이사항 — 그래서 repos가 아니라 folders에 붙인다.
+	(db) => {
+		db.exec(`ALTER TABLE folders ADD COLUMN rule_task TEXT;`)
+	},
+	// v24 — "세션이 바뀌면 안 돼 — 강제로 꺼져도 그렇고" — 지휘자 세션 복원(§orchestrator.cjs
+	// restoreConductorSession)이 folder.name으로 다시 지어낸 라벨("conductor-${folder.name}")로
+	// 스냅샷을 찾았는데, 폴더 이름을 나중에 바꾸면 그 라벨이 안 맞아 복원이 조용히 실패하고 매번 새
+	// 세션이 떴다(서브태스크 쪽의 같은 버그를 고치며 발견 — restoreByName으로 통일). 진짜 세션 이름을
+	// 폴더에 직접 저장해두면 이름이 뭘로 바뀌든 상관없이 정확히 그 세션을 다시 찾는다.
+	(db) => {
+		db.exec(`ALTER TABLE folders ADD COLUMN conductor_session TEXT;`)
+	},
 ]
 
 function migrate() {

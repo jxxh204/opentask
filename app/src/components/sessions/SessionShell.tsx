@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSessionsStore } from '../../store/useSessionsStore'
+import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useReviewStore } from '../../store/useReviewStore'
 import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, wtNodeId } from '../../store/useTabsStore'
 import { listRepoWorktrees, adoptWorktree } from '../../api/worktrees'
 import type { RealWorktree } from '../../api/worktrees'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
+import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
 import PrReviewModal from './PrReviewModal'
 import TaskDetailModal from './TaskDetailModal'
+import SubtaskDetailPanel from './SubtaskDetailPanel'
+import NotesSection from './NotesSection'
+import NoteDetailPanel from './NoteDetailPanel'
 import SettingsModal from './SettingsModal'
 import Modal from '../common/Modal'
 import RepoTable from './RepoTable'
@@ -152,9 +156,14 @@ export default function SessionShell() {
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const folders = useSessionsStore((s) => s.folders)
 	const inbox = useSessionsStore((s) => s.inbox)
+	const notes = useSessionsStore((s) => s.notes)
 	const detailTaskId = useSessionsStore((s) => s.detailTaskId)
+	const detailSubtaskId = useSessionsStore((s) => s.detailSubtaskId)
+	const detailSubtaskParentId = useSessionsStore((s) => s.detailSubtaskParentId)
+	const closeSubtaskDetail = useSessionsStore((s) => s.closeSubtaskDetail)
+	const detailNoteId = useSessionsStore((s) => s.detailNoteId)
+	const closeNoteDetail = useSessionsStore((s) => s.closeNoteDetail)
 	const closeTaskDetail = useSessionsStore((s) => s.closeTaskDetail)
-	const openTaskDetail = useSessionsStore((s) => s.openTaskDetail)
 	const reviewJobs = useReviewStore((s) => s.jobs)
 	const clearReview = useReviewStore((s) => s.clearReview)
 	const repos = useSessionsStore((s) => s.repos)
@@ -169,12 +178,33 @@ export default function SessionShell() {
 	const restoreFolder = useSessionsStore((s) => s.restoreFolder)
 	const loadGitStatus = useSessionsStore((s) => s.loadGitStatus)
 	const loadTermStatus = useSessionsStore((s) => s.loadTermStatus)
+	const loadBoard = useSessionsStore((s) => s.loadBoard)
+	const loadRepos = useSessionsStore((s) => s.loadRepos)
+	// "관제에게 물어보기 하면 관제가 움직이잖아. 관제에도 상태가 보일 필요가 있어" — term.cjs가 이미
+	// 계산해주는 status(§ loadTermStatus, TaskRow가 쓰는 것과 같은 소스)를 관제 세션 이름(orm-control)
+	// 그대로 조인한다.
+	const controlTermStatus = useSessionsStore((s) => s.termStatus['orm-control'])
 	const loadHealth = useSessionsStore((s) => s.loadHealth)
 	const refreshAllOrchestrations = useSessionsStore((s) => s.refreshAllOrchestrations)
+	const refreshAllSubtaskWork = useSessionsStore((s) => s.refreshAllSubtaskWork)
 	const cockpitSummary = useSessionsStore((s) => s.cockpitSummary)
 	const apiAddress = useSessionsStore((s) => s.apiAddress)
+	// "이거 조금만 더 눈에 띄게 해주고 복사 기능도 해줘" — 클릭하면 클립보드에 복사, 1.2초간 "복사됨" 표시.
+	const [addressCopied, setAddressCopied] = useState(false)
+	function copyApiAddress() {
+		if (!apiAddress) return
+		navigator.clipboard?.writeText(apiAddress).catch(() => {})
+		setAddressCopied(true)
+		setTimeout(() => setAddressCopied(false), 1200)
+	}
 
-	const [repoFilter, setRepoFilter] = useState<string | null>(null)
+	// "각 레포별로 볼 수 있는 체크박스가 있으면 좋겠어. 예외처리를 한다던가" — 예전엔 라디오 방식(전체 or
+	// 딱 하나)이었다. null=전체(필터 없음), Set이면 그 안에 있는 레포만. "전체" 상태에서 하나만 체크
+	// 해제하면 나머지 전부를 체크한 Set으로 시작해 "이 레포만 빼고 다 보기"(예외처리)가 자연스럽게 된다.
+	// "이게 캘린더에도 적용되게 해줘" — useSessionsStore로 끌어올려 CalendarPane도 같은 필터를 본다.
+	const repoFilters = useSessionsStore((s) => s.repoFilters)
+	const toggleRepoFilter = useSessionsStore((s) => s.toggleRepoFilter)
+	const setRepoFilters = useSessionsStore((s) => s.setRepoFilters)
 	const [repoPickerOpen, setRepoPickerOpen] = useState(false)
 	const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
 	const [sidebarQuery, setSidebarQuery] = useState('')
@@ -211,6 +241,22 @@ export default function SessionShell() {
 		return () => clearInterval(id)
 	}, [refreshAllOrchestrations])
 
+	// "진행중 표기도 안돼" — 서브태스크의 진행 중/세션 종료 배지도 같은 이유로 안 보였다: 이 데이터
+	// 자체를 사이드바가 구독한 적이 없었다(TaskDetailContent가 열려있을 때만 자체 폴링). 같은 주기로
+	// 전역 상태에 채워 FolderCard/TaskRow의 subChain 점이 실제 세션 생사를 반영하게 한다.
+	useEffect(() => {
+		refreshAllSubtaskWork()
+		const id = setInterval(refreshAllSubtaskWork, 15000)
+		return () => clearInterval(id)
+	}, [refreshAllSubtaskWork])
+
+	// "관제에게 물어보기"로 저장된 팀 규칙은 관제 세션이 curl로 서버에 직접 쓴 것이라(프론트의 자체
+	// 액션을 안 거침) loadBoard와 같은 이유로 여기도 주기적으로 다시 안 불러오면 화면에 안 반영된다.
+	useEffect(() => {
+		const id = setInterval(loadRepos, 15000)
+		return () => clearInterval(id)
+	}, [loadRepos])
+
 	// TaskRow가 질문대기/인증필요를 보여주려면(§12) term.cjs의 실시간 status가 필요 — 백엔드는 이미
 	// /api/term으로 내려주고 있었는데 프론트 어디서도 안 쓰고 있었다.
 	useEffect(() => {
@@ -218,6 +264,15 @@ export default function SessionShell() {
 		const id = setInterval(loadTermStatus, 15000)
 		return () => clearInterval(id)
 	}, [loadTermStatus])
+
+	// "사이드바가 실시간 동기화되지 않고 있어" — 지휘자가 MCP/API로 서브태스크를 만들거나 이름을
+	// 바꾸는 등, 프론트의 자체 액션을 거치지 않고 서버 데이터가 바뀌는 경우가 있다(오케스트레이터
+	// 세션이 API를 직접 호출). 그런 변경은 화면이 다시 로드되기 전까진 반영될 계기가 없었다 —
+	// gitStatus/오케스트레이션과 같은 주기로 보드 전체를 다시 불러와 사이드바 트리를 최신으로 유지.
+	useEffect(() => {
+		const id = setInterval(loadBoard, 15000)
+		return () => clearInterval(id)
+	}, [loadBoard])
 
 	// 서브태스크를 펼치면(TaskRow의 기존 toggleTask) 그 서브태스크가 워크스페이스의 활성 노드가
 	// 된다(기본 탭: 터미널). 태스크(폴더) 쪽 선택은 FolderCard의 헤더 클릭이 직접 처리한다.
@@ -246,18 +301,16 @@ export default function SessionShell() {
 
 	// "일감 완료 체크... 태스크에서는 없어져도 되나 캘린더에는 남아있어야함" — 완료 처리한 태스크는
 	// 이 사이드바 트리에서만 걸러낸다. 캘린더(CalendarPane)는 completed_at을 보지 않고 그대로 보여준다.
-	const visibleInbox = (repoFilter ? inbox.filter((t) => t.repo_id === repoFilter) : inbox).filter((t) => !t.completed_at)
-	const visibleFolders = (repoFilter ? folders.map((f) => ({ ...f, tasks: f.tasks.filter((t) => t.repo_id === repoFilter) })) : folders)
-		.map((f) => ({ ...f, tasks: f.tasks.filter((t) => !t.completed_at) }))
-		.filter((f) => !repoFilter || f.tasks.length > 0)
+	const visibleInbox = (repoFilters ? inbox.filter((t) => !!t.repo_id && repoFilters.has(t.repo_id)) : inbox).filter((t) => !t.completed_at)
+	const visibleFolders = (repoFilters ? folders.map((f) => ({ ...f, tasks: f.tasks.filter((t) => !!t.repo_id && repoFilters.has(t.repo_id)) })) : folders).map((f) => ({ ...f, tasks: f.tasks.filter((t) => !t.completed_at) })).filter((f) => !repoFilters || f.tasks.length > 0)
 	const totalTasks = visibleInbox.length + visibleFolders.reduce((n, f) => n + f.tasks.length, 0)
-	// 버튼 라벨은 실제 선택 상태를 정직하게 반영한다 — repoFilter가 없으면(= "전체 레포" 선택) repos[0]
-	// 이름으로 대체하지 않는다(드롭다운에선 "전체 레포"가 선택 표시되는데 버튼엔 "gongbiz"만 뜨던 버그).
-	const activeRepo = repoFilter ? repos.find((r) => r.id === repoFilter) : undefined
-	const activeRepoLabel = activeRepo?.name ?? '전체 레포'
-	// "전체 레포"(멀티레포에서 repoFilter 미지정)일 땐 워크트리 목록이 어느 레포 것인지 모호해서
-	// 첫 번째 레포로 대체 — 드롭다운에서 구체적인 레포를 고르면 바로 그 레포로 바뀐다.
-	const activeRepoId = repoFilter || repos[0]?.id || null
+	// 버튼 라벨은 실제 선택 상태를 정직하게 반영한다 — 체크된 레포가 몇 개냐에 따라 이름/개수/전체를 구분.
+	const checkedRepos = repoFilters ? repos.filter((r) => repoFilters.has(r.id)) : repos
+	const activeRepo = checkedRepos.length === 1 ? checkedRepos[0] : undefined
+	const activeRepoLabel = !repoFilters ? '전체 레포' : checkedRepos.length === 0 ? '레포 없음' : checkedRepos.length === 1 ? checkedRepos[0].name : `${checkedRepos.length}개 레포`
+	// "전체" 또는 여러 개가 체크된 상태일 땐 워크트리 목록이 어느 레포 것인지 모호해서 첫 번째 레포로
+	// 대체 — 체크박스로 정확히 하나만 남기면 바로 그 레포로 바뀐다.
+	const activeRepoId = checkedRepos.length === 1 ? checkedRepos[0].id : repos[0]?.id || null
 	// 브랜치명 → 이미 추적 중인 태스크. inbox 태스크는 폴더가 없어 실제 워크트리가 없으므로 제외.
 	const trackedByBranch = new Map<string, { taskId: string; taskName: string }>()
 	for (const f of folders) for (const t of f.tasks) for (const b of t.branches) trackedByBranch.set(b.name, { taskId: t.id, taskName: t.name })
@@ -279,8 +332,12 @@ export default function SessionShell() {
 		setWorktrees(null)
 		setWorktreesError(null)
 		listRepoWorktrees(activeRepoId)
-			.then((d) => { if (!cancelled) setWorktrees(d.worktrees) })
-			.catch((e) => { if (!cancelled) setWorktreesError(e instanceof Error ? e.message : String(e)) })
+			.then((d) => {
+				if (!cancelled) setWorktrees(d.worktrees)
+			})
+			.catch((e) => {
+				if (!cancelled) setWorktreesError(e instanceof Error ? e.message : String(e))
+			})
 		return () => {
 			cancelled = true
 		}
@@ -288,11 +345,8 @@ export default function SessionShell() {
 
 	const q = sidebarQuery.trim().toLowerCase()
 	const displayInbox = q ? visibleInbox.filter((t) => t.name.toLowerCase().includes(q)) : visibleInbox
-	const displayFolders = q
-		? visibleFolders
-				.map((f) => (f.name.toLowerCase().includes(q) ? f : { ...f, tasks: f.tasks.filter((t) => t.name.toLowerCase().includes(q)) }))
-				.filter((f) => f.name.toLowerCase().includes(q) || f.tasks.length > 0)
-		: visibleFolders
+	const displayFolders = q ? visibleFolders.map((f) => (f.name.toLowerCase().includes(q) ? f : { ...f, tasks: f.tasks.filter((t) => t.name.toLowerCase().includes(q)) })).filter((f) => f.name.toLowerCase().includes(q) || f.tasks.length > 0) : visibleFolders
+	const displayNotes = q ? notes.filter((n) => n.name.toLowerCase().includes(q)) : notes
 
 	// 보관함 — archived_at(ms) 기준 날짜별로 묶어서 최신 날짜가 위로 오게
 	const archiveGroups: [string, typeof archive][] = []
@@ -345,299 +399,339 @@ export default function SessionShell() {
 
 	return (
 		<div className={styles.appRoot}>
-		<div className={styles.root} ref={rootRef}>
-			<aside className={styles.sidebar}>
-				<div className={styles.navLinks}>
-					<button
-						className={styles.navLink}
-						type="button"
-						onClick={() => {
-							const s = useTabsStore.getState()
-							if (!s.tabsByNode[CRONJOBS_NODE_ID]?.length) s.openTab(CRONJOBS_NODE_ID, 'cronjobs')
-							s.setActiveNode(CRONJOBS_NODE_ID, 'cronjobs')
-						}}
-					>
-						<span className={styles.navLinkIcon}>{AUTOMATIONS_ICON}</span>
-						크론잡
-					</button>
-					<button
-						className={styles.navLink}
-						type="button"
-						onClick={() => {
-							const s = useTabsStore.getState()
-							if (!s.tabsByNode[CALENDAR_NODE_ID]?.length) s.openTab(CALENDAR_NODE_ID, 'calendar')
-							s.setActiveNode(CALENDAR_NODE_ID, 'calendar')
-						}}
-					>
-						<span className={styles.navLinkIcon}>{CALENDAR_ICON}</span>
-						캘린더
-					</button>
-					<button
-						className={styles.navLink}
-						type="button"
-						onClick={() => {
-							const s = useTabsStore.getState()
-							if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
-							s.setActiveNode(CONTROL_NODE_ID, 'control')
-						}}
-					>
-						<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
-						관제
-					</button>
-				</div>
-				<label className={styles.sidebarSearch}>
-					<span className={styles.sidebarSearchIcon}>{SEARCH_ICON}</span>
-					<input
-						className={styles.sidebarSearchInput}
-						type="text"
-						value={sidebarQuery}
-						onChange={(e) => setSidebarQuery(e.target.value)}
-						placeholder="검색"
-					/>
-				</label>
-				<div className={styles.head}>
-					<span className={`${styles.repoPicker} ${repoPickerOpen ? styles.open : ''}`}>
-						<button className={styles.repoSelect} type="button" onClick={(e) => { e.stopPropagation(); setRepoPickerOpen((o) => !o); setColorPickerFor(null) }}>
-							{activeRepo && <RepoIcon repo={activeRepo} />}
-							<span className={styles.repoSelectLabel}>{activeRepoLabel}</span>
-							<span className={styles.repoSelectChev}>
-								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-									<path d="M6 9l6 6 6-6" />
-								</svg>
-							</span>
+			<div className={styles.root} ref={rootRef}>
+				<aside className={styles.sidebar}>
+					<div className={styles.navLinks}>
+						<button
+							className={styles.navLink}
+							type="button"
+							onClick={() => {
+								const s = useTabsStore.getState()
+								if (!s.tabsByNode[CRONJOBS_NODE_ID]?.length) s.openTab(CRONJOBS_NODE_ID, 'cronjobs')
+								s.setActiveNode(CRONJOBS_NODE_ID, 'cronjobs')
+							}}
+						>
+							<span className={styles.navLinkIcon}>{AUTOMATIONS_ICON}</span>
+							크론잡
 						</button>
-						{repoPickerOpen && (
-							<div className={styles.repoSelectPanel}>
-								{multiRepo && (
-									<div className={`${styles.repoSelectOpt} ${!repoFilter ? styles.selected : ''}`} onClick={() => { setRepoFilter(null); setRepoPickerOpen(false) }}>
-										전체 레포
-									</div>
-								)}
-								{repos.map((r) => (
-									<div key={r.id} className={`${styles.repoSelectOpt} ${repoFilter === r.id ? styles.selected : ''}`} onClick={() => { setRepoFilter(r.id); setRepoPickerOpen(false) }}>
-										<RepoIcon repo={r} />
-										<span className={styles.repoSelectOptName}>{r.name}</span>
-										<RepoColorDot
-											repo={r}
-											open={colorPickerFor === r.id}
-											onToggle={() => setColorPickerFor((id) => (id === r.id ? null : r.id))}
-											onClose={() => setColorPickerFor(null)}
-										/>
-									</div>
-								))}
-								<div className={styles.wtDivider} />
-								<div
-									className={`${styles.repoSelectOpt} ${styles.repoSelectManage}`}
-									onClick={() => {
-										setRepoPickerOpen(false)
-										setReposModalOpen(true)
-									}}
-								>
-									레포 관리
-								</div>
-							</div>
-						)}
-					</span>
-					<button className={styles.headIconBtn} type="button" onClick={(e) => { e.stopPropagation(); setRepoPickerOpen(false); setAddRepoOpen(true) }} title="새 레포 추가">
-						{FOLDER_ADD_ICON}
-					</button>
-					<button className={styles.taskAddBtn} type="button" onClick={(e) => { e.stopPropagation(); setNewTaskModalOpen(true) }} title="태스크 추가">
-						{PLUS_ICON}
-					</button>
-				</div>
-
-				{!archiveView && (
-					<div className={`${styles.taskCount} ${treeCollapsed ? styles.collapsed : ''}`} onClick={collapseAll}>
-						<span className={styles.tcchev}>⌄</span>
-						<span>{totalTasks} Task</span>
+						<button
+							className={styles.navLink}
+							type="button"
+							onClick={() => {
+								const s = useTabsStore.getState()
+								if (!s.tabsByNode[CALENDAR_NODE_ID]?.length) s.openTab(CALENDAR_NODE_ID, 'calendar')
+								s.setActiveNode(CALENDAR_NODE_ID, 'calendar')
+							}}
+						>
+							<span className={styles.navLinkIcon}>{CALENDAR_ICON}</span>
+							캘린더
+						</button>
+						<button
+							className={styles.navLink}
+							type="button"
+							onClick={() => {
+								const s = useTabsStore.getState()
+								if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
+								s.setActiveNode(CONTROL_NODE_ID, 'control')
+							}}
+						>
+							<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
+							<span style={{ flex: 1, textAlign: 'left' }}>비서</span>
+							{controlTermStatus?.exists && (
+								<StatusDot
+									color={controlTermStatus.needsAuth ? 'red' : controlTermStatus.waiting ? 'amber' : 'green'}
+									pulse={!!controlTermStatus.working}
+									size={7}
+								/>
+							)}
+						</button>
 					</div>
-				)}
-
-				{!archiveView && displayInbox.length > 0 && (
-					<div className={`scroll-y ${styles.inboxList}`}>
-						{displayInbox.map((t) => (
-							<div
-								key={t.id}
-								className={`${styles.inboxRow} ${activeNodeId === t.id ? styles.inboxRowSelected : ''}`}
-								onClick={() => useTabsStore.getState().setActiveNode(t.id, 'terminal')}
+					<label className={styles.sidebarSearch}>
+						<span className={styles.sidebarSearchIcon}>{SEARCH_ICON}</span>
+						<input className={styles.sidebarSearchInput} type="text" value={sidebarQuery} onChange={(e) => setSidebarQuery(e.target.value)} placeholder="검색" />
+					</label>
+					<div className={styles.head}>
+						<span className={`${styles.repoPicker} ${repoPickerOpen ? styles.open : ''}`}>
+							<button
+								className={styles.repoSelect}
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation()
+									setRepoPickerOpen((o) => !o)
+									setColorPickerFor(null)
+								}}
 							>
-								<span className={styles.inboxIcon}>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-										<path d="M4 12h4l2 3h4l2-3h4" />
-										<path d="M5.5 5h13L21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6L5.5 5z" />
+								{activeRepo && <RepoIcon repo={activeRepo} />}
+								<span className={styles.repoSelectLabel}>{activeRepoLabel}</span>
+								<span className={styles.repoSelectChev}>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+										<path d="M6 9l6 6 6-6" />
 									</svg>
 								</span>
-								<div className={styles.inboxBody}>
-									<div className={styles.inboxTitle}>{t.name}</div>
-									<div className={styles.inboxMeta}>
-										{enrichingTitle[t.id] ? (
-											// 링크로 만든 일감의 제목이 당분간 "○○ 링크 태스크" placeholder라 헷갈릴 수
-											// 있다 — 링크 내용을 읽어 실제 제목으로 바꾸는 중임을 명시(최대 170초).
-											<span className={styles.inboxClassifying}>
-												<span className={styles.inboxSubmitSpinner} />
-												제목 생성 중…
-											</span>
-										) : classifying[t.id] ? (
-											// repoClassify.cjs가 백그라운드에서 도는 동안(멀티레포일 때만, 최대 ~16초) 조용히
-											// 아무 표시가 없었다 — "레포 분류 중"이라고 명시해서 멈춘 것처럼 안 보이게 한다.
-											<span className={styles.inboxClassifying}>
-												<span className={styles.inboxSubmitSpinner} />
-												레포 분류 중…
-											</span>
-										) : (
-											<span className={`m ${styles.inboxTime}`}>{timeAgo(t.created_at)}</span>
-										)}
-										<span
-											className={styles.inboxAction}
-											onClick={(e) => {
-												e.stopPropagation()
-												useSessionsStore.getState().quickStartTask(t.id)
+							</button>
+							{repoPickerOpen && (
+								<div className={styles.repoSelectPanel}>
+									{multiRepo && (
+										<div
+											className={`${styles.repoSelectOpt} ${!repoFilters ? styles.selected : ''}`}
+											onClick={() => {
+												setRepoFilters(null)
+												setRepoPickerOpen(false)
 											}}
 										>
-											시작
-										</span>
-									</div>
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-
-				{!archiveView && (
-					<div className={`scroll-y ${styles.treeScroll}`}>
-						{displayFolders.map((f) => (
-							<FolderCard key={f.id} folder={f} />
-						))}
-						{displayFolders.length === 0 && <div className={styles.treeEmpty}>{q ? '검색 결과 없음' : '진행 중인 작업 없음'}</div>}
-					</div>
-				)}
-
-				{archiveView && (
-					<div className={`scroll-y ${styles.treeScroll}`}>
-						{archive.length === 0 && <div className={styles.treeEmpty}>보관된 작업 없음</div>}
-						{archiveGroups.map(([date, items]) => (
-							<div key={date}>
-								<div className={`m ${styles.archiveDateLabel}`}>{date}</div>
-								{items.map((f) => (
-									<div key={f.id} className={styles.archiveItemRow}>
-										<div className={styles.archiveItemBody}>
-											<div className={styles.archiveItemTitle}>{f.name}</div>
-											{f.base && (
-												<div className={`m ${styles.wtLineSmall}`}>
-													⎇ {f.base}
-												</div>
-											)}
+											<span className={styles.repoCheckbox} data-checked={!repoFilters} />
+											전체 레포
 										</div>
-										<span
-											className={styles.archiveRestoreBtn}
-											onClick={() => restoreFolder(f.id)}
-											style={{ opacity: archiveBusy === f.id ? 0.5 : undefined }}
-										>
-											복원
-										</span>
-									</div>
-								))}
-							</div>
-						))}
-					</div>
-				)}
-
-				{!archiveView && (wtLoading || untrackedWorktrees.length > 0 || worktreesError) && (
-					<div className={styles.sidebarWtSection}>
-						<div className={styles.sidebarWtDivider} />
-						<div className={styles.sidebarWtHeader}>
-							<span>워크트리</span>
-							{!wtLoading && <span className={styles.sidebarWtCount}>{untrackedWorktrees.length}</span>}
-						</div>
-						{worktreesError && <div className={styles.wtHint}>{worktreesError}</div>}
-						<div className={`scroll-y ${styles.sidebarWtList}`}>
-							{wtLoading &&
-								[0, 1, 2].map((i) => (
-									<div key={i} className={styles.wtSkeletonRow}>
-										<span className={styles.wtSkeletonBar} style={{ width: `${64 - i * 10}%` }} />
-									</div>
-								))}
-							{!wtLoading &&
-								untrackedWorktrees.map((w) => {
-									const busy = worktreeBusy === w.branch
-									return (
-										<div key={w.path} className={styles.wtRow}>
-											<span className={styles.wtRowMain} onClick={() => openAdHocTerminal(w.path)}>
-												<span className={styles.wtRowLabel}>{w.branch}</span>
-											</span>
-											<span
-												className={styles.wtRowAction}
+									)}
+									{repos.map((r) => {
+										const checked = !repoFilters || repoFilters.has(r.id)
+										return (
+											<div
+												key={r.id}
+												className={`${styles.repoSelectOpt} ${checked && repoFilters ? styles.selected : ''}`}
 												onClick={(e) => {
 													e.stopPropagation()
-													if (!busy) connectWorktree(w.branch)
+													toggleRepoFilter(r.id)
 												}}
-												title="연결"
 											>
-												{PLUG_ICON}
+												<span className={styles.repoCheckbox} data-checked={checked} />
+												<RepoIcon repo={r} />
+												<span className={styles.repoSelectOptName}>{r.name}</span>
+												<RepoColorDot repo={r} open={colorPickerFor === r.id} onToggle={() => setColorPickerFor((id) => (id === r.id ? null : r.id))} onClose={() => setColorPickerFor(null)} />
+											</div>
+										)
+									})}
+									<div className={styles.wtDivider} />
+									<div
+										className={`${styles.repoSelectOpt} ${styles.repoSelectManage}`}
+										onClick={() => {
+											setRepoPickerOpen(false)
+											setReposModalOpen(true)
+										}}
+									>
+										레포 관리
+									</div>
+								</div>
+							)}
+						</span>
+						<button
+							className={styles.headIconBtn}
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation()
+								setRepoPickerOpen(false)
+								setAddRepoOpen(true)
+							}}
+							title="새 레포 추가"
+						>
+							{FOLDER_ADD_ICON}
+						</button>
+						<button
+							className={styles.taskAddBtn}
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation()
+								setNewTaskModalOpen(true)
+							}}
+							title="메인 태스크 추가"
+						>
+							{PLUS_ICON}
+						</button>
+					</div>
+
+					{!archiveView && (
+						<div className={`${styles.taskCount} ${treeCollapsed ? styles.collapsed : ''}`} onClick={collapseAll}>
+							<span className={styles.tcchev}>⌄</span>
+							<span>{totalTasks} Task</span>
+						</div>
+					)}
+
+					{!archiveView && displayInbox.length > 0 && (
+						<div className={`scroll-y ${styles.inboxList}`}>
+							{displayInbox.map((t) => (
+								<div key={t.id} className={`${styles.inboxRow} ${activeNodeId === t.id ? styles.inboxRowSelected : ''}`} onClick={() => useTabsStore.getState().setActiveNode(t.id, 'terminal')}>
+									<span className={styles.inboxIcon}>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+											<path d="M4 12h4l2 3h4l2-3h4" />
+											<path d="M5.5 5h13L21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6L5.5 5z" />
+										</svg>
+									</span>
+									<div className={styles.inboxBody}>
+										<div className={styles.inboxTitle}>{t.name}</div>
+										<div className={styles.inboxMeta}>
+											{enrichingTitle[t.id] ? (
+												// 링크로 만든 일감의 제목이 당분간 "○○ 링크 태스크" placeholder라 헷갈릴 수
+												// 있다 — 링크 내용을 읽어 실제 제목으로 바꾸는 중임을 명시(최대 170초).
+												<span className={styles.inboxClassifying}>
+													<span className={styles.inboxSubmitSpinner} />
+													제목 생성 중…
+												</span>
+											) : classifying[t.id] ? (
+												// repoClassify.cjs가 백그라운드에서 도는 동안(멀티레포일 때만, 최대 ~16초) 조용히
+												// 아무 표시가 없었다 — "레포 분류 중"이라고 명시해서 멈춘 것처럼 안 보이게 한다.
+												<span className={styles.inboxClassifying}>
+													<span className={styles.inboxSubmitSpinner} />
+													레포 분류 중…
+												</span>
+											) : (
+												<span className={`m ${styles.inboxTime}`}>{timeAgo(t.created_at)}</span>
+											)}
+											<span
+												className={styles.inboxAction}
+												onClick={(e) => {
+													e.stopPropagation()
+													useSessionsStore.getState().quickStartTask(t.id)
+												}}
+											>
+												시작
+											</span>
+										</div>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+
+					{!archiveView && <NotesSection notes={displayNotes} />}
+
+					{!archiveView && (
+						<div className={`scroll-y ${styles.treeScroll}`}>
+							{displayFolders.map((f) => (
+								<FolderCard key={f.id} folder={f} />
+							))}
+							{displayFolders.length === 0 && <div className={styles.treeEmpty}>{q ? '검색 결과 없음' : '진행 중인 작업 없음'}</div>}
+						</div>
+					)}
+
+					{archiveView && (
+						<div className={`scroll-y ${styles.treeScroll}`}>
+							{archive.length === 0 && <div className={styles.treeEmpty}>보관된 작업 없음</div>}
+							{archiveGroups.map(([date, items]) => (
+								<div key={date}>
+									<div className={`m ${styles.archiveDateLabel}`}>{date}</div>
+									{items.map((f) => (
+										<div key={f.id} className={styles.archiveItemRow}>
+											<div className={styles.archiveItemBody}>
+												<div className={styles.archiveItemTitle}>{f.name}</div>
+												{f.base && <div className={`m ${styles.wtLineSmall}`}>⎇ {f.base}</div>}
+											</div>
+											<span className={styles.archiveRestoreBtn} onClick={() => restoreFolder(f.id)} style={{ opacity: archiveBusy === f.id ? 0.5 : undefined }}>
+												복원
+											</span>
+										</div>
+									))}
+								</div>
+							))}
+						</div>
+					)}
+
+					{!archiveView && (wtLoading || untrackedWorktrees.length > 0 || worktreesError) && (
+						<div className={styles.sidebarWtSection}>
+							<div className={styles.sidebarWtDivider} />
+							<div className={styles.sidebarWtHeader}>
+								<span>워크트리</span>
+								{!wtLoading && <span className={styles.sidebarWtCount}>{untrackedWorktrees.length}</span>}
+							</div>
+							{worktreesError && <div className={styles.wtHint}>{worktreesError}</div>}
+							<div className={`scroll-y ${styles.sidebarWtList}`}>
+								{wtLoading &&
+									[0, 1, 2].map((i) => (
+										<div key={i} className={styles.wtSkeletonRow}>
+											<span className={styles.wtSkeletonBar} style={{ width: `${64 - i * 10}%` }} />
+										</div>
+									))}
+								{!wtLoading &&
+									untrackedWorktrees.map((w) => {
+										const busy = worktreeBusy === w.branch
+										return (
+											<div key={w.path} className={styles.wtRow}>
+												<span className={styles.wtRowMain} onClick={() => openAdHocTerminal(w.path)}>
+													<span className={styles.wtRowLabel}>{w.branch}</span>
+												</span>
+												<span
+													className={styles.wtRowAction}
+													onClick={(e) => {
+														e.stopPropagation()
+														if (!busy) connectWorktree(w.branch)
+													}}
+													title="연결"
+												>
+													{PLUG_ICON}
+												</span>
+											</div>
+										)
+									})}
+							</div>
+						</div>
+					)}
+
+					<div className={`m ${styles.foot}`}>
+						<span className={styles.livedot} />
+						<span>
+							{cockpitSummary?.mainBranch ? `${cockpitSummary.mainBranch} · ` : ''}
+							{totalTasks} 작업
+						</span>
+					</div>
+					{/* "다른 걸 하고 있어도 백그라운드에서 돌아서 다 되면 확인할 수 있게, 사이드바에서 진행상황을
+				    보여주고 클릭하면 상세로" — useReviewStore는 드로어 마운트 여부와 무관하게 계속 폴링하므로
+				    여기서도 같은 상태를 그대로 구독만 하면 된다. */}
+					{/* "태스크 등록됐으면 여기서 빼줘" — quickStartTask가 폴더를 만들어 태스크를 그리로 옮기면
+				    folder_id가 생긴다("등록됨"의 신호). folders[].tasks에 있다는 게 바로 그 뜻이라, 거기
+				    속한 태스크는 이 검토 진행 목록에서 뺀다(더 이상 트리아지 대상이 아니라 실제 오케스트레이션
+				    중인 태스크니까). 아직 inbox에 있는 것만 여기 남는다. */}
+					{(() => {
+						const registeredTaskIds = new Set(folders.flatMap((f) => f.tasks.map((t) => t.id)))
+						const pendingReviewJobs = Object.values(reviewJobs).filter((j) => !registeredTaskIds.has(j.taskId))
+						if (pendingReviewJobs.length === 0) return null
+						return (
+							<div className={styles.reviewSection}>
+								<div className={styles.reviewSectionTitle}>AI 검토</div>
+								{pendingReviewJobs.map((j) => {
+									const result = j.status?.result
+									const done = !!j.status?.done
+									const failed = !!j.error || (done && !!result && !result.ok && !result.tooVague)
+									const vague = done && !!result && !result.ok && !!result.tooVague
+									return (
+										<div key={j.taskId} className={styles.reviewRow} onClick={() => openTaskOrFolderDetail(j.taskId)}>
+											<span className={`${styles.reviewDot} ${!done ? styles.reviewDotBusy : failed ? styles.reviewDotFail : vague ? styles.reviewDotWarn : styles.reviewDotDone}`} />
+											<span className={styles.reviewName}>{j.taskName}</span>
+											<span className={styles.reviewStatus}>
+												{/* "24퍼에서 안움직여" — j.error가 뜨면 done은 영영 true가 안 되니(폴링이 실패 직후 멈춤)
+										    !done 분기가 먼저 걸려 마지막으로 받은 퍼센트에서 그대로 얼어붙어 보였다.
+										    failed(=error 포함) 여부를 !done보다 먼저 확인해야 한다. */}
+												{failed ? '실패' : !done ? `${j.status?.percent ?? 5}%` : vague ? '설명 필요' : result && result.ok ? `${result.days}일` : ''}
+											</span>
+											<span
+												className={styles.reviewDismiss}
+												onClick={(e) => {
+													e.stopPropagation()
+													clearReview(j.taskId)
+												}}
+												title="닫기"
+											>
+												×
 											</span>
 										</div>
 									)
 								})}
-						</div>
+							</div>
+						)
+					})()}
+					<div className={`${styles.archiveRow} ${archiveView ? styles.archiveRowActive : ''}`} onClick={() => setArchiveView((v) => !v)}>
+						<span className={styles.archiveIcon}>{ARCHIVE_ICON}</span>
+						<span style={{ flex: 1 }}>보관함</span>
+						<span className={`m ${styles.archiveCount}`}>{archive.length}</span>
 					</div>
-				)}
-
-				<div className={`m ${styles.foot}`}>
-					<span className={styles.livedot} />
-					<span>{cockpitSummary?.mainBranch ? `${cockpitSummary.mainBranch} · ` : ''}{totalTasks} 작업</span>
-				</div>
-				{/* "다른 걸 하고 있어도 백그라운드에서 돌아서 다 되면 확인할 수 있게, 사이드바에서 진행상황을
-				    보여주고 클릭하면 상세로" — useReviewStore는 드로어 마운트 여부와 무관하게 계속 폴링하므로
-				    여기서도 같은 상태를 그대로 구독만 하면 된다. */}
-				{Object.values(reviewJobs).length > 0 && (
-					<div className={styles.reviewSection}>
-						<div className={styles.reviewSectionTitle}>AI 검토</div>
-						{Object.values(reviewJobs).map((j) => {
-							const result = j.status?.result
-							const done = !!j.status?.done
-							const failed = !!j.error || (done && !!result && !result.ok && !result.tooVague)
-							const vague = done && !!result && !result.ok && !!result.tooVague
-							return (
-								<div key={j.taskId} className={styles.reviewRow} onClick={() => openTaskDetail(j.taskId)}>
-									<span
-										className={`${styles.reviewDot} ${
-											!done ? styles.reviewDotBusy : failed ? styles.reviewDotFail : vague ? styles.reviewDotWarn : styles.reviewDotDone
-										}`}
-									/>
-									<span className={styles.reviewName}>{j.taskName}</span>
-									<span className={styles.reviewStatus}>
-										{!done ? `${j.status?.percent ?? 5}%` : failed ? '실패' : vague ? '설명 필요' : result && result.ok ? `${result.days}일` : ''}
-									</span>
-									<span
-										className={styles.reviewDismiss}
-										onClick={(e) => {
-											e.stopPropagation()
-											clearReview(j.taskId)
-										}}
-										title="닫기"
-									>
-										×
-									</span>
-								</div>
-							)
-						})}
+					<div className={styles.archiveRow} onClick={() => setSettingsOpen(true)}>
+						<span className={styles.archiveIcon}>{GEAR_ICON}</span>
+						<span style={{ flex: 1 }}>설정</span>
 					</div>
-				)}
-				<div className={`${styles.archiveRow} ${archiveView ? styles.archiveRowActive : ''}`} onClick={() => setArchiveView((v) => !v)}>
-					<span className={styles.archiveIcon}>{ARCHIVE_ICON}</span>
-					<span style={{ flex: 1 }}>보관함</span>
-					<span className={`m ${styles.archiveCount}`}>{archive.length}</span>
-				</div>
-				<div className={styles.archiveRow} onClick={() => setSettingsOpen(true)}>
-					<span className={styles.archiveIcon}>{GEAR_ICON}</span>
-					<span style={{ flex: 1 }}>설정</span>
-				</div>
-			</aside>
+				</aside>
 
-			<main className={styles.workspace}>
-				<TabWorkspace />
-			</main>
-		</div>
+				<main className={styles.workspace}>
+					<TabWorkspace />
+				</main>
+			</div>
 
 			<div className={`m ${styles.statusbar}`}>
 				<span className={styles.sbItem}>
@@ -659,11 +753,21 @@ export default function SessionShell() {
 					PR {cockpitSummary?.prOpen ?? 0} open · {cockpitSummary?.prDraft ?? 0} draft
 				</span>
 				<span className={styles.sbSpacer} />
-				{apiAddress && <span className={styles.sbItem}>{apiAddress}</span>}
+				{apiAddress && (
+					<span
+						className={`${styles.apiAddress} ${addressCopied ? styles.apiAddressCopied : ''}`}
+						onClick={copyApiAddress}
+						title="클릭하면 복사됩니다 — 모바일 기기에서 같은 Wi-Fi로 접속할 때 씁니다"
+					>
+						{addressCopied ? '복사됨 ✓' : apiAddress}
+					</span>
+				)}
 			</div>
 
 			<PrReviewModal />
 			<TaskDetailModal taskId={detailTaskId} onClose={closeTaskDetail} />
+			<SubtaskDetailPanel subtaskId={detailSubtaskId} parentTaskId={detailSubtaskParentId} onClose={closeSubtaskDetail} />
+			<NoteDetailPanel noteId={detailNoteId} onClose={closeNoteDetail} />
 			<SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 			<Modal open={reposModalOpen} onClose={() => setReposModalOpen(false)}>
 				<RepoTable />

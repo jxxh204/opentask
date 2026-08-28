@@ -74,7 +74,7 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 	// 터미널에선 지휘자가 뻔히 살아서 "Considering…" 중인데 헤더만 "대기"라고 해서 어색해 보였다
 	// (사용자가 스크린샷으로 신고). 지휘자 생존 여부(orch.conductor)를 더해 3단계로 구분한다.
 	const isActive = orch.running || !!orch.conductor
-	const stateLabel = orch.running ? '조율 중' : orch.conductor ? '지휘자 작업 중' : '대기'
+	const stateLabel = orch.running ? '조율 중' : orch.conductor ? '태스크 매니저 작업 중' : '대기'
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
@@ -94,7 +94,7 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 				)}
 				{orch.conductor && (
 					<button className={styles.btn} disabled={busy} onClick={() => stopConductor(folderId)}>
-						지휘자 중지
+						태스크 매니저 중지
 					</button>
 				)}
 			</div>
@@ -109,69 +109,79 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 
 			<div className={styles.pad}>
 				{orch.sessions.length > 0 && (
-					<div className={styles.sessions}>
+					<div className={styles.sessionStrip}>
 						{orch.sessions.map((s) => (
-							<div key={s.taskId} className={`m ${styles.sessionRow}`}>
+							<span key={s.taskId} className={`m ${styles.sessionChip}`}>
 								<span className={styles.sessionDot} />
 								{s.tmuxSession}
-							</div>
+							</span>
 						))}
 					</div>
 				)}
 
+				{/* "대화 로그가 그냥 평문 나열이라 안 읽힘" — 지휘자↔서브태스크·오퍼레이터 사이 실제 오간
+				    대화라 이 패널에서 가장 자주, 가장 먼저 읽는 정보다. BranchChain의 시그널 레일과 같은
+				    타임라인 지오메트리를 빌려 순서를 눈으로 따라갈 수 있게 하고, 각 항목을 흐르는 평문이
+				    아니라 자기 카드로 담아 종류(kind)별 색이 레일 노드+칩 두 군데서 동시에 신호한다. */}
 				{orch.conductor && (
 					<>
 						<div className={styles.logLabel}>대화 로그</div>
-						<div className={styles.feedList}>
-							{orch.feed.length === 0 && <div className={styles.logEmpty}>아직 대화 없음</div>}
-							{orch.feed.map((e, i) => (
-								<div key={i} className={styles.feedRow}>
-									<div className={`m ${styles.feedMeta}`}>
-										<span className={styles.feedFrom}>{e.from}</span>
-										<span className={styles.feedArrow}>→</span>
-										<span className={styles.feedTo}>{e.to}</span>
-										<span className={`${styles.feedKind} ${styles[`kind_${e.kind}`]}`}>{KIND_LABEL[e.kind] || '메시지'}</span>
-										<span className={styles.feedTime}>{timeAgo(e.ts)}</span>
+						{orch.feed.length === 0 ? (
+							<div className={styles.logEmpty}>아직 대화 없음</div>
+						) : (
+							<div className={styles.feedTimeline}>
+								<div className={styles.feedRail} />
+								{orch.feed.map((e, i) => (
+									<div key={i} className={styles.feedEntry}>
+										<span className={`${styles.feedNode} ${styles[`node_${e.kind}`]}`} />
+										<div className={styles.feedCard}>
+											<div className={`m ${styles.feedMeta}`}>
+												<span className={styles.feedFrom}>{e.from}</span>
+												<span className={styles.feedArrow}>→</span>
+												<span className={styles.feedTo}>{e.to}</span>
+												<span className={`${styles.feedKind} ${styles[`kind_${e.kind}`]}`}>{KIND_LABEL[e.kind] || '메시지'}</span>
+												<span className={styles.feedTime}>{timeAgo(e.ts)}</span>
+											</div>
+											<div className={styles.feedText}>{e.text}</div>
+										</div>
 									</div>
-									<div className={styles.feedText}>{e.text}</div>
-								</div>
-							))}
-						</div>
-					</>
-				)}
-
-				{decisions.length > 0 && (
-					<>
-						<div className={styles.logLabel} title="AI 판정 근거 — 서버 재시작해도 안 지워짐(feed와 다름)">
-							판정 로그
-						</div>
-						<div className={styles.feedList}>
-							{decisions.map((d) => (
-								<div key={d.id} className={styles.feedRow}>
-									<div className={`m ${styles.feedMeta}`}>
-										<span className={`${styles.feedKind} ${styles.kind_plan}`}>{DECISION_LABEL[d.kind] || d.kind}</span>
-										<span className={styles.feedTime}>{timeAgo(d.created_at)}</span>
-									</div>
-									<div className={styles.feedText}>{d.reason}</div>
-								</div>
-							))}
-						</div>
-					</>
-				)}
-
-				<div className={styles.logLabel}>활동 로그</div>
-				<div className={styles.log}>
-					{orch.log.length === 0 && <div className={styles.logEmpty}>아직 활동 없음</div>}
-					{orch.log
-						.slice()
-						.reverse()
-						.map((l, i) => (
-							<div key={i} className={styles.logRow}>
-								<StatusDot color={l.dot as DotColor} size={5} />
-								<span className={`m ${styles.logText}`}>{l.t}</span>
+								))}
 							</div>
-						))}
-				</div>
+						)}
+					</>
+				)}
+
+				{/* 판정 로그·활동 로그는 실제 오간 대화가 아니라 기계적 감사·이벤트 기록이라, 위 대화 로그와
+				    같은 무게로 그리면(전엔 똑같은 feedList) "뭐가 중요한 정보인지" 위계가 안 잡혔다. 두
+				    로그를 하나의 조용한 스트림으로 묶어 대화 로그보다 한 단 낮은 시각적 무게로 둔다. */}
+				{(decisions.length > 0 || orch.log.length > 0) && (
+					<>
+						<div className={styles.logLabel}>시스템 로그</div>
+						<div className={styles.log}>
+							{decisions.map((d) => (
+								<div key={`d-${d.id}`} className={styles.logRow}>
+									<StatusDot color="violet" size={5} />
+									<span className={`m ${styles.logText}`}>
+										<span className={styles.logKind} title="AI 판정 근거 — 서버 재시작해도 안 지워짐">
+											{DECISION_LABEL[d.kind] || d.kind}
+										</span>
+										{d.reason}
+									</span>
+									<span className={styles.logTime}>{timeAgo(d.created_at)}</span>
+								</div>
+							))}
+							{orch.log
+								.slice()
+								.reverse()
+								.map((l, i) => (
+									<div key={`a-${i}`} className={styles.logRow}>
+										<StatusDot color={l.dot as DotColor} size={5} />
+										<span className={`m ${styles.logText}`}>{l.t}</span>
+									</div>
+								))}
+						</div>
+					</>
+				)}
 			</div>
 		</div>
 	)

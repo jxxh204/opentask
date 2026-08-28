@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { useTabsStore } from '../../store/useTabsStore'
+import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import '@xterm/xterm/css/xterm.css'
 
 // 진짜 임베드 터미널 — xterm.js ↔ (백엔드) node-pty가 tmux 세션에 attach. WebSocket 양방향.
@@ -20,6 +23,17 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 		})
 		const fit = new FitAddon()
 		term.loadAddon(fit)
+		// "링크누르면 앱내 브라우저로 이동하게해줘" — 관제/지휘자 터미널 출력에 뜨는 노션 문서 링크 등을
+		// 시스템 브라우저로 새 창을 띄우는 대신, 지금 활성 노드의 "브라우저" 탭에서 그대로 연다.
+		term.loadAddon(
+			new WebLinksAddon((event, uri) => {
+				event.preventDefault()
+				const nodeId = useTabsStore.getState().activeNodeId
+				if (!nodeId) return
+				useTabsStore.getState().openOrFocusTab(nodeId, 'browser')
+				useBrowserNavStore.getState().request(nodeId, uri)
+			}),
+		)
 		term.open(hostRef.current)
 		try {
 			fit.fit()

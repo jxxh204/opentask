@@ -1,19 +1,10 @@
 // actuator.cjs — 지시(Control)의 쓰기/실행 담당. 감시(읽기)와 분리된 위험 영역.
-// 에이전트 tmux 세션에 프롬프트를 send-keys로 주입. 화이트리스트 + 드라이런 필수.
+// 에이전트 세션(term.cjs가 소유한 node-pty 프로세스)에 프롬프트를 입력. 화이트리스트 + 드라이런 필수.
 'use strict'
-const { execFile } = require('child_process')
 const C = require('./collector.cjs')
 const Term = require('./term.cjs')
 
-function exec(cmd, args, timeoutMs = 4000) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20 }, (err, stdout, stderr) =>
-      resolve({ ok: !err, out: String(stdout || ''), err: String(stderr || (err && err.message) || '') }),
-    )
-  })
-}
-
-// 허용 세션 = state.json에 등록된 에이전트(에픽워크플로우) + term.cjs가 실제로 띄운 orm-* tmux 세션(디버깅 dbg-에이전트 등).
+// 허용 세션 = state.json에 등록된 에이전트(에픽워크플로우) + term.cjs가 실제로 띄운 orm-* 세션(디버깅 dbg-에이전트 등).
 // 두 소스 다 이 앱이 만든 세션만 노출하므로 임의 세션/명령 차단이라는 목적은 그대로 유지된다.
 async function knownSessions() {
   const m = C.readModel()
@@ -23,34 +14,30 @@ async function knownSessions() {
   return known
 }
 
-// 프롬프트 디스패치: 세션의 활성 pane에 텍스트 입력 후 Enter.
+// 프롬프트 디스패치: 세션에 텍스트 입력 후 Enter.
 // dryRun=true면 실제 전송 없이 미리보기만 반환.
 async function dispatch({ session, message, dryRun = true }) {
   if (!session || !message) return { ok: false, error: 'session·message 필수' }
   const known = await knownSessions()
   if (!known.has(session)) return { ok: false, error: `허용되지 않은 세션: ${session} (state.json 미등록)` }
 
-  const has = await exec('tmux', ['has-session', '-t', session])
-  const alive = has.ok
+  const alive = await Term.exists(session)
 
   const preview = {
     session,
     agent: known.get(session)?.agent,
     alive,
     chars: message.length,
-    commands: [`tmux send-keys -t ${session} -l <message>`, `tmux send-keys -t ${session} Enter`],
+    commands: ['(세션에 문자 그대로 입력 후 Enter)'],
     messagePreview: message.slice(0, 400),
   }
   // 미리보기는 미기동이어도 허용 (무엇이 실행될지 보여주기)
   if (dryRun) return { ok: true, dryRun: true, alive, preview }
   // 실제 전송은 살아있어야 함
-  if (!alive) return { ok: false, error: `tmux 세션 미기동: ${session}`, alive: false, preview }
+  if (!alive) return { ok: false, error: `세션 미기동: ${session}`, alive: false, preview }
 
-  // -l: literal(키 해석 없이 텍스트 그대로), 이어서 Enter
-  const typed = await exec('tmux', ['send-keys', '-t', session, '-l', message])
-  if (!typed.ok) return { ok: false, error: 'send-keys 실패: ' + typed.err, preview }
-  const enter = await exec('tmux', ['send-keys', '-t', session, 'Enter'])
-  return { ok: enter.ok, sent: true, preview, error: enter.ok ? undefined : enter.err }
+  const r = await Term.send({ name: session, message, enter: true })
+  return r.ok ? { ok: true, sent: true, preview } : { ok: false, error: r.error, preview }
 }
 
 // 프롬프트 템플릿 (프론트 빠른 버튼용)

@@ -66,6 +66,7 @@ export default function SessionsPage() {
 	const hydrateSetup = useSetupStore((s) => s.hydrate)
 	const loadBoard = useSessionsStore((s) => s.loadBoard)
 	const loadRepos = useSessionsStore((s) => s.loadRepos)
+	const loadBlockedPeriods = useSessionsStore((s) => s.loadBlockedPeriods)
 
 	useEffect(() => {
 		hydrateSetup()
@@ -75,8 +76,9 @@ export default function SessionsPage() {
 		if (configured) {
 			loadBoard()
 			loadRepos()
+			loadBlockedPeriods()
 		}
-	}, [configured, loadBoard, loadRepos])
+	}, [configured, loadBoard, loadRepos, loadBlockedPeriods])
 
 	if (!configured) return <SessionsSetupGate />
 

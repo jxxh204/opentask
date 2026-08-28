@@ -1,9 +1,160 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSessionsStore } from '../../store/useSessionsStore'
-import type { Task } from '../../store/types'
-import { getRepoColor } from '../../utils/repoColor'
+import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
+import { useHolidayStore } from '../../store/useHolidayStore'
+import type { Task, BlockedPeriod } from '../../store/types'
+import { businessDayRange } from '../../utils/businessDays'
 import NewTaskModal from './NewTaskModal'
+import BlockPeriodModal from './BlockPeriodModal'
 import styles from './CalendarPane.module.css'
+
+// "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든... 서브태스크 일정은
+// 기존처럼 옮길수있어 각각 일정이 별도" — 캘린더가 실제로 그리는 최소 단위. 서브태스크가 예정일을
+// 가지면 그 서브태스크들이 태스크의 진짜 일정이 되고(태스크 자신은 더 안 그림), 없으면 태스크
+// 자신이 그대로 하나의 항목이 된다. "태스크하나를 색하나로... 각 단계를 같은색으로" — color는
+// 항상 부모 태스크의 색이라 서브태스크별로 다르지 않다.
+interface CalItem {
+	id: string
+	name: string
+	parentName: string
+	due_date: number | null
+	duration_days: number | null
+	completed_at: number | null
+	color: string | null
+	openId: string // 클릭 시 열 태스크 id(항상 부모 태스크)
+	subtaskId: string | null // 이 항목이 서브태스크면 그 id(드래그로 예정일 바꿀 때 어느 API를 부를지 구분)
+}
+function taskToCalItem(t: Task): CalItem {
+	return { id: t.id, name: t.name, parentName: t.name, due_date: t.due_date, duration_days: t.duration_days, completed_at: t.completed_at, color: t.color, openId: t.id, subtaskId: null }
+}
+function flattenCalendarItems(tasks: Task[]): CalItem[] {
+	const items: CalItem[] = []
+	for (const t of tasks) {
+		const scheduled = t.subtasks.filter((st) => !!st.due_date)
+		if (scheduled.length > 0) {
+			// "메인 태스크의 기간은 전체 일정의 기간산정으로... 캘린더에 표기는 안되야할것같아" — 태스크
+			// 자신의 마감일/기간은 이제 서브태스크 전체를 아우르는 자동 산정값(recomputeFromSubtasks)일
+			// 뿐이라, 캘린더엔 서브태스크만 그린다(태스크 자신은 절대 안 그림 — 중복·혼동 방지).
+			for (const st of scheduled) {
+				items.push({
+					id: st.id,
+					name: st.name,
+					parentName: t.name,
+					due_date: st.due_date,
+					duration_days: st.duration_days,
+					// "서브태스크 완료 버튼 필요" — 서브태스크 자신이 완료 처리됐거나, 부모 태스크 전체가
+					// 완료 처리됐으면(기존 동작 유지) 둘 다 done으로 그린다.
+					completed_at: st.completed_at || t.completed_at,
+					color: t.color,
+					openId: t.id,
+					subtaskId: st.id,
+				})
+			}
+		} else {
+			items.push(taskToCalItem(t))
+		}
+	}
+	return items
+}
+// 태스크 자신에게 예정일이 있거나, 서브태스크 중 하나라도 예정일이 있으면 "일정이 있다"고 본다 —
+// 안 그러면 서브태스크에만 날짜를 준 태스크가 "날짜 없음" 스트립에도 잘못 걸린다.
+function hasSchedule(t: Task) {
+	return !!t.due_date || t.subtasks.some((st) => !!st.due_date)
+}
+// "적용해서 5일로 확정됐으면 주/월 캘린더에서도 그만큼 길어져야해... 완전히 이어지게해줘... 중간에
+// 일감이 있을때도 자동으로 처리가 되어야해" — 각 날 칸이 독립적으로 자기 몫만 그리는 방식(칸마다
+// 목록 순서가 달라 안 이어져 보임)은 버리고, 진짜 겹치지 않는 레인(Gantt) 오버레이로 다시 만들었다.
+// 한 주(week) 단위로: 그 주와 겹치는 여러 날짜짜리 태스크들을 시작 열~끝 열로 계산하고, 겹치는
+// 것끼리는 다른 레인(줄)에 배정한다(고전적인 구간 스케줄링 그리디) — 그래서 같은 태스크는 항상 같은
+// 레인·같은 세로 위치에서 이어지고, 그 자리에 다른 일감이 있어도 자동으로 다음 레인으로 밀린다.
+// 하루짜리 태스크는 기존처럼 각 날 칸 안에 그대로 둔다(레인 배너는 여러 날짜짜리만).
+const LANE_H = 20 // px — 레인 막대 1개 높이(막대+간격)
+const CELL_HEAD_H = 24 // px — 월 칸(compact) 날짜 헤더 높이(한 줄, 레인 배너가 그 아래부터 시작하도록)
+// "겹친다" — 주 칸(wide)은 요일 라벨 + 날짜가 두 줄로 쌓이고(.cellWide .cellHead가 column) 위아래
+// 패딩도 더 커서, 월 칸과 같은 CELL_HEAD_H를 쓰면 레인 배너가 날짜 숫자 위에 겹쳐 그려졌다.
+const WEEK_CELL_HEAD_H = 60 // px — .cellWide 패딩(12) + 요일줄+간격+날짜줄(~38) + 헤드 margin-bottom(10)
+
+interface LaneEntry {
+	item: CalItem
+	startCol: number
+	endCol: number
+	lane: number
+	continuesLeft: boolean
+	continuesRight: boolean
+}
+// windowDays 안에서 여러 날짜짜리 항목(태스크 또는 서브태스크)들의 시작~끝 열과 레인을 계산 —
+// 그리디 구간 스케줄링: 시작 열 순으로 정렬 후, 지금까지 쓰인 레인 중 이 항목 시작 열 이전에 이미
+// 끝난 레인이 있으면 재사용하고, 없으면 새 레인을 연다.
+function computeLanes(windowDays: Date[], items: CalItem[]): { entries: LaneEntry[]; laneCount: number } {
+	const windowStart = windowDays[0].getTime()
+	const last = windowDays[windowDays.length - 1]
+	const windowEnd = new Date(last.getFullYear(), last.getMonth(), last.getDate()).getTime()
+	const raw: { item: CalItem; startCol: number; endCol: number; continuesLeft: boolean; continuesRight: boolean }[] = []
+	for (const it of items) {
+		if (!it.due_date || !it.duration_days || it.duration_days <= 1) continue
+		const range = businessDayRange(it.due_date, it.duration_days)
+		const rangeStartMs = range[0].getTime()
+		const rangeEndMs = range[range.length - 1].getTime()
+		if (rangeEndMs < windowStart || rangeStartMs > windowEnd) continue // 이 창과 안 겹침
+		const startCol = Math.max(0, Math.round((rangeStartMs - windowStart) / 86400000))
+		const endCol = Math.min(windowDays.length - 1, Math.round((rangeEndMs - windowStart) / 86400000))
+		raw.push({ item: it, startCol, endCol, continuesLeft: rangeStartMs < windowStart, continuesRight: rangeEndMs > windowEnd })
+	}
+	raw.sort((a, b) => a.startCol - b.startCol || b.endCol - a.endCol)
+	const laneEndCols: number[] = []
+	const entries: LaneEntry[] = []
+	for (const r of raw) {
+		let lane = laneEndCols.findIndex((end) => end < r.startCol)
+		if (lane === -1) {
+			lane = laneEndCols.length
+			laneEndCols.push(r.endCol)
+		} else {
+			laneEndCols[lane] = r.endCol
+		}
+		entries.push({ ...r, lane })
+	}
+	return { entries, laneCount: laneEndCols.length }
+}
+
+// "막기가 가려야해" — 차단 기간 이름표가 일반 문서 흐름(cellHead 아래)에 있고 여러 날짜 태스크
+// 레인 배너는 그 위에 절대위치로 겹쳐 그려져서, 같은 자리를 두고 서로 가려버렸다. 차단 기간도
+// computeLanes와 똑같은 레인 배정 로직을 타게 해서(§ 아래) 절대 겹치지 않는 자기 레인을 갖게
+// 한다 — 항상 태스크 레인보다 앞(위쪽 레인)에 배정해 차단 기간이 항상 먼저 보인다.
+interface BlockedLaneEntry {
+	period: BlockedPeriod
+	startCol: number
+	endCol: number
+	lane: number
+	continuesLeft: boolean
+	continuesRight: boolean
+}
+function computeBlockedLanes(windowDays: Date[], periods: BlockedPeriod[]): { entries: BlockedLaneEntry[]; laneCount: number } {
+	const windowStart = windowDays[0].getTime()
+	const last = windowDays[windowDays.length - 1]
+	const windowEnd = new Date(last.getFullYear(), last.getMonth(), last.getDate()).getTime()
+	const raw = periods
+		.filter((p) => p.end_date >= windowStart && p.start_date <= windowEnd)
+		.map((p) => ({
+			period: p,
+			startCol: Math.max(0, Math.round((p.start_date - windowStart) / 86400000)),
+			endCol: Math.min(windowDays.length - 1, Math.round((p.end_date - windowStart) / 86400000)),
+			continuesLeft: p.start_date < windowStart,
+			continuesRight: p.end_date > windowEnd,
+		}))
+	raw.sort((a, b) => a.startCol - b.startCol || b.endCol - a.endCol)
+	const laneEndCols: number[] = []
+	const entries: BlockedLaneEntry[] = []
+	for (const r of raw) {
+		let lane = laneEndCols.findIndex((end) => end < r.startCol)
+		if (lane === -1) {
+			lane = laneEndCols.length
+			laneEndCols.push(r.endCol)
+		} else {
+			laneEndCols[lane] = r.endCol
+		}
+		entries.push({ ...r, lane })
+	}
+	return { entries, laneCount: laneEndCols.length }
+}
 
 // "주단위 월단위 캘린더도 있으면 좋겠어. 캘린더에 일감이 관리되어야해" 요청으로 신설. 예정일(due_date)은
 // v10 마이그레이션으로 tasks에 추가됨 — 시:분 없이 "그 날"만 의미가 있어 로컬 자정 epoch ms로 저장한다.
@@ -56,11 +207,21 @@ type Mode = 'week' | 'month'
 export default function CalendarPane() {
 	const inbox = useSessionsStore((s) => s.inbox)
 	const folders = useSessionsStore((s) => s.folders)
-	const repos = useSessionsStore((s) => s.repos)
 	const dragTaskId = useSessionsStore((s) => s.dragTaskId)
 	const setDragTask = useSessionsStore((s) => s.setDragTask)
 	const updateTaskDueDate = useSessionsStore((s) => s.updateTaskDueDate)
-	const openTaskDetail = useSessionsStore((s) => s.openTaskDetail)
+	const updateSubtaskDueDate = useSessionsStore((s) => s.updateSubtaskDueDate)
+	const openSubtaskDetail = useSessionsStore((s) => s.openSubtaskDetail)
+	// "좋아. 이것 그대로 두고 이게 캘린더에도 적용되게 해줘" — 사이드바(SessionShell)의 레포 체크박스
+	// 필터를 그대로 공유한다(§ useSessionsStore.repoFilters) — 캘린더 자체 필터 UI는 만들지 않는다.
+	const repoFilters = useSessionsStore((s) => s.repoFilters)
+	// "일정 막기 기능이 필요해. 중간에 QA기간같은게 있어서 다른걸 못할 수 있거든"
+	const blockedPeriods = useSessionsStore((s) => s.blockedPeriods)
+	const removeBlockedPeriod = useSessionsStore((s) => s.removeBlockedPeriod)
+	// "캘린더에 대한민국 공휴일도 적용해줘" — 나라 선택은 설정 모달로 옮겼다(§SettingsModal "캘린더
+	// 공휴일 국가" — 전역 환경설정이라 캘린더 툴바 안 붐비게 하는 것보다 설정이 맞는 자리).
+	const holidayByDate = useHolidayStore((s) => s.byDate)
+	const ensureHolidayYears = useHolidayStore((s) => s.ensureYears)
 
 	const [mode, setMode] = useState<Mode>('week')
 	const [cursor, setCursor] = useState(() => new Date())
@@ -68,25 +229,40 @@ export default function CalendarPane() {
 	const [unscheduledOpen, setUnscheduledOpen] = useState(false)
 	const [query, setQuery] = useState('')
 	const [newTaskDate, setNewTaskDate] = useState<number | null>(null)
+	const [blockModalOpen, setBlockModalOpen] = useState(false)
+	const [blockDefaultDate, setBlockDefaultDate] = useState<number | null>(null)
+	// "서브태스크 일정은 기존처럼 옮길수있어 각각 일정이 별도" — 태스크 드래그(dragTaskId, 전역 스토어)와
+	// 별개로, 서브태스크 드래그는 이 컴포넌트 로컬 상태로만 추적한다(사이드바 등 다른 곳은 서브태스크를
+	// 안 다루니 전역일 필요가 없다).
+	const [dragSubtaskId, setDragSubtaskId] = useState<string | null>(null)
 
-	const allTasks = useMemo(() => [...inbox, ...folders.flatMap((f) => f.tasks)], [inbox, folders])
+	const allTasks = useMemo(() => {
+		const all = [...inbox, ...folders.flatMap((f) => f.tasks)]
+		return repoFilters ? all.filter((t) => !!t.repo_id && repoFilters.has(t.repo_id)) : all
+	}, [inbox, folders, repoFilters])
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase()
 		return q ? allTasks.filter((t) => t.name.toLowerCase().includes(q)) : allTasks
 	}, [allTasks, query])
+	// "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든" — 서브태스크에 예정일이
+	// 있으면 그게 실제 캘린더 항목이 되고, 없으면 태스크 자신이 항목이 된다(§ flattenCalendarItems).
+	const calendarItems = useMemo(() => flattenCalendarItems(filtered), [filtered])
 
+	// 여러 날짜짜리(duration_days > 1) 항목은 이제 이 목록에 안 들어간다 — 레인 배너(computeLanes/
+	// renderLaneBar)가 따로 그린다. 여기는 하루짜리만.
 	const byDay = useMemo(() => {
-		const map = new Map<string, Task[]>()
-		for (const t of filtered) {
-			if (!t.due_date) continue
-			const key = dateKey(new Date(t.due_date))
+		const map = new Map<string, CalItem[]>()
+		for (const it of calendarItems) {
+			if (!it.due_date) continue
+			if (it.duration_days && it.duration_days > 1) continue
+			const key = dateKey(new Date(it.due_date))
 			const arr = map.get(key)
-			if (arr) arr.push(t)
-			else map.set(key, [t])
+			if (arr) arr.push(it)
+			else map.set(key, [it])
 		}
 		return map
-	}, [filtered])
-	const unscheduled = useMemo(() => filtered.filter((t) => !t.due_date), [filtered])
+	}, [calendarItems])
+	const unscheduled = useMemo(() => filtered.filter((t) => !hasSchedule(t)), [filtered])
 
 	function go(dir: 1 | -1) {
 		setCursor((c) => (mode === 'week' ? addDays(c, dir * 7) : new Date(c.getFullYear(), c.getMonth() + dir, 1)))
@@ -113,8 +289,13 @@ export default function CalendarPane() {
 	// 모달을 먼저 열고, 실제 작업 공간으로 가는 건 그 모달 안 "작업 열기" 버튼이 맡는다.
 	// TaskDetailModal의 열림 상태는 스토어로 옮겨졌다(§ "사이드바에서 진행상황 보여주고 클릭하면
 	// 상세로" — 사이드바의 AI 검토 진행 목록도 같은 드로어를 열어야 해서 여기 로컬 state로는 부족).
-	function openTask(taskId: string) {
-		openTaskDetail(taskId)
+	// "월/주캘린더에서도 서브태스크를 누르면 서브태스크 상세로 갔으면좋겠어" — item이 서브태스크에서
+	// 나온 칩/막대(item.subtaskId)면 서브태스크 전용 드로어를 연다. 아니면 태스크 상세인데, "메인
+	// 태스크는 이제 사이드바에서 상세페이지를 띄우지말고 탭으로" — 폴더로 승격된 태스크면 모달 대신
+	// 그 폴더의 탭으로 이동한다(openTaskOrFolderDetail).
+	function openTask(item: CalItem) {
+		if (item.subtaskId) openSubtaskDetail(item.subtaskId, item.openId)
+		else openTaskOrFolderDetail(item.openId)
 	}
 	function periodLabel() {
 		if (mode === 'month') return `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
@@ -123,52 +304,147 @@ export default function CalendarPane() {
 		return s.getMonth() === e.getMonth() ? `${s.getFullYear()}년 ${s.getMonth() + 1}월 ${s.getDate()}–${e.getDate()}일` : `${s.getMonth() + 1}월 ${s.getDate()}일 – ${e.getMonth() + 1}월 ${e.getDate()}일`
 	}
 
-	// "캘린더도 배경색이 옅게 컬러가 적용됐으면" — 레포 식별 컬러(레포 관리/사이드바 점과 같은 팔레트,
-	// utils/repoColor.ts)를 그대로 재사용해 칩 배경을 그 레포색의 아주 옅은 틴트로만 준다. 왼쪽 컬러
-	// 바는 뺐다 — 카드에 컬러 테두리를 다는 건 이 디자인 시스템에서 진행 상태 표시 자리라 정체성
-	// 신호와 겹치면 안 되고("색 있는 border-left/right" 금지), 배경 틴트만으로도 충분히 구분된다.
-	function renderChip(t: Task) {
-		const repo = t.repo_id ? repos.find((r) => r.id === t.repo_id) : null
-		const color = repo ? getRepoColor(repo) : null
+	// "태스크하나를 색하나로 보여주는거야" — 배경은 그 항목이 속한 태스크의 커스텀 색(item.color,
+	// 없으면 기본 배경 그대로). "레포의 색상은... 텍스트색상이든 뭔가 다른걸로 표시해야할것같아" —
+	// 배경 자리를 태스크 색에 내주는 대신 레포 식별은 텍스트 색으로 옮겼다. 왼쪽 컬러 바는 안 쓴다 —
+	// 이 디자인 시스템에서 컬러 테두리는 진행 상태 표시 자리라 정체성 신호와 겹치면 안 된다.
+	function itemDrag(item: CalItem) {
+		return {
+			draggable: true,
+			onDragStart: (e: React.DragEvent) => {
+				e.dataTransfer.effectAllowed = 'move'
+				e.dataTransfer.setData('text/plain', item.id)
+				if (item.subtaskId) setDragSubtaskId(item.subtaskId)
+				else setDragTask(item.id)
+			},
+			onDragEnd: () => {
+				setDragTask(null)
+				setDragSubtaskId(null)
+			},
+		}
+	}
+	function renderChip(item: CalItem) {
+		// "캘린더 레포 색상을 텍스트에 적용하는건 제거해줘" — 레포 식별은 이제 캘린더에서 안 보여준다.
 		// "완료해도... 캘린더에는 남아있어야함" — 태스크 트리에서는 걸러내는(SessionShell.tsx) completed_at을
 		// 캘린더는 무시하고 그대로 그린다. 완료됐다는 건 체크마크+취소선으로만 구분.
-		const done = !!t.completed_at
+		const done = !!item.completed_at
 		return (
 			<div
-				key={t.id}
+				key={item.id}
 				className={`${styles.chip} ${done ? styles.chipDone : ''}`}
-				style={color && !done ? { background: `color-mix(in srgb, ${color} 8%, var(--card2))` } : undefined}
-				draggable
-				onDragStart={(e) => {
-					e.dataTransfer.effectAllowed = 'move'
-					e.dataTransfer.setData('text/plain', t.id)
-					setDragTask(t.id)
+				style={{
+					background: item.color && !done ? `color-mix(in srgb, ${item.color} 14%, var(--card2))` : undefined,
 				}}
-				onDragEnd={() => setDragTask(null)}
+				{...itemDrag(item)}
 				onClick={(e) => {
 					e.stopPropagation()
-					openTask(t.id)
+					openTask(item)
 				}}
-				title={t.duration_days && t.duration_days > 1 ? `${t.name} (영업일 ${t.duration_days}일)` : t.name}
+				title={item.subtaskId ? `${item.parentName} — ${item.name}` : item.name}
 			>
 				{done && <span className={styles.chipCheck}>✓</span>}
-				{t.name}
-				{/* 기간이 있는 태스크는 며칠짜리인지만 짧게 — 시작일 칸에 걸쳐 실제로 여러 날에 이어 그리는
-				    멀티데이 바 렌더링은 이번 스코프 밖(칸 폭 재계산이 필요한 별도 작업), 배지로만 표시. */}
-				{!!t.duration_days && t.duration_days > 1 && <span className={styles.chipDuration}>{t.duration_days}일</span>}
+				{item.name}
 			</div>
 		)
 	}
 
-	function renderDayCell(d: Date, compact: boolean) {
+	// 한 주(windowDays) 안에서 겹치지 않게 레인 배정된 여러 날짜짜리 항목 막대 하나를 그린다.
+	// continuesLeft/Right는 이 창 밖에서 이어진다는 뜻 — 잘린 게 아니라 "이 창 경계 밖으로도 계속됨"을
+	// ‹ › 화살표로 알려준다(진짜 잘림과 구분). laneOffset — 차단 기간 레인이 항상 위쪽을 차지하므로
+	// (§ computeBlockedLanes) 태스크 레인은 그 개수만큼 아래로 밀려서 그려진다.
+	function renderLaneBar(e: LaneEntry, cols: number, laneOffset = 0) {
+		const item = e.item
+		const done = !!item.completed_at
+		return (
+			<div
+				key={item.id}
+				className={`${styles.laneBar} ${done ? styles.chipDone : ''}`}
+				style={{
+					left: `${(e.startCol / cols) * 100}%`,
+					width: `${((e.endCol - e.startCol + 1) / cols) * 100}%`,
+					top: (e.lane + laneOffset) * LANE_H,
+					background: item.color && !done ? `color-mix(in srgb, ${item.color} 16%, var(--card2))` : undefined,
+				}}
+				{...itemDrag(item)}
+				onClick={(ev) => {
+					ev.stopPropagation()
+					openTask(item)
+				}}
+				title={`${item.subtaskId ? `${item.parentName} — ${item.name}` : item.name} (영업일 ${item.duration_days}일)`}
+			>
+				{done && <span className={styles.chipCheck}>✓</span>}
+				{e.continuesLeft ? '‹ ' : ''}
+				{item.name}
+				<span className={styles.chipDuration}>{item.duration_days}일</span>
+				{e.continuesRight ? ' ›' : ''}
+			</div>
+		)
+	}
+
+	// "막기가 가려야해" — 차단 기간 막대. 항상 레인 0부터 채워(위쪽 우선) 태스크 막대에 가려지지 않는다.
+	function renderBlockedBar(e: BlockedLaneEntry, cols: number) {
+		const p = e.period
+		return (
+			<div
+				key={p.id}
+				className={styles.blockedBar}
+				style={{ left: `${(e.startCol / cols) * 100}%`, width: `${((e.endCol - e.startCol + 1) / cols) * 100}%`, top: e.lane * LANE_H }}
+				title={p.name}
+			>
+				<span className={styles.blockedBarText}>
+					🚫 {e.continuesLeft ? '‹ ' : ''}
+					{p.name}
+					{e.continuesRight ? ' ›' : ''}
+				</span>
+				<span
+					className={styles.blockedBarClose}
+					onClick={(ev) => {
+						ev.stopPropagation()
+						removeBlockedPeriod(p.id)
+					}}
+					title="삭제"
+				>
+					×
+				</span>
+			</div>
+		)
+	}
+
+	// "일정 막기... QA기간같은게 있어서" — 이 날짜가 속한 차단 기간(있으면, 배경 줄무늬용).
+	// start_date <= d <= end_date 둘 다 로컬 자정 epoch ms라 날짜 단위로만 비교하면 된다.
+	function blockedPeriodFor(d: Date) {
+		const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+		return blockedPeriods.find((p) => t >= p.start_date && t <= p.end_date)
+	}
+
+	// reserveTop — 이 칸이 속한 주(week)에 레인 배너가 몇 줄 떠 있는지에 맞춰 태스크 목록 시작 위치를
+	// 아래로 밀어준다(레인 배너는 칸들 위에 절대위치로 겹쳐 그려지므로, 안 밀면 하루짜리 칩과 겹친다).
+	function renderDayCell(d: Date, compact: boolean, reserveTop = 0) {
 		const key = dateKey(d)
 		const today = isSameDay(d, new Date())
 		const tasks = byDay.get(key) ?? []
+		// "막기가 가려야해" — 이름표+삭제 버튼은 이제 레인 배너 쪽 renderBlockedBar가 그린다(§ 위).
+		// 여기서는 그 날이 차단 중인지만 알아 배경 줄무늬(ambient 신호)만 준다.
+		const blocked = blockedPeriodFor(d)
+
+		// "주말 표기 필요" — 요일 라벨/날짜 숫자 색으로만 구분(토=blue, 일=red), 배경은 안 건드려
+		// cellToday/cellBlocked 배경 레이어와 안 겹치게 한다(§ CalendarPane.module.css .cellSat/.cellSun).
+		const dow = d.getDay()
+		// "캘린더에 대한민국 공휴일도 적용해줘" — 평일에 낀 공휴일도 잡아야 해서 요일이 아니라 날짜로 조회.
+		const holiday = holidayByDate[key]
 
 		return (
 			<div
 				key={key}
-				className={[styles.cell, compact ? styles.cellCompact : styles.cellWide, today ? styles.cellToday : '', hoverKey === key ? styles.cellOver : ''].join(' ')}
+				className={[
+					styles.cell,
+					compact ? styles.cellCompact : styles.cellWide,
+					today ? styles.cellToday : '',
+					hoverKey === key ? styles.cellOver : '',
+					blocked ? styles.cellBlocked : '',
+					dow === 0 ? styles.cellSun : dow === 6 ? styles.cellSat : '',
+					holiday ? styles.cellHoliday : '',
+				].join(' ')}
 				onDragOver={(e) => {
 					e.preventDefault()
 					if (hoverKey !== key) setHoverKey(key)
@@ -177,7 +453,14 @@ export default function CalendarPane() {
 				onDrop={(e) => {
 					e.preventDefault()
 					setHoverKey(null)
-					if (dragTaskId) updateTaskDueDate(dragTaskId, keyToLocalMidnight(key))
+					// "서브태스크 일정은 기존처럼 옮길수있어 각각 일정이 별도" — 서브태스크를 끌고 있었으면
+					// 그 서브태스크만 옮기고, 아니면 기존처럼 태스크 자체를 옮긴다.
+					if (dragSubtaskId) {
+						updateSubtaskDueDate(dragSubtaskId, keyToLocalMidnight(key))
+						setDragSubtaskId(null)
+					} else if (dragTaskId) {
+						updateTaskDueDate(dragTaskId, keyToLocalMidnight(key))
+					}
 				}}
 				// 월 칸은 좁아서 "+" 아이콘만 정확히 누르기 번거롭다 — 칸 배경 아무 데나 눌러도 그 날짜로
 				// 일감 추가가 열리게(칩·버튼 클릭은 각자 stopPropagation이라 여기까지 안 올라옴).
@@ -186,14 +469,17 @@ export default function CalendarPane() {
 				<div className={styles.cellHead}>
 					{!compact && <span className={styles.cellDow}>{DOW_LABEL[d.getDay()]}</span>}
 					<span className={`${styles.cellDate} ${today ? styles.cellDateToday : ''}`}>{d.getDate()}</span>
+					{holiday && <span className={styles.holidayLabel}>{holiday}</span>}
 				</div>
-
 				{/* 월(month) 칸은 좁아서 주(week)와 다르게 처리한다 — "더보기" 대신 전부 보여주고 넘치면
 				    이 목록만 내부 스크롤, "+"는 아이콘만 마우스 올렸을 때만(태스크 있으면 바로 밑,
 				    없으면 칸 중앙). 주 칸은 이전 그대로(늘 보이는 "+ 작업 추가" 텍스트 버튼, 아래). */}
 				{compact ? (
-					<div className={`${styles.cellTasks} ${styles.cellTasksScroll} ${tasks.length === 0 ? styles.cellTasksEmpty : ''}`}>
-						{tasks.map(renderChip)}
+					<div
+						className={`${styles.cellTasks} ${styles.cellTasksScroll} ${tasks.length === 0 ? styles.cellTasksEmpty : ''}`}
+						style={reserveTop ? { marginTop: reserveTop } : undefined}
+					>
+						{tasks.map((task) => renderChip(task))}
 						{/* "태스크가 있으면 주캘린더와 동일한 작업 추가 ui를 노출" — 태스크가 이미 있는 칸은
 						    좁은 아이콘 대신 주 캘린더와 같은 "+ 작업 추가" 텍스트 버튼으로. 빈 칸은 그대로
 						    중앙 아이콘("없으면 중앙에. + 버튼" 기존 결정 유지). 둘 다 월 칸 전용이라 마우스
@@ -210,7 +496,9 @@ export default function CalendarPane() {
 					</div>
 				) : (
 					<>
-						<div className={styles.cellTasks}>{tasks.map(renderChip)}</div>
+						<div className={styles.cellTasks} style={reserveTop ? { marginTop: reserveTop } : undefined}>
+							{tasks.map((task) => renderChip(task))}
+						</div>
 						<button type="button" className={styles.addRow} onClick={() => setNewTaskDate(keyToLocalMidnight(key))}>
 							+ 작업 추가
 						</button>
@@ -240,6 +528,16 @@ export default function CalendarPane() {
 	useEffect(() => {
 		if (mode === 'month') monthBodyRef.current?.scrollTo({ top: 0 })
 	}, [cursor, mode])
+
+	// 지금 화면에 걸쳐 있는 연도(들)의 공휴일만 받아온다 — 월 뷰는 몇 달이 이어붙어 연말/연초에
+	// 두 해에 걸칠 수 있다. 이미 받은 연도는 ensureHolidayYears 내부에서 알아서 건너뛴다.
+	useEffect(() => {
+		const days = weekDays ?? monthWeeks?.flat() ?? []
+		const years = Array.from(new Set(days.map((d) => d.getFullYear())))
+		if (years.length) ensureHolidayYears(years)
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- weekDays/monthWeeks are recomputed every
+		// render (not memoized); depend on the primitives that actually determine their contents instead.
+	}, [cursor, mode, ensureHolidayYears])
 
 	return (
 		<div className={styles.wrap}>
@@ -281,6 +579,17 @@ export default function CalendarPane() {
 				<button type="button" className={`${styles.unscheduledBtn} ${unscheduledOpen ? styles.unscheduledBtnOpen : ''}`} onClick={() => setUnscheduledOpen((o) => !o)}>
 					날짜 없음 ({unscheduled.length})
 				</button>
+				{/* "일정 막기 기능이 필요해. 중간에 QA기간같은게 있어서 다른걸 못할 수 있거든" */}
+				<button
+					type="button"
+					className={styles.unscheduledBtn}
+					onClick={() => {
+						setBlockDefaultDate(null)
+						setBlockModalOpen(true)
+					}}
+				>
+					+ 일정 막기
+				</button>
 				<div className={styles.modeTabs}>
 					{(['week', 'month'] as const).map((m) => (
 						<button key={m} type="button" className={`${styles.modeTab} ${mode === m ? styles.modeTabActive : ''}`} onClick={() => setMode(m)}>
@@ -293,11 +602,40 @@ export default function CalendarPane() {
 			{unscheduledOpen && (
 				<div className={styles.unscheduledStrip}>
 					{unscheduled.length === 0 && <span className={styles.unscheduledEmpty}>예정일 없는 일감이 없습니다.</span>}
-					{unscheduled.map(renderChip)}
+					{unscheduled.map((t) => renderChip(taskToCalItem(t)))}
 				</div>
 			)}
 
-			{mode === 'week' && <div className={styles.weekGrid}>{weekDays!.map((d) => renderDayCell(d, false))}</div>}
+			{mode === 'week' &&
+				(() => {
+					// "주캘린더 이거 눈에 안띄니까 그냥 주캘린더에 합쳐주고 이부분 제거해줘" — 아래 별도
+					// 구역으로 내렸던 걸 되돌려, 월 뷰와 같은 방식(요일 칸 위에 겹쳐 띄우는 레인 배너)으로
+					// 합친다. reserveTop으로 요일 칸의 태스크 목록을 그만큼 밀어 겹치지 않게 한다.
+					// "막기가 가려야해" — 차단 기간 레인을 항상 앞(위쪽)에 두고, 태스크 레인은 그만큼
+					// laneOffset으로 밀어서 그린다 — 같은 레인 배정 로직이라 절대 겹치지 않는다.
+					const blocked = computeBlockedLanes(weekDays!, blockedPeriods)
+					const tasks = computeLanes(weekDays!, calendarItems)
+					const laneCount = blocked.laneCount + tasks.laneCount
+					return (
+						<div className={styles.weekGrid}>
+							{weekDays!.map((d) => renderDayCell(d, false, laneCount * LANE_H))}
+							{laneCount > 0 && (
+								<div
+									className={styles.monthLanesBanner}
+									style={{ top: WEEK_CELL_HEAD_H, height: laneCount * LANE_H }}
+									onClick={(e) => {
+										if (e.target !== e.currentTarget) return
+										setBlockDefaultDate(weekDays![0].getTime())
+										setBlockModalOpen(true)
+									}}
+								>
+									{blocked.entries.map((e) => renderBlockedBar(e, weekDays!.length))}
+									{tasks.entries.map((e) => renderLaneBar(e, weekDays!.length, blocked.laneCount))}
+								</div>
+							)}
+						</div>
+					)
+				})()}
 
 			{mode === 'month' && (
 				<div className={styles.monthGrid}>
@@ -309,17 +647,39 @@ export default function CalendarPane() {
 						))}
 					</div>
 					<div className={styles.monthBody} ref={monthBodyRef}>
-						{monthRows!.map(({ key, week, label }) => (
-							<div key={key}>
-								{label && <div className={styles.monthDivider}>{label}</div>}
-								<div className={styles.monthWeekRow}>{week.map((d) => renderDayCell(d, true))}</div>
-							</div>
-						))}
+						{monthRows!.map(({ key, week, label }) => {
+							const blocked = computeBlockedLanes(week, blockedPeriods)
+							const tasks = computeLanes(week, calendarItems)
+							const laneCount = blocked.laneCount + tasks.laneCount
+							return (
+								<div key={key}>
+									{label && <div className={styles.monthDivider}>{label}</div>}
+									<div className={styles.monthWeekRow}>
+										{week.map((d) => renderDayCell(d, true, laneCount * LANE_H))}
+										{laneCount > 0 && (
+											<div
+												className={styles.monthLanesBanner}
+												style={{ top: CELL_HEAD_H, height: laneCount * LANE_H }}
+												onClick={(e) => {
+													if (e.target !== e.currentTarget) return
+													setBlockDefaultDate(week[0].getTime())
+													setBlockModalOpen(true)
+												}}
+											>
+												{blocked.entries.map((e) => renderBlockedBar(e, week.length))}
+												{tasks.entries.map((e) => renderLaneBar(e, week.length, blocked.laneCount))}
+											</div>
+										)}
+									</div>
+								</div>
+							)
+						})}
 					</div>
 				</div>
 			)}
 
 			<NewTaskModal open={newTaskDate !== null} onClose={() => setNewTaskDate(null)} defaultDueDate={newTaskDate} />
+			<BlockPeriodModal open={blockModalOpen} onClose={() => setBlockModalOpen(false)} defaultStartDate={blockDefaultDate} />
 		</div>
 	)
 }

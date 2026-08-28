@@ -55,7 +55,24 @@ function update(id, patch) {
 	const base = 'base' in patch ? patch.base || null : cur.base
 	const description = patch.description ?? cur.description
 	const color = 'color' in patch ? patch.color || null : cur.color
-	db.prepare('UPDATE repos SET name = ?, path = ?, base = ?, description = ?, color = ? WHERE id = ?').run(name, repoPath, base, description, color, id)
+	// "팀 규칙" — 레포당 자유 텍스트 4칸(§ db.cjs v22). 빈 문자열도 null로 접어 "규칙 없음" 상태를
+	// 하나로 통일한다(빈 문자열 vs null을 따로 구분할 이유가 없다).
+	const ruleGeneral = 'ruleGeneral' in patch ? patch.ruleGeneral?.trim() || null : cur.rule_general
+	const ruleTaskWriting = 'ruleTaskWriting' in patch ? patch.ruleTaskWriting?.trim() || null : cur.rule_task_writing
+	const ruleBranch = 'ruleBranch' in patch ? patch.ruleBranch?.trim() || null : cur.rule_branch
+	const rulePredev = 'rulePredev' in patch ? patch.rulePredev?.trim() || null : cur.rule_predev
+	db.prepare('UPDATE repos SET name = ?, path = ?, base = ?, description = ?, color = ?, rule_general = ?, rule_task_writing = ?, rule_branch = ?, rule_predev = ? WHERE id = ?').run(
+		name,
+		repoPath,
+		base,
+		description,
+		color,
+		ruleGeneral,
+		ruleTaskWriting,
+		ruleBranch,
+		rulePredev,
+		id,
+	)
 	return get(id)
 }
 

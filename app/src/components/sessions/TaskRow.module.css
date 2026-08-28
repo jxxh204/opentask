@@ -267,3 +267,66 @@
 	color: var(--t3);
 	margin: 0 0 5px;
 }
+
+/* "UI를 조금더 작게... 서브태스크가 좀더 눈에 안띄었으면좋겠어. 메인태스크만큼 눈에 띄고있어" —
+   BranchChain(실제 git 브랜치 체인, 다른 화면에서도 씀)과 같은 레일+노드 언어를 빌리되, 크기·명도를
+   낮춘 전용 변형. BranchChain.module.css를 직접 손대면 진짜 브랜치 체인까지 작아지므로 여기 따로 둔다. */
+.subChainWrap {
+	position: relative;
+	padding-left: 18px;
+}
+.subChainRail {
+	position: absolute;
+	left: 4px;
+	top: 8px;
+	bottom: 16px;
+	width: 1.5px;
+	background: var(--line2);
+}
+.subChainNode {
+	position: relative;
+	margin-bottom: 4px;
+}
+.subChainDot {
+	position: absolute;
+	left: -18px;
+	top: 8px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--card);
+	border: 1.5px solid var(--t3);
+}
+/* "진행중 표기도 안돼" — 서브태스크 세션 생사(§ TaskDetailContent의 subtaskWorkBadge와 같은 신호,
+   여기선 칩이 아니라 이 점 하나로 표현). 진행 중=초록, 세션 종료(=advance 없이 그냥 죽음)=앰버. */
+.subChainDotAlive {
+	border-color: var(--green);
+	background: var(--gtint);
+}
+.subChainDotDone {
+	border-color: var(--amber);
+	background: var(--atint);
+}
+.subChainCard {
+	padding: 5px 9px;
+	border-radius: var(--radius-chip);
+	cursor: grab;
+}
+.subChainCard:hover {
+	background: var(--card-hover);
+}
+/* rowDropTarget과 같은 언어(드래그로 서브태스크 순서를 다시 끼워 넣는 자리) — 서브태스크 전용
+   크기·명도로 낮춘 subChain* 변형에 맞춰 같은 클래스를 재사용하지 않고 여기 따로 둔다. */
+.subChainCardDropTarget {
+	background: var(--vtint);
+	box-shadow: inset 0 0 0 1.5px var(--violet);
+}
+.subChainName {
+	font-size: 10.5px;
+	font-weight: 500;
+	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+

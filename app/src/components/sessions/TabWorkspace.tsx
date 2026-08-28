@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore'
-import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, MODEL_POLICY_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, wtPathFromNodeId } from '../../store/useTabsStore'
+import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, MODEL_POLICY_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, TEAM_RULES_NODE_ID, wtPathFromNodeId } from '../../store/useTabsStore'
 import type { TabKind } from '../../store/useTabsStore'
 import type { Task } from '../../store/types'
 import { createTerm } from '../../api/term'
+import { getSubtaskWorkState } from '../../api/sessions'
 import XTerm from '../terminal/XTerm'
 import ServerPane from './ServerPane'
 import BrowserPane from './BrowserPane'
 import SubagentStrip from './SubagentStrip'
 import OrchestratorPane from './OrchestratorPane'
+import TaskManagerBoard from './TaskManagerBoard'
+import TaskDetailTab from './TaskDetailTab'
 import CronJobsPane from './CronJobsPane'
 import ModelPolicyPane from './ModelPolicyPane'
+import TeamRulesPane from './TeamRulesPane'
+import { TAB_ICON } from './tabIcons'
 import CalendarPane from './CalendarPane'
 import ControlPane from './ControlPane'
 import styles from './TabWorkspace.module.css'
@@ -20,7 +25,10 @@ import styles from './TabWorkspace.module.css'
 // 터미널/로컬 서버/브라우저/클로드 세션의 백엔드는 노드에 따라 다른 세션을 가리킨다 — 태스크 노드는
 // 그 서브태스크의 오케스트레이션 세션, 폴더 노드는 그 폴더의 지휘자(conductor) 세션.
 const ADDABLE_TASK_TABS: TabKind[] = ['terminal', 'server', 'browser', 'claude']
-const ADDABLE_FOLDER_TABS: TabKind[] = ['orchestrator', 'terminal', 'server', 'browser', 'claude']
+// "팀 규칙 탭이 어딧어? 추가도 안되고" — 설정 모달에만 진입점을 두니(모델 배정과 같은 패턴) 못 찾는다.
+// 팀 규칙은 레포 단위지만 사람은 "이 폴더 작업하다가 그 레포 규칙을 보고 싶다"는 맥락에서 찾으니,
+// 여기 폴더 전용 "+" 메뉴에도 넣는다 — 열면 그 폴더의 레포로 미리 스코프된다(§ TeamRulesPane initialRepoId).
+const ADDABLE_FOLDER_TABS: TabKind[] = ['detail', 'orchestrator', 'diagram', 'terminal', 'server', 'browser', 'claude', 'teamRules']
 
 // VSCode의 "새 터미널"처럼 탭을 열면 버튼 없이 곧바로 세션이 뜬다 — 탭 인스턴스당 한 번만
 // 시작하도록 startedRef로 막는다(StrictMode 이중 마운트·재렌더 대비).
@@ -88,6 +96,74 @@ function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 	return (
 		<div className={styles.stub}>
 			<div className={styles.stubTitle}>터미널 시작 중…</div>
+		</div>
+	)
+}
+
+// "모든 서브태스크는 클릭해서 탭을 추가할 수 있고... 워크트리가 있다면 워크트리내에서 클로드 세션을
+// 띄우고 없다면 서브태스크인걸 인지하는 클로드세션만 띄워줘" — 이 서브태스크가 이미 launchSubtask로
+// 시작돼 살아있는 세션이 있으면 그 워크트리에 그대로 붙고, 아직 없으면(사람이 "개발 시작"을 누르기
+// 전) 워크트리 없이 즉석 세션을 하나 띄우되 이 서브태스크 맥락(이름·설명)을 시드로 알려준다 — 여기서
+// 워크트리를 새로 만들지는 않는다(그건 "개발 시작" 버튼의 몫 — 메인태스크는 오케스트레이션만).
+function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { tabId: string; subtaskId: string; parentTaskId: string; fallbackCwd: string | null }) {
+	const sessionName = useTabsStore((s) => s.claudeSessionByTab[tabId])
+	const modelLabel = useTabsStore((s) => s.claudeModelByTab[tabId])
+	const setClaudeSession = useTabsStore((s) => s.setClaudeSession)
+	const subtask = useSessionsStore((s) => {
+		const allTasks = [...s.inbox, ...s.folders.flatMap((f) => f.tasks)]
+		return allTasks.find((t) => t.id === parentTaskId)?.subtasks.find((st) => st.id === subtaskId) ?? null
+	})
+	const [liveSession, setLiveSession] = useState<string | null>(null)
+	const [liveCwd, setLiveCwd] = useState<string | null>(null)
+	const [checked, setChecked] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const startedRef = useRef(false)
+
+	useEffect(() => {
+		let cancelled = false
+		getSubtaskWorkState(parentTaskId)
+			.then((r) => {
+				if (cancelled || !r.ok) return
+				const st = r.subtasks.find((x) => x.id === subtaskId)
+				if (st?.alive && st.tmuxSession && st.worktreePath) {
+					setLiveSession(st.tmuxSession)
+					setLiveCwd(st.worktreePath)
+				}
+			})
+			.finally(() => !cancelled && setChecked(true))
+		return () => {
+			cancelled = true
+		}
+	}, [parentTaskId, subtaskId])
+
+	useEffect(() => {
+		if (!checked || liveSession || sessionName || startedRef.current) return
+		if (!fallbackCwd) {
+			setError('워크트리가 아직 없고, 대체할 레포 경로도 찾지 못했습니다.')
+			return
+		}
+		startedRef.current = true
+		const seed = `[서브태스크 세션] "${subtask?.name || ''}"에 대해 이야기해줘 — 아직 이 서브태스크 전용 워크트리는 없다(태스크 상세에서 "개발 시작"을 누르면 생긴다).${subtask?.desc ? ' ' + subtask.desc : ''}`
+		createTerm({ cwd: fallbackCwd, command: 'claude', label: subtask?.name || 'subtask', seed })
+			.then((r) => {
+				if (r.ok) setClaudeSession(tabId, r.name, r.modelLabel)
+				else setError(r.error || '세션 생성 실패')
+			})
+			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
+	}, [checked, liveSession, sessionName, fallbackCwd, subtask, tabId, setClaudeSession])
+
+	if (liveSession && liveCwd) return <XTerm session={liveSession} cwd={liveCwd} modelLabel={null} />
+	if (sessionName) return <XTerm session={sessionName} cwd={fallbackCwd || ''} modelLabel={modelLabel} />
+	if (error)
+		return (
+			<div className={styles.stub}>
+				<div className={styles.stubTitle}>세션을 시작하지 못했습니다</div>
+				<div className={styles.stubError}>{error}</div>
+			</div>
+		)
+	return (
+		<div className={styles.stub}>
+			<div className={styles.stubTitle}>서브태스크 세션 확인 중…</div>
 		</div>
 	)
 }
@@ -251,6 +327,8 @@ export default function TabWorkspace() {
 		return null
 	})
 	const orch = useSessionsStore((s) => (found?.folderId ? getOrchestration(s, found.folderId) : null))
+	const folderTasks = useSessionsStore((s) => (found?.kind === 'folder' ? (s.folders.find((f) => f.id === found.folderId)?.tasks ?? []) : []))
+	const folderRepoId = useSessionsStore((s) => (found?.kind === 'folder' ? (s.folders.find((f) => f.id === found.folderId)?.repo_id ?? null) : null))
 	const repos = useSessionsStore((s) => s.repos)
 	const rootPath = useSessionsStore((s) => s.rootPath)
 
@@ -334,7 +412,7 @@ export default function TabWorkspace() {
 	// 크론잡/모델배정/캘린더/관제는 태스크 트리 밖의 "최상위 페이지"다 — 사이드바에서 바로 꽂히는 진입점이지
 	// 여러 개를 나란히 열어두고 오가는 탭 개념이 아니라, 탭바(닫기 ×, 다른 탭과 나란히) 자체를 안 보여주고
 	// 페이지 내용만 꽉 채운다. 미추적 워크트리 즉석 터미널(wtPath)은 여러 개를 동시에 열 수 있어 탭바를 유지.
-	if (activeNodeId === CRONJOBS_NODE_ID || activeNodeId === MODEL_POLICY_NODE_ID || activeNodeId === CALENDAR_NODE_ID || activeNodeId === CONTROL_NODE_ID) {
+	if (activeNodeId === CRONJOBS_NODE_ID || activeNodeId === MODEL_POLICY_NODE_ID || activeNodeId === CALENDAR_NODE_ID || activeNodeId === CONTROL_NODE_ID || activeNodeId === TEAM_RULES_NODE_ID) {
 		return (
 			<div className={styles.wrap}>
 				<div className={styles.body}>
@@ -342,6 +420,7 @@ export default function TabWorkspace() {
 					{activeNodeId === MODEL_POLICY_NODE_ID && <ModelPolicyPane />}
 					{activeNodeId === CALENDAR_NODE_ID && <CalendarPane />}
 					{activeNodeId === CONTROL_NODE_ID && <ControlPane />}
+					{activeNodeId === TEAM_RULES_NODE_ID && <TeamRulesPane />}
 				</div>
 			</div>
 		)
@@ -420,7 +499,10 @@ export default function TabWorkspace() {
 								}}
 							/>
 						) : (
-							<span>{t.label || TAB_LABEL[t.kind]}</span>
+							<>
+								{TAB_ICON[t.kind] && <span className={styles.tabIcon}>{TAB_ICON[t.kind]}</span>}
+								<span>{t.label || TAB_LABEL[t.kind]}</span>
+							</>
 						)}
 						<span
 							className={styles.tabClose}
@@ -455,7 +537,10 @@ export default function TabWorkspace() {
 										setCmdkOpen(false)
 									}}
 								>
-									<span>{TAB_LABEL[t]}</span>
+									<span className={styles.cmdkItemLabel}>
+										{TAB_ICON[t] && <span className={styles.tabIcon}>{TAB_ICON[t]}</span>}
+										<span>{TAB_LABEL[t]}</span>
+									</span>
 								</div>
 							))}
 							{found.kind === 'task' && (
@@ -508,11 +593,17 @@ export default function TabWorkspace() {
 						<InboxPreview task={found.task!} />
 					) : (
 						<>
+							{activeTabInstance?.kind === 'detail' && found.kind === 'folder' && <TaskDetailTab nodeId={activeNodeId} tabId={activeTabInstance.id} folderId={found.folderId!} />}
 							{activeTabInstance?.kind === 'orchestrator' && found.kind === 'folder' && <OrchestratorPane folderId={found.folderId!} />}
+							{activeTabInstance?.kind === 'diagram' && found.kind === 'folder' && <TaskManagerBoard tasks={folderTasks} />}
+							{activeTabInstance?.kind === 'teamRules' && found.kind === 'folder' && <TeamRulesPane initialRepoId={folderRepoId} folderId={found.folderId!} />}
+						{activeTabInstance?.kind === 'subtask' && activeTabInstance.subtaskId && activeTabInstance.parentTaskId && (
+							<SubtaskSessionPane tabId={activeTabInstance.id} subtaskId={activeTabInstance.subtaskId} parentTaskId={activeTabInstance.parentTaskId} fallbackCwd={claudeCwd} />
+						)}
 							{activeTabInstance?.kind === 'terminal' &&
 								(mainSession ? (
 									<div className={styles.termWrap}>
-										{found.kind === 'task' && <SubagentStrip cwd={mainSession.worktreePath} />}
+										{found.kind === 'task' && <SubagentStrip cwd={mainSession.worktreePath} sessionName={mainSession.tmuxSession} />}
 										<div className={styles.termHost}>
 											<XTerm session={mainSession.tmuxSession} cwd={mainSession.worktreePath} modelLabel={mainSession.modelLabel} />
 										</div>

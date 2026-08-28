@@ -42,7 +42,7 @@ async function apiDelete(path) {
 }
 function requireControl() {
 	if (IS_CONTROL) return null
-	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 관제 에이전트 세션 전용입니다.' }], isError: true }
+	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 비서 세션 전용입니다.' }], isError: true }
 }
 function ok(data) {
 	return { content: [{ type: 'text', text: JSON.stringify(data) }], isError: data && data.ok === false }
@@ -99,7 +99,7 @@ server.registerTool(
 	'update_task',
 	{
 		title: '태스크 상세정보 수정',
-		description: '태스크의 이름/설명/진행방식(kind)/시작프롬프트/레포/마감일을 수정한다. 필요한 필드만 넘기면 된다.',
+		description: '태스크의 이름/설명/진행방식(kind)/시작프롬프트/레포/마감일/기간/색상을 수정한다. 필요한 필드만 넘기면 된다.',
 		inputSchema: {
 			taskId: z.string(),
 			name: z.string().optional(),
@@ -108,6 +108,8 @@ server.registerTool(
 			startPrompt: z.string().nullable().optional(),
 			repoId: z.string().nullable().optional(),
 			dueDate: z.union([z.string(), z.number(), z.null()]).optional(),
+			durationDays: z.number().nullable().optional().describe('영업일 기준 소요 기간'),
+			color: z.string().nullable().optional().describe('캘린더 배경색(hex, 예: "#3b82f6"). null이면 기본 배경으로 해제'),
 		},
 	},
 	async ({ taskId, dueDate, ...patch }) => {
@@ -122,6 +124,89 @@ server.registerTool('delete_task', { title: '태스크 삭제', description: '�
 	const guard = requireControl()
 	if (guard) return guard
 	return ok(await apiDelete(`/api/tasks/${taskId}`))
+})
+
+// 서브태스크 — 태스크 하나를 개발/개발자테스트/QA/배포처럼 단계로 쪼갠 것(list_tasks가 돌려주는
+// 각 태스크의 subtasks 배열 참고). "태스크 시작"이 폴더 안에 태스크를 늘어놓는 것과는 다른 개념 —
+// 이건 태스크 하나 밑에 딸린 하위 항목이다. 자기만의 예정일/기간/설명을 갖고 캘린더에도 따로 뜬다.
+// 실제 워크트리+클로드 세션을 띄우는 "개발 시작"/"다음 단계로"는 이 툴셋에 없다 — 그건 무거운 동작이라
+// 태스크 상세페이지에서 사람이 직접 누르거나 해당 태스크의 지휘자에게 맡긴다.
+server.registerTool(
+	'create_subtask',
+	{
+		title: '서브태스크 생성',
+		description: '태스크 하나를 개발/개발자테스트/QA/배포처럼 작은 단계로 쪼갠다. 각 서브태스크는 자기만의 설명·예정일·기간을 갖고 캘린더에 독립적으로 표시된다.',
+		inputSchema: {
+			taskId: z.string(),
+			name: z.string(),
+			desc: z.string().optional(),
+			dueDate: z.union([z.string(), z.number(), z.null()]).optional().describe('"YYYY-MM-DD" 또는 epoch ms'),
+			durationDays: z.number().optional().describe('영업일 기준'),
+		},
+	},
+	async ({ taskId, dueDate, ...rest }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const ms = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00').getTime() : dueDate
+		return ok(await apiPost(`/api/tasks/${taskId}/subtasks`, { ...rest, dueDate: ms }))
+	},
+)
+
+server.registerTool(
+	'update_subtask',
+	{
+		title: '서브태스크 수정',
+		description: '서브태스크의 이름/설명/예정일/기간을 수정한다.',
+		inputSchema: {
+			subtaskId: z.string(),
+			name: z.string().optional(),
+			desc: z.string().optional(),
+			dueDate: z.union([z.string(), z.number(), z.null()]).optional(),
+			durationDays: z.number().nullable().optional(),
+		},
+	},
+	async ({ subtaskId, dueDate, ...patch }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const ms = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00').getTime() : dueDate
+		return ok(await apiPatch(`/api/subtasks/${subtaskId}`, dueDate !== undefined ? { ...patch, dueDate: ms } : patch))
+	},
+)
+
+server.registerTool('delete_subtask', { title: '서브태스크 삭제', description: '서브태스크를 삭제한다.', inputSchema: { subtaskId: z.string() } }, async ({ subtaskId }) => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiDelete(`/api/subtasks/${subtaskId}`))
+})
+
+// 일정 막기 — 태스크가 아니라 캘린더 자체의 제약(QA 기간 등). 그 기간의 모든 날짜가 캘린더에
+// 줄무늬로 표시된다. 겹치는 기존 일정은 서버가 자동으로 그 기간만큼 뒤로 밀어준다.
+server.registerTool('list_blocked_periods', { title: '일정 막기 목록', description: '등록된 캘린더 차단 기간(예: QA 기간) 전체를 조회한다.', inputSchema: {} }, async () => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiGet('/api/blocked-periods'))
+})
+
+server.registerTool(
+	'create_blocked_period',
+	{
+		title: '일정 막기 생성',
+		description:
+			'캘린더에 차단 기간을 만든다(예: "QA 기간"). 이 기간과 겹치는 기존 태스크/서브태스크 일정은 서버가 자동으로 이 기간의 길이만큼 뒤로 밀어준다.',
+		inputSchema: { name: z.string().describe('막는 이유(예: "QA 기간")'), startDate: z.union([z.string(), z.number()]), endDate: z.union([z.string(), z.number()]) },
+	},
+	async ({ name, startDate, endDate }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const toMs = (v) => (typeof v === 'string' ? new Date(v + 'T00:00:00').getTime() : v)
+		return ok(await apiPost('/api/blocked-periods', { name, startDate: toMs(startDate), endDate: toMs(endDate) }))
+	},
+)
+
+server.registerTool('delete_blocked_period', { title: '일정 막기 삭제', description: '캘린더 차단 기간을 삭제한다(이미 밀린 일정은 되돌아가지 않는다).', inputSchema: { id: z.string() } }, async ({ id }) => {
+	const guard = requireControl()
+	if (guard) return guard
+	return ok(await apiDelete(`/api/blocked-periods/${id}`))
 })
 
 server.registerTool(

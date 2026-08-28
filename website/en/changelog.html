@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Changelog — OpenTask</title>
+	<meta name="description" content="Version-by-version changes in OpenTask. Once a downloadable build ships, releases will accumulate on this page." />
+	<link rel="icon" type="image/png" href="/favicon-32.png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+	<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+	<header class="nav">
+		<div class="container nav-inner">
+			<a class="brand" href="/en/index.html">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<nav class="nav-links">
+				<a href="/en/index.html#features">Features</a>
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/changelog.html" class="active">Changelog</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+			</nav>
+			<div class="nav-cta">
+				<a class="lang-switch" href="/changelog.html">한국어</a>
+				<a class="btn btn-ghost" href="/en/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/en/download.html">Download</a>
+			</div>
+			<button class="nav-toggle" aria-label="Open menu">☰</button>
+		</div>
+	</header>
+
+	<main>
+		<section style="padding-top: 56px; padding-bottom: 24px;">
+			<div class="container">
+				<div class="section-head">
+					<div class="eyebrow">Changelog</div>
+					<h2>Release notes</h2>
+					<p>What's new or changed in OpenTask, tracked here.</p>
+				</div>
+			</div>
+		</section>
+
+		<section style="padding-top: 0;">
+			<div class="container" style="max-width: 720px;">
+				<div class="callout warn" style="margin-bottom: 32px;">
+					<strong>Before the first official release.</strong> Once signing and notarization are
+					done and a downloadable build is up, releases will start accumulating here against real
+					version tags. What follows is a pre-release summary of what's already built.
+				</div>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.0</h3>
+						<span class="chip chip-amber">Pre-release</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Task · subtask · worktree–based parallel agent orchestration (Task Manager) — the wave starts driving automatically the moment a subtask is created</li>
+						<li>Diagram board summarizing a subtask chain like an assembly line</li>
+						<li>Calendar — week/month views of subtask schedules, drag-to-reschedule, blocked periods</li>
+						<li>Cron Jobs — interval, daily, or weekly schedules that auto-create new tasks</li>
+						<li>Model Policy — per-task-type (design, coding, review, QA, etc.) AI model assignment</li>
+						<li>Team Rules — four free-text fields per repo that get folded into every agent's instructions</li>
+						<li>Control — a whole-app agent that manages the calendar, cron jobs, and settings by conversation</li>
+						<li>PR Review — Apply a comment (injects into a live session) or Dispute it (public reply on GitHub)</li>
+						<li>macOS Electron desktop shell — the backend runs as a detached process so sessions survive quitting the app</li>
+						<li>Auto-update wiring via electron-updater + GitHub Releases (activates once signing is in place)</li>
+					</ul>
+				</article>
+
+				<div style="text-align:center; padding: 24px 0;">
+					<p style="color:var(--t3); font-size:13px; margin:0;">
+						The first tagged release will be added here with a date once it ships.
+					</p>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer>
+		<div class="container footer-inner">
+			<a class="brand" href="/en/index.html">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<div class="footer-links">
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/changelog.html">Changelog</a>
+				<a href="/en/download.html">Download</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">License (MIT)</a>
+			</div>
+			<div class="footer-copy">© 2026 OpenTask</div>
+		</div>
+	</footer>
+
+	<script type="module" src="/src/main.js"></script>
+</body>
+</html>

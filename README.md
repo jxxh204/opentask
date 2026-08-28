@@ -7,7 +7,7 @@
 This is a monorepo with two parts:
 
 - **[`agents/`](./agents), [`skills/`](./skills)** — the engine. Drop-in subagents and slash-command skills for Claude Code (see below).
-- **[`app/`](./app)** — the control plane. A Vite+Node web app that watches your worktrees/agents/PRs in real time and lets you dispatch work. Runs standalone with demo data, or point it at a repo that uses the `marty-workflow`/`backlog-execute` skills for the full live experience. **→ [`app/README.md`](./app/README.md) for setup.**
+- **[`app/`](./app)** — the control plane, shipped as the desktop app **OpenTask**. A Vite+Node app that watches your tasks/subtasks/agents/PRs in real time and lets you dispatch work. Runs standalone with demo data, or connect a real repo for the full live experience. **→ [`app/README.en.md`](./app/README.en.md) for setup** (Korean: [`app/README.md`](./app/README.md)).
 
 ## What is the engine?
 
@@ -45,8 +45,8 @@ Drop them into `~/.claude/` and Claude Code picks them up automatically. Ask it 
 ## Install
 
 ```bash
-git clone https://github.com/jxxh204/openrm
-cd openrm
+git clone https://github.com/jxxh204/opentask
+cd opentask
 ./install.sh          # copies agents → ~/.claude/agents, skills → ~/.claude/skills
 ```
 

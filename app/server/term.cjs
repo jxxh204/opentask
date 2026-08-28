@@ -1,15 +1,29 @@
-// term.cjs — OpenRM이 직접 호스팅하는 진짜 터미널. tmux 세션(영속) + node-pty 브리지(WS는 index.cjs).
-// 세션은 'orm-' 접두로 격리 — OpenRM이 만든 것만 list/kill 한다(임의 tmux 세션 보호).
+// term.cjs — OpenRM이 직접 호스팅하는 진짜 터미널. node-pty로 이 서버 프로세스의 자식으로 셸을
+// 직접 띄운다(과거엔 tmux 세션 위에 얹었으나 "tmux는 다른사람이 쓸때 불편해서" 제거 — 다른 사람이
+// 세션에 직접 붙어 쓸 때 tmux 자체의 존재가 걸리적거렸다). 화면 상태는 헤드리스 xterm(@xterm/headless)
+// 으로 이 프로세스 안에서 그대로 재현해 tmux capture-pane을 대체하고, 브라우저가 여러 번 붙었다
+// 떨어져도(WS 재연결) @xterm/addon-serialize로 그 순간 화면을 그대로 되돌려준다.
+//
+// ⚠️ 트레이드오프(사용자에게 명시적으로 확인함): tmux는 별도 서버 데몬이라 OpenRM 백엔드가 죽어도
+// 세션이 안 죽었지만, 지금은 세션(node-pty 프로세스)이 이 서버 프로세스의 자식이라 서버가 재시작되면
+// (코드 배포·컴퓨터 종료 등) 세션도 같이 죽는다 — 그래서 이 파일의 recordSession/restorable/restore
+// ("복원 경로")가 장식이 아니라 핵심이 됐다: 죽으면 스냅샷(cwd·kind·모델)으로 claude --continue를
+// 다시 띄워 대화를 이어받는다.
+//
+// 세션은 'orm-' 접두로 격리 — OpenRM이 만든 것만 list/kill 한다(임의 프로세스 보호).
 'use strict'
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { execFile } = require('child_process')
+const pty = require('node-pty')
+const { Terminal } = require('@xterm/headless')
+const { SerializeAddon } = require('@xterm/addon-serialize')
 const Worktrees = require('./worktrees.cjs') // dev 시작 시 node_modules/env 보장용 (worktrees→collector, 순환 없음)
 const Settings = require('./settings.cjs')
 
 // claude가 한 번도 안 본 cwd에서는 "이 폴더를 신뢰하시겠습니까?" 1회성 확인 다이얼로그가 뜨는데,
-// 이게 뜨면 send-keys로 보낸 seed가 다이얼로그 위에 얹혀 채팅으로 전달되지 못하고 유실된다 —
+// 이게 뜨면 주입한 seed가 다이얼로그 위에 얹혀 채팅으로 전달되지 못하고 유실된다 —
 // 오케스트레이션은 태스크마다 새 git worktree(=한 번도 안 본 경로)를 만드므로 매번 이 게이트에 걸린다.
 // 워크트리는 사용자가 Setup에서 지정한 자기 레포 안이므로, "Yes, I trust this folder"를 직접 누르는 것과
 // 동일하게 미리 신뢰 등록해 다이얼로그 자체가 안 뜨게 한다. 실패해도 세션 생성은 막지 않음(다이얼로그가
@@ -49,9 +63,6 @@ function trustFolder(cwd, mcpFolderId) {
 }
 
 const PREFIX = 'orm-'
-// 필드 구분자 — 멀티문자 토큰. tmux 3.6a가 \x1f 등 제어문자(<0x20)를 format 출력에서 삭제하므로
-// 세션명·cwd·명령에 절대 안 나오는 토큰 사용. (재부팅 후 /usr/local/bin/tmux 3.6a로 바뀌며 \x1f가 깨졌던 버그)
-const US = '|:orm:|'
 
 // ── 세션 스냅샷 (재부팅 대비 OpenRM 자체 복원) ──
 // OpenRM이 띄운 세션을 cwd·kind·포트와 함께 디스크에 기록. kill하면 제거.
@@ -69,8 +80,8 @@ function saveSnap(s) {
     fs.writeFileSync(SNAP_FILE, JSON.stringify(s, null, 2))
   } catch (_) {}
 }
-// cmux가 세션을 'orm-X_<10자리ts>_<n>_<cwd>_...'로 리네임 → 안정적 베이스(앞부분)만 추출.
-// 이름에 . / 가 섞여 tmux new-session 라운드트립이 깨지므로, 항상 베이스로 매칭/attach 한다.
+// 이제 세션명이 외부(과거의 tmux/cmux)에서 리네임될 일이 없다 — 우리가 만든 이름 그대로 죽을 때까지
+// 유지된다. 그래도 스냅샷 키 매칭 호출부가 많아 안전하게 남겨둔다(정상 케이스는 항상 n === name).
 function baseName(n) {
   return String(n || '').split(/_\d{9,}_/)[0]
 }
@@ -92,7 +103,7 @@ function recordSession(name, cwd, label, command, model) {
 function forgetSession(name) {
   const s = loadSnap()
   let changed = false
-  // 정확 일치 + cmux 리네임(긴 이름)으로 들어온 경우 base 키도 제거
+  // 정확 일치 + (혹시 남아있는) 베이스 매칭으로 들어온 경우 base 키도 제거
   for (const k of Object.keys(s)) {
     if (k === name || name === k || name.startsWith(k + '_')) {
       delete s[k]
@@ -102,79 +113,122 @@ function forgetSession(name) {
   if (changed) saveSnap(s)
 }
 
-function tmux(args, timeout = 5000) {
-  return new Promise((resolve) =>
-    execFile('tmux', args, { timeout, maxBuffer: 4 << 20, env: process.env }, (e, out, err) =>
-      resolve({ ok: !e, out: String(out || ''), err: String(err || (e && e.message) || '') }),
-    ),
+// ── 세션 레지스트리(구 tmux 서버의 자리) ──
+// name -> { proc: node-pty IPty, term: 헤드리스 xterm(화면 상태), serializeAddon, cwd, command, label,
+//           model, kind, createdAt, wsClients: Set<WebSocket>, exited }
+const sessions = new Map()
+
+function slug(s) {
+  return (
+    String(s || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9가-힣_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'sh'
   )
 }
 
-// tmux 설치 여부 확인 — 온보딩의 필수 스텝. 개발실 오케스트레이션·개발실/디버깅의 실터미널이
-// 전부 tmux에 의존하므로, 없으면 여기서 조기에 안내한다(오류를 나중에 개별 기능에서 겪지 않도록).
-function checkAvailable() {
-  return tmux(['-V'], 3000).then((r) => ({
-    available: r.ok,
-    version: r.ok ? r.out.trim() : null,
-    error: r.ok ? null : (r.err || '실행 파일을 찾을 수 없음').trim(),
-  }))
+// 실제 pty+헤드리스 터미널을 name으로 스폰해 레지스트리에 등록한다. create()/ensureNamed() 공용 내부 함수.
+function spawnEntry(name, cwd, { cols = 200, rows = 50 } = {}) {
+  const shell = process.env.SHELL || '/bin/zsh'
+  const proc = pty.spawn(shell, ['-l'], {
+    name: 'xterm-256color',
+    cols,
+    rows,
+    cwd,
+    // -e LANG 대신 env로 넘김(tmux 전용 플래그였음) — 셸/claude가 UTF-8로 동작 → 한글 안 깨짐.
+    // CLAUDE_CODE_FORCE_SESSION_PERSISTENCE — OpenTask 자신이 Claude Code 세션(개발할 때의 나 자신)
+    // 안에서 실행되고 있으면 이 서버가 CLAUDE_CODE_CHILD_SESSION=1을 그대로 물려받고, 여기서 스폰하는
+    // 지휘자/서브태스크/비서 세션도 그 env를 이어받아 "중첩 세션이니 대화 기록을 안 남긴다"로 조용히
+    // 꺼진다("Transcript saving is off" 경고). claude --continue 복원도, 이번 비서 대화형 UI(§
+    // transcript.cjs)도 전부 그 기록 파일에 의존하므로 절대 꺼지면 안 된다 — 항상 강제로 켠다.
+    env: { ...process.env, LANG: process.env.LANG || 'en_US.UTF-8', LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8', CLAUDE_CODE_FORCE_SESSION_PERSISTENCE: '1' },
+  })
+  const term = new Terminal({ cols, rows, allowProposedApi: true })
+  const serializeAddon = new SerializeAddon()
+  term.loadAddon(serializeAddon)
+  const entry = { proc, term, serializeAddon, cwd, command: null, label: name.slice(PREFIX.length), model: null, kind: 'shell', createdAt: Date.now(), wsClients: new Set(), exited: false }
+  sessions.set(name, entry)
+  proc.onData((data) => {
+    try {
+      term.write(data)
+    } catch (_) {}
+    for (const ws of entry.wsClients) {
+      try {
+        ws.send(data)
+      } catch (_) {}
+    }
+  })
+  proc.onExit(() => {
+    entry.exited = true
+    for (const ws of entry.wsClients) {
+      try {
+        ws.close()
+      } catch (_) {}
+    }
+  })
+  return entry
 }
 
-function slug(s) {
-  return String(s || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9가-힣_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'sh'
+// tmux 설치 확인은 이제 의미가 없다(node-pty는 이 앱에 번들된 네이티브 모듈, 외부 바이너리 불필요) —
+// 온보딩이 그래도 이 엔드포인트를 부르면 항상 "사용 가능"으로 답한다(하위호환, 실질적 체크는 없음).
+function checkAvailable() {
+  return Promise.resolve({ available: true, version: null, error: null })
 }
 
 // OpenRM 소유 세션 목록 + 메타(cwd·현재 프로세스·attach 여부)
 async function list() {
-  // session_id($N)도 — 리네임된 이름엔 . 가 있어 -t 이름 타겟이 깨지므로 id로 죽인다.
-  const r = await tmux(['list-sessions', '-F', ['#{session_id}', '#{session_name}', '#{session_created}', '#{session_attached}', '#{pane_current_path}', '#{pane_current_command}'].join(US)])
-  if (!r.ok) return [] // 서버 없음 등
   const snap = loadSnap()
   const out = []
-  for (const line of r.out.split('\n')) {
-    if (!line) continue
-    const [id, name, created, attached, cwd, cmd] = line.split(US)
-    if (!name || !name.startsWith(PREFIX)) continue
-    // 세션에 배분된 모델 — 스냅샷에서(정확 일치 or 베이스명 매칭, cmux 리네임 대비)
+  for (const [name, entry] of sessions) {
+    if (entry.exited) continue
     const snapKey = snap[name] ? name : Object.keys(snap).find((k) => baseName(k) === baseName(name))
-    out.push({ id, name, label: name.slice(PREFIX.length), created: Number(created) * 1000 || null, attached: attached === '1', cwd, command: cmd, model: (snapKey && snap[snapKey].model) || null })
+    out.push({
+      id: name,
+      name,
+      label: entry.label,
+      created: entry.createdAt,
+      attached: entry.wsClients.size > 0,
+      cwd: entry.cwd,
+      command: entry.command,
+      model: entry.model || (snapKey && snap[snapKey].model) || null,
+    })
   }
   return out
 }
 
 async function exists(name) {
-  return (await tmux(['has-session', '-t', name])).ok
+  const e = sessions.get(name)
+  return !!e && !e.exited
 }
 
 // 초기 지시(seed)를 claude TUI에 실제로 꽂힐 때까지 재시도하며 주입.
-// 예전엔 고정 6초 setTimeout이었는데, MCP 인증 체크 등으로 부팅이 그보다 오래 걸리면 send-keys가
-// 아직 입력을 못 받는 상태의 pane에 꽂혀 조용히 유실됐다(seed가 "주입됨"으로 기록되는데 실제 세션엔
+// 예전엔 고정 6초 setTimeout이었는데, MCP 인증 체크 등으로 부팅이 그보다 오래 걸리면 입력이
+// 아직 준비 안 된 상태의 화면에 꽂혀 조용히 유실됐다(seed가 "주입됨"으로 기록되는데 실제 세션엔
 // 아무 지시도 안 들어간 실버그 — 오케스트레이션 "시작"이 아무 반응 없는 것처럼 보이는 원인이었다).
 // `❯` 프롬프트 렌더 여부는 스플래시 화면에도 이미 떠 있어 신호가 못 됐다 — 대신 "방금 타이핑한 텍스트가
-// 실제로 화면에 반영됐는지"로 검증한다. 매 시도 전엔 C-u로 이전 시도의 잔여 입력을 지운다.
+// 실제로 화면에 반영됐는지"로 검증한다. 매 시도 전엔 Ctrl-U로 이전 시도의 잔여 입력을 지운다.
 async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 } = {}) {
   const marker = oneLine.slice(0, 12)
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    await tmux(['send-keys', '-t', name, 'C-u'])
-    await tmux(['send-keys', '-t', name, '-l', oneLine])
+    const entry = sessions.get(name)
+    if (!entry || entry.exited) return false
+    entry.proc.write('\x15') // Ctrl-U — 라인 지우기
+    entry.proc.write(oneLine)
     await new Promise((res) => setTimeout(res, 400))
-    const check = await tmux(['capture-pane', '-p', '-t', name])
-    if (check.ok && check.out.includes(marker)) {
+    const screen = capturePane(name) || ''
+    if (screen.includes(marker)) {
       // 텍스트가 화면에 꽂힌 것과 그 순간 Enter를 "제출"로 처리할 준비가 된 것은 다르다(claude
       // TUI 버전에 따라 렌더링↔입력 처리 타이밍이 어긋날 수 있음 — 실측: Enter 한 번으로도, 600ms
       // 후 재확인+한 번 더로도 씹혀서 프롬프트에 텍스트만 남고 제출 안 된 채 멈추는 케이스 확인됨,
       // 수동으로 몇 초 뒤 Enter를 다시 보내면 성공함). 프롬프트에서 marker가 사라질 때까지(=제출
       // 완료) 최대 ~18초 동안 1.2초 간격으로 Enter를 반복 재시도한다.
       for (let i = 0; i < 15; i++) {
-        await tmux(['send-keys', '-t', name, 'Enter'])
+        entry.proc.write('\r')
         await new Promise((res) => setTimeout(res, 1200))
-        const after = await tmux(['capture-pane', '-p', '-t', name])
-        if (!after.ok || !after.out.includes(marker)) break // marker가 프롬프트에서 사라짐 = 제출됨
+        const after = capturePane(name) || ''
+        if (!after.includes(marker)) break // marker가 화면에서 사라짐 = 제출됨
       }
       return true
     }
@@ -183,9 +237,65 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
   return false
 }
 
-// 새 터미널 생성: 워크트리(cwd)에서 detached 세션 → (옵션) 명령 실행 + (옵션) 초기 지시(seed) 주입.
+// tmux capture-pane -p(스크롤백 아니라 지금 보이는 화면만)의 대체 — 헤드리스 xterm의 뷰포트만 읽는다.
+function capturePane(name) {
+  const entry = sessions.get(name)
+  if (!entry) return null
+  const buf = entry.term.buffer.active
+  const lines = []
+  for (let i = buf.baseY; i < buf.baseY + entry.term.rows; i++) {
+    const line = buf.getLine(i)
+    lines.push(line ? line.translateToString(true) : '')
+  }
+  return lines.join('\n')
+}
+
+// "태스크를 새로 키면 새로 켜줘. 세션은 동일해도" — conductorCwd를 폴더별로 분리한 뒤로 그 cwd에
+// claude가 이어받을 대화 자체가 없는 게 정상 케이스가 됐다(새 폴더거나, 이전 대화가 옛 공유 cwd
+// 아래 있던 경우). `claude --continue`가 "No conversation found to continue"를 내고 그냥 셸
+// 프롬프트로 떨어지면, 세션 이름/자리는 그대로 둔 채 같은 세션 안에서 이어받기 없이 새로 켠다 —
+// 사람이 매번 죽은 세션을 보고 수동으로 재시작할 필요 없게.
+async function watchContinueFallback(name, cmd, fallbackSeed) {
+  if (!/--continue\b/.test(String(cmd))) return
+  const start = Date.now()
+  while (Date.now() - start < 8000) {
+    await new Promise((res) => setTimeout(res, 500))
+    const entry = sessions.get(name)
+    if (!entry || entry.exited) return
+    const screen = capturePane(name) || ''
+    if (/No conversation found to continue/i.test(screen)) {
+      const fallback = String(cmd).replace(/\s*--continue\b/, '').trim()
+      if (!fallback) return
+      // 셸이 "No conversation found..." 에러를 아직 다 그리는 중일 때 바로 다음 명령을 흘려보내면
+      // 프롬프트에 씹혀 타이핑만 되고 제출이 안 된 채 남는 경우가 실측됐다(injectSeed가 겪은 것과
+      // 같은 종류의 렌더링↔입력 타이밍 문제) — Ctrl-U로 잔여 입력을 지우고 재시도하며, 화면에서
+      // 이 명령 문자열 그대로가 사라지거나(=클로드 스플래시가 그 자리를 덮음) claude TUI 신호가
+      // 뜨는 걸로 실제 제출을 확인한다.
+      for (let i = 0; i < 5; i++) {
+        entry.proc.write('\x15')
+        entry.proc.write(fallback + '\r')
+        await new Promise((res) => setTimeout(res, 1500))
+        const after = capturePane(name) || ''
+        if (!after.includes(fallback) || /esc to interrupt|for agents|Claude Code/i.test(after)) {
+          // "태스크 매니저가 직접 개발했어" — --continue가 실패해 이어받을 대화 없이 맨몸으로 새로
+          // 켜진 세션이다. 최초 생성 때만 주는 역할 지시(seed)를 여기서도 넣어주지 않으면 자기가
+          // 지휘자인지도 모른 채 평범한 코딩 에이전트처럼 직접 다 구현해버린다.
+          const seedText = fallbackSeed && String(fallbackSeed).trim()
+          if (seedText) {
+            const oneLine = seedText.replace(/[\r\n]+/g, ' ').slice(0, 2000)
+            injectSeed(name, oneLine).catch(() => {})
+          }
+          return
+        }
+      }
+      return
+    }
+  }
+}
+
+// 새 터미널 생성: 워크트리(cwd)에서 셸 프로세스 → (옵션) 명령 실행 + (옵션) 초기 지시(seed) 주입.
 // mcpFolderId: 이 세션이 지휘자면 그 folderId — mcpDispatch.cjs를 이 cwd에 등록시킨다(trustFolder 참고).
-async function create({ cwd, command, label, seed, model, mcpFolderId }) {
+async function create({ cwd, command, label, seed, model, mcpFolderId, continueFallbackSeed }) {
   if (!cwd) return { ok: false, error: 'cwd 필수' }
   try {
     if (!fs.statSync(cwd).isDirectory()) return { ok: false, error: 'cwd 디렉토리 아님' }
@@ -195,11 +305,8 @@ async function create({ cwd, command, label, seed, model, mcpFolderId }) {
   // 유니크 세션명
   let base = PREFIX + slug(label || cwd.split('/').pop())
   let name = base
-  for (let i = 2; await exists(name); i++) name = base + '-' + i
+  for (let i = 2; sessions.has(name); i++) name = base + '-' + i
 
-  // -e LANG: 세션 셸/claude가 UTF-8로 동작 → 한글 안 깨짐 (launchd 서버엔 LANG 없어 필수)
-  const created = await tmux(['new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', '-e', 'LANG=en_US.UTF-8', '-e', 'LC_CTYPE=en_US.UTF-8'])
-  if (!created.ok) return { ok: false, error: 'tmux new-session 실패: ' + created.err }
   // 모델 자동 배분 — claude 명령인데 호출부가 모델을 안 넘겼으면(오케스트레이터를 거치지 않는 즉석
   // 세션 등) 여기서 기본 배분한다. 이게 없으면 사이드바/탭 어디에도 모델이 안 뜬다(빈 데이터가 아니라
   // 아예 배분 자체가 안 된 것 — orchestrator.cjs가 겪었던 것과 같은 갭).
@@ -210,20 +317,83 @@ async function create({ cwd, command, label, seed, model, mcpFolderId }) {
     cmd = String(cmd).replace(/^(\s*\S+)/, `$1 --model ${model}`)
   }
   if (cmd && /\bclaude\b/.test(String(cmd))) trustFolder(cwd, mcpFolderId)
+
+  const entry = spawnEntry(name, cwd)
+  entry.command = command || null
+  entry.label = label || name.slice(PREFIX.length)
+  entry.model = model || null
+  entry.kind = kindOf(command)
+
   if (cmd && String(cmd).trim()) {
-    await tmux(['send-keys', '-t', name, String(cmd), 'Enter'])
+    entry.proc.write(String(cmd) + '\r')
+    if (/\bclaude\b/.test(String(cmd))) watchContinueFallback(name, cmd, continueFallbackSeed).catch(() => {})
   }
   const seedText = seed && String(seed).trim()
   if (seedText) {
     const oneLine = seedText.replace(/[\r\n]+/g, ' ').slice(0, 2000)
     injectSeed(name, oneLine).catch(() => {})
   }
-  recordSession(name, cwd, label || name.slice(PREFIX.length), command, model)
-  return { ok: true, name, label: name.slice(PREFIX.length), cwd, command: command || null, model: model || null, modelLabel: model ? Settings.modelLabel(model) : null, seeded: !!seedText }
+  recordSession(name, cwd, entry.label, command, model)
+  return { ok: true, name, label: entry.label, cwd, command: command || null, model: model || null, modelLabel: model ? Settings.modelLabel(model) : null, seeded: !!seedText }
+}
+
+// /term WS가 요청한 이름으로 세션을 "있으면 그대로, 없으면 정확히 그 이름으로" 만든다 — create()처럼
+// 이름을 슬러그+중복회피로 다시 계산하지 않는다(WS URL의 session= 파라미터와 실제 세션명이 어긋나면
+// 브라우저가 자기가 요청한 세션에 못 붙는다). 명령/시드 없는 맨 셸 — 즉석 "터미널"/"클로드 세션" 탭용.
+function ensureNamed(name, cwd) {
+  const existing = sessions.get(name)
+  if (existing && !existing.exited) return { ok: true, name, created: false }
+  try {
+    if (!fs.statSync(cwd).isDirectory()) return { ok: false, error: 'cwd 없음: ' + cwd }
+  } catch {
+    return { ok: false, error: 'cwd 없음: ' + cwd }
+  }
+  spawnEntry(name, cwd)
+  recordSession(name, cwd, name.slice(PREFIX.length), null, null)
+  return { ok: true, name, created: true }
+}
+
+// WS 연결을 세션에 붙인다 — attach 순간 지금까지의 화면을 그대로 복원(@xterm/addon-serialize, 예전
+// tmux attach가 기존 화면을 그대로 보여주던 것과 동일 효과)하고, 이후 실시간 출력을 계속 전달한다.
+// 여러 WS가 동시에 붙을 수 있고(다른 사람이 같이 보는 것도 tmux 시절처럼 가능), 하나가 끊겨도(반환된
+// detach 호출) 세션 자체(node-pty 프로세스)는 안 죽는다 — 이게 "닫아도 세션은 산다" 요구의 핵심.
+function attachWs(name, ws, { cols, rows } = {}) {
+  const entry = sessions.get(name)
+  if (!entry) return () => {}
+  if (cols && rows) {
+    try {
+      entry.proc.resize(cols, rows)
+      entry.term.resize(cols, rows)
+    } catch (_) {}
+  }
+  try {
+    const snapshot = entry.serializeAddon.serialize()
+    if (snapshot) ws.send(snapshot)
+  } catch (_) {}
+  entry.wsClients.add(ws)
+  return () => entry.wsClients.delete(ws)
+}
+
+function write(name, data) {
+  const entry = sessions.get(name)
+  if (entry && !entry.exited) {
+    try {
+      entry.proc.write(data)
+    } catch (_) {}
+  }
+}
+
+function resize(name, cols, rows) {
+  const entry = sessions.get(name)
+  if (entry && !entry.exited) {
+    try {
+      entry.proc.resize(cols, rows)
+      entry.term.resize(cols, rows)
+    } catch (_) {}
+  }
 }
 
 // 재부팅/종료로 사라진(스냅샷엔 있지만 현재 안 떠있는) 세션 목록.
-// claude(cmux) 실행 시 세션명이 'orm-X_<ts>_..._<ver>'로 바뀌므로 prefix로 살아있음 판정.
 function liveMatches(snapName, liveNames) {
   return liveNames.some((ln) => ln === snapName || ln.startsWith(snapName + '_'))
 }
@@ -238,7 +408,7 @@ async function restorable() {
       try {
         dirExists = fs.statSync(e.cwd).isDirectory()
       } catch (_) {}
-      return { name, cwd: e.cwd, label: e.label, kind: e.kind, port: e.port, command: e.command, dirExists }
+      return { name, cwd: e.cwd, label: e.label, kind: e.kind, port: e.port, command: e.command, dirExists, savedAt: e.savedAt || 0 }
     })
 }
 // 복원: dev → 빈 포트로 재시작, agent → claude --continue(직전 대화 이어받기), shell → 빈 셸
@@ -282,9 +452,9 @@ function forget({ name, all } = {}) {
 // 세션 화면을 스크레이프해 에이전트 상태 추정 (작업중/입력대기/claude여부 + 마지막 줄).
 async function status(name) {
   if (!name || !name.startsWith(PREFIX)) return null
-  const scr = await tmux(['capture-pane', '-t', name, '-p'])
-  if (!scr.ok) return { exists: false }
-  const text = scr.out
+  const entry = sessions.get(name)
+  if (!entry || entry.exited) return { exists: false }
+  const text = capturePane(name) || ''
   const working = /esc to interrupt/i.test(text)
   const needsAuth = /MFA|ExpiredToken|재인증|인증.*만료|AccessDenied|권한.*요청/i.test(text)
   // ❯ 단독/'to manage'/'for agents'는 claude가 유휴 상태(다음 지시 기다림)일 때도 항상 떠 있는 UI 껍데기라
@@ -340,7 +510,7 @@ async function startDevServer({ cwd, label }) {
   return { ok: true, port, name: r.name, label: r.label }
 }
 
-// 개발서버 끄기 — 그 포트의 프로세스 종료 + 관련 dev tmux 세션 정리.
+// 개발서버 끄기 — 그 포트의 프로세스 종료 + 관련 dev 세션 정리.
 async function stopDevServer({ port, cwd }) {
   const out = { ok: true, killedPids: [], killedSession: null }
   if (port) {
@@ -354,55 +524,50 @@ async function stopDevServer({ port, cwd }) {
       } catch (_) {}
     }
   }
-  // 그 dev tmux 세션도 종료 (스냅샷 kind=dev+port 매칭 또는 cwd+node/next)
-  try {
-    const snap = loadSnap()
-    const live = await list()
-    for (const s of live) {
-      const meta = snap[baseName(s.name)] || snap[s.name]
-      const devMatch = (meta && meta.kind === 'dev' && (!port || Number(meta.port) === Number(port))) || (cwd && s.cwd === cwd && /node|next|npm/i.test(s.command || ''))
-      if (devMatch) {
-        await tmux(['kill-session', '-t', s.id || s.name])
-        forgetSession(s.name)
-        out.killedSession = s.name
-        break
-      }
+  // 그 dev 세션도 종료 (kind=dev+port 매칭 또는 cwd+node/next)
+  for (const [name, entry] of sessions) {
+    if (entry.exited) continue
+    const devMatch = (entry.kind === 'dev' && (!port || Number(portOf(entry.command)) === Number(port))) || (cwd && entry.cwd === cwd && /node|next|npm/i.test(entry.command || ''))
+    if (devMatch) {
+      try {
+        entry.proc.kill()
+      } catch (_) {}
+      sessions.delete(name)
+      forgetSession(name)
+      out.killedSession = name
+      break
     }
-  } catch (_) {}
+  }
   return out
 }
 
 // list() + 각 세션 상태 (개발실 그리드용)
 async function listLive() {
-  const sessions = await list()
-  return Promise.all(sessions.map(async (s) => ({ ...s, status: await status(s.name).catch(() => null) })))
+  const live = await list()
+  return Promise.all(live.map(async (s) => ({ ...s, status: await status(s.name).catch(() => null) })))
 }
 
 // 종료 (orm- 접두만 허용)
 async function kill(name) {
   if (!name || !name.startsWith(PREFIX)) return { ok: false, error: 'OpenRM 세션만 종료 가능' }
-  // cmux 리네임/중첩으로 같은 베이스의 세션이 여러 개일 수 있어 — 베이스 매칭으로 전부 종료(쓰레기 정리).
   const b = baseName(name)
-  const live = await list()
-  // 이름에 . 가 있으면 -t 이름 타겟 불가 → session_id($N)로 종료 (id 있을 때만)
-  const targets = live.filter((s) => s.name === name || baseName(s.name) === b)
   let killed = 0
-  for (const t of targets) {
-    const r = await tmux(['kill-session', '-t', t.id || t.name])
-    if (r.ok) killed++
-  }
-  if (!targets.length) {
-    // 라이브 목록에 없으면 마지막으로 이름으로 시도
-    const r = await tmux(['kill-session', '-t', name])
-    if (r.ok) killed++
+  for (const [key, entry] of sessions) {
+    if (key === name || baseName(key) === b) {
+      try {
+        entry.proc.kill()
+      } catch (_) {}
+      sessions.delete(key)
+      killed++
+    }
   }
   forgetSession(name) // 스냅샷도 제거 (base 매칭)
   return killed ? { ok: true, killed } : { ok: false, error: '종료 실패 (세션을 못 찾음)' }
 }
 
-// 특정 포트의 dev 서버가 도는 tmux 세션 찾기 (그 워크트리에서 재시작하기 위함).
+// 특정 포트의 dev 서버가 도는 세션 찾기 (그 워크트리에서 재시작하기 위함).
 // 포트의 '실제' 프로세스 cwd(진실의 원천)를 최우선으로 — 스냅샷 포트는 stale일 수 있어 신뢰 안 함.
-//  반환: { cwd(=env를 바꿀 워크트리), session(제자리 재시작 가능한 dev tmux, 없으면 null) }
+//  반환: { cwd(=env를 바꿀 워크트리), session(제자리 재시작 가능한 dev 세션, 없으면 null) }
 async function devSessionForPort(port) {
   const p = Number(port)
   if (!p) return null
@@ -418,42 +583,70 @@ async function devSessionForPort(port) {
         res(m ? m.slice(1) : null)
       }),
     )
-  const sessions = await list()
-  const snap = loadSnap()
-  const snapKeyFor = (name) => (snap[name] ? name : Object.keys(snap).find((k) => baseName(k) === baseName(name)))
-  const devKey = (x) => { const k = snapKeyFor(x.name); return k && snap[k].kind === 'dev' ? k : null }
+  const sess = await list()
+  const isDev = (s) => sessions.get(s.name)?.kind === 'dev'
   if (procCwd) {
-    // 실제 cwd와 일치하는 'dev' tmux 세션이 있으면 제자리 재시작 가능
-    const s = sessions.find((x) => x.cwd === procCwd && devKey(x))
-    const k = s ? devKey(s) : null
-    return { cwd: procCwd, hasSession: !!s, name: s ? s.name : null, id: s ? s.id : null, command: (k && snap[k].command) || `npm run dev -- -p ${p}`, port: p }
+    // 실제 cwd와 일치하는 'dev' 세션이 있으면 제자리 재시작 가능
+    const s = sess.find((x) => x.cwd === procCwd && isDev(x))
+    return { cwd: procCwd, hasSession: !!s, name: s ? s.name : null, id: s ? s.id : null, command: (s && s.command) || `npm run dev -- -p ${p}`, port: p }
   }
-  // ② 포트에 프로세스가 없으면(꺼짐) → 스냅샷 dev 세션으로 폴백 (그 세션에서 다시 띄움)
-  const s = sessions.find((x) => { const k = devKey(x); return k && snap[k].port === p })
+  // ② 포트에 프로세스가 없으면(꺼짐) → dev 세션 중 그 포트로 기록된 것으로 폴백
+  const s = sess.find((x) => isDev(x) && portOf(x.command) === p)
   if (!s) return null
-  const k = devKey(s)
-  return { cwd: s.cwd, hasSession: true, name: s.name, id: s.id, command: (k && snap[k].command) || `npm run dev -- -p ${p}`, port: p }
+  return { cwd: s.cwd, hasSession: true, name: s.name, id: s.id, command: s.command || `npm run dev -- -p ${p}`, port: p }
 }
 // dev 세션을 그 터미널에서 재시작 — Ctrl-C(정상 종료·포트 해제) 후 원래 dev 명령 재실행. 같은 포트/워크트리 유지.
 async function restartDevSession({ id, name, command, port }) {
   const tgt = id || name
   if (!tgt) return { ok: false, error: '세션 지정 필요' }
+  const entry = sessions.get(tgt)
+  if (!entry || entry.exited) return { ok: false, error: '세션 없음' }
   const cmd = command || `npm run dev -- -p ${port}`
-  await tmux(['send-keys', '-t', tgt, 'C-c'])
+  entry.proc.write('\x03') // Ctrl-C
   await new Promise((r) => setTimeout(r, 1800)) // 포트 해제 대기
-  await tmux(['send-keys', '-t', tgt, '-l', cmd])
-  await tmux(['send-keys', '-t', tgt, 'Enter'])
+  entry.proc.write(cmd)
+  entry.proc.write('\r')
+  entry.command = cmd
   return { ok: true, restartedIn: name || tgt, command: cmd }
 }
 
 // 텍스트/명령 한 줄 전송(원샷 — 진짜 입력은 WS로)
 async function send({ name, message, enter = true }) {
   if (!name || !name.startsWith(PREFIX) || !message) return { ok: false, error: 'name·message 필수' }
-  if (!(await exists(name))) return { ok: false, error: '세션 없음' }
-  const typed = await tmux(['send-keys', '-t', name, '-l', message])
-  if (!typed.ok) return { ok: false, error: typed.err }
-  if (enter) await tmux(['send-keys', '-t', name, 'Enter'])
+  const entry = sessions.get(name)
+  if (!entry || entry.exited) return { ok: false, error: '세션 없음' }
+  entry.proc.write(message)
+  if (enter) entry.proc.write('\r')
   return { ok: true, sent: true }
 }
 
-module.exports = { list, listLive, status, create, kill, send, exists, startDevServer, stopDevServer, devSessionForPort, restartDevSession, freePort, restorable, restore, forget, baseName, PREFIX, checkAvailable, trustFolder }
+module.exports = {
+  list,
+  listLive,
+  status,
+  create,
+  kill,
+  send,
+  exists,
+  // "관제에게 질문하는 버튼" — send()는 한 방 던지고 끝(제출 확인 없음)이라 세션이 아직 스플래시
+  // 렌더링 중이면 씹혀 유실될 수 있다. injectSeed는 원래 새 세션 최초 지시 전용이었지만 화면에
+  // 실제로 찍혔는지 확인하고 제출까지 재시도하는 유일한 함수라 control.cjs의 ask()도 그대로 재사용한다.
+  injectSeed,
+  startDevServer,
+  stopDevServer,
+  devSessionForPort,
+  restartDevSession,
+  freePort,
+  restorable,
+  restore,
+  forget,
+  baseName,
+  PREFIX,
+  checkAvailable,
+  trustFolder,
+  // WS 브리지(index.cjs) 전용 — 세션 레지스트리에 직접 접근.
+  ensureNamed,
+  attachWs,
+  write,
+  resize,
+}

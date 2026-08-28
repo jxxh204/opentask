@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Docs — OpenTask</title>
+	<meta name="description" content="OpenTask 사용 설명서 — 퀵스타트, 설치, 핵심 개념, 기능별 사용 방법, 설정, 보안, FAQ." />
+	<link rel="icon" type="image/png" href="/favicon-32.png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+	<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+	<header class="nav">
+		<div class="container nav-inner">
+			<a class="brand" href="/">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<nav class="nav-links">
+				<a href="/#features">기능</a>
+				<a href="/docs.html" class="active">Docs</a>
+				<a href="/changelog.html">릴리스 노트</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+			</nav>
+			<div class="nav-cta">
+				<a class="lang-switch" href="/en/docs.html">EN</a>
+				<a class="btn btn-ghost" href="/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/download.html">다운로드</a>
+			</div>
+			<button class="nav-toggle" aria-label="메뉴 열기">☰</button>
+		</div>
+	</header>
+
+	<main class="container docs-shell">
+		<aside class="docs-nav">
+			<div class="group-label">시작하기</div>
+			<a href="#overview">개요</a>
+			<a href="#quickstart">퀵스타트</a>
+			<a href="#install">설치</a>
+			<a href="#concepts">핵심 개념</a>
+
+			<div class="group-label">사용 방법</div>
+			<a href="#use-tasks">태스크 만들기</a>
+			<a href="#use-subtasks">서브태스크 · 워크트리</a>
+			<a href="#use-taskmanager">태스크 매니저</a>
+			<a href="#use-diagram">다이어그램 보드</a>
+			<a href="#use-panes">터미널 · 서버 · 브라우저</a>
+			<a href="#use-calendar">캘린더</a>
+			<a href="#use-pr-review">PR 리뷰</a>
+			<a href="#use-cronjobs">크론잡</a>
+			<a href="#use-model-policy">모델 배정</a>
+			<a href="#use-team-rules">팀 규칙</a>
+			<a href="#use-control">관제</a>
+
+			<div class="group-label">레퍼런스</div>
+			<a href="#features">기능 요약</a>
+			<a href="#configuration">설정</a>
+
+			<div class="group-label">운영</div>
+			<a href="#security">보안</a>
+			<a href="#faq">FAQ</a>
+
+			<div class="group-label">참여</div>
+			<a href="/changelog.html">릴리스 노트 ↗</a>
+			<a href="#contributing">기여하기</a>
+		</aside>
+
+		<div class="docs-content">
+			<h1>Docs</h1>
+			<p class="lede">OpenTask를 설치하고, 각 기능을 실제로 어떻게 쓰는지, 무엇을 조심해야 하는지 정리했습니다.</p>
+
+			<section class="docs-section" id="overview">
+				<h2>개요</h2>
+				<p>
+					OpenTask는 태스크 아래 서브태스크를 만들면 각각 격리된 git worktree + AI 코딩 에이전트
+					(Claude Code 등)가 붙는 병렬 개발 관제탑입니다. 태스크 생성 → 서브태스크(워크트리) →
+					에이전트 웨이브 → PR 리뷰 → 캘린더 반영까지 이어지는 루프를 GitHub · 터미널 탭을 오가지
+					않고 한 곳에서 살아있는 상태로 조작하는 것이 목적입니다.
+				</p>
+				<p>
+					원래는 1인 운영자(오퍼레이터) 도구로 시작했고, 오픈소스로 공개되며 여러 명이 함께 여러
+					워크트리에서 동시에 도는 에이전트 · PR · 모니터링 신호를 감시하는 소규모 개발팀 대상으로
+					대상 범위가 넓어졌습니다.
+				</p>
+				<div class="callout">
+					<strong>두 가지 실행 형태.</strong> ① 소스에서 직접 띄우는 개발 모드(Vite dev server + Node
+					백엔드가 별도 프로세스), ② 패키징된 macOS Electron 데스크톱 앱. 두 형태 모두 동일한
+					프론트/백엔드 코드를 쓰며 기능 차이는 없습니다 — Electron은 배포 포맷일 뿐, 별도 기능
+					세트가 아닙니다. 패키징된 앱은 백엔드를 별도 detached 프로세스로 띄우므로, 앱 창을 완전히
+					종료해도(Cmd+Q) 진행 중이던 에이전트 세션은 계속 돌아갑니다.
+				</div>
+			</section>
+
+			<section class="docs-section" id="quickstart">
+				<h2>퀵스타트</h2>
+				<p>정식 서명 빌드가 나오기 전까지는 소스에서 3단계로 바로 띄워볼 수 있습니다.</p>
+				<div class="codeblock"><code>git clone https://github.com/jxxh204/opentask
+cd opentask/app
+npm install
+npm run electron:dev</code></div>
+				<p>
+					명령이 끝나면 OpenTask 데스크톱 창이 뜹니다. 아무 설정도 하지 않은 상태라면 <strong>데모
+					데이터</strong>로 전체 화면 구조(태스크 트리 · 캘린더 · 크론잡 · 관제)를 바로 둘러볼 수
+					있습니다. 실제 내 레포에 연결하려면 온보딩 화면에서 "레포 추가"를 누르세요 — 자세한
+					절차는 <a href="#install">설치</a>와 <a href="#use-tasks">태스크 만들기</a>를 참고하세요.
+				</p>
+				<div class="callout">
+					<strong>더 빠르게 보고만 싶다면.</strong> <code>npm run electron:dev</code> 대신
+					<code>npm run start</code>를 실행하면 브라우저에서 <code>http://localhost:5180</code>으로
+					같은 화면을 볼 수 있습니다(데스크톱 창 없이).
+				</div>
+			</section>
+
+			<section class="docs-section" id="install">
+				<h2>설치</h2>
+
+				<h3>방법 A · 다운로드 앱 (준비 중)</h3>
+				<p>
+					서명 · 공증된 macOS 앱은 현재 준비 중입니다. 공개되면 <a href="/download.html">다운로드 페이지</a>에서
+					바로 받을 수 있습니다.
+				</p>
+
+				<h3>방법 B · 소스에서 빌드 (지금 바로 가능)</h3>
+				<p>저장소를 클론하고 <code>app/</code> 폴더에서 실행합니다.</p>
+				<div class="codeblock"><code>git clone https://github.com/jxxh204/opentask
+cd opentask/app
+npm install
+npm run start   # 백엔드(8770) + 프론트(5180) 동시 실행</code></div>
+				<p>데스크톱 창(Electron)으로 바로 띄우고 싶다면:</p>
+				<div class="codeblock"><code>npm run electron:dev</code></div>
+				<p>
+					처음 실행하면 온보딩 화면에서 레포를 연결합니다. 아직 연결하지 않아도 데모 데이터로
+					화면 구조를 먼저 둘러볼 수 있습니다.
+				</p>
+
+				<h3>요구 사항</h3>
+				<table class="feature-table">
+					<tr><th>항목</th><th>내용</th></tr>
+					<tr><td>Node.js</td><td>20 이상 (<code>package.json</code>의 <code>engines</code> 기준)</td></tr>
+					<tr><td>OS</td><td>macOS (Electron 데스크톱 앱 기준). 소스는 크로스플랫폼 실행을 막진 않지만 공식 지원은 macOS만</td></tr>
+					<tr><td>패키지 매니저</td><td>npm 또는 yarn 둘 다 지원(둘 다 lockfile 존재)</td></tr>
+				</table>
+
+				<h3>문제 해결 — 네이티브 모듈 빌드 오류</h3>
+				<p>
+					<code>better-sqlite3</code> · <code>node-pty</code>는 네이티브 모듈이라 Node/Electron
+					버전이 바뀌면 다시 빌드해야 할 수 있습니다.
+				</p>
+				<div class="codeblock"><code># Node용으로 다시 빌드(순수 npm run start / npm run server 용)
+npm run rebuild:node
+
+# Electron용으로 다시 빌드(electron:dev / electron:build 용)
+npm run electron:rebuild</code></div>
+			</section>
+
+			<section class="docs-section" id="concepts">
+				<h2>핵심 개념</h2>
+
+				<h3>태스크와 서브태스크</h3>
+				<p>
+					태스크(메인 태스크, 실제로는 "폴더")는 작업을 묶는 단위입니다. 그 아래 서브태스크를
+					만들면 각각 격리된 git worktree + 실제 tmux/Claude Code 터미널 세션에 매핑됩니다. 실제
+					코드 작업은 전부 서브태스크 단위 워크트리에서만 일어나고, 메인 태스크 자신은
+					오케스트레이션(지휘)만 담당합니다.
+				</p>
+
+				<h3>태스크 매니저 · 웨이브</h3>
+				<p>
+					태스크 매니저(오케스트레이터)는 별도 "시작" 버튼이 없습니다 — 태스크에 서브태스크가
+					생기는 순간 자동으로 통제를 시작해, 서브태스크를 순차 "웨이브"로 하나씩 지휘합니다.
+					라이브 터미널과 함께, 지휘자가 스스로 기록한 계획 · 지시 · 보고 · 메시지 · 오류 로그를
+					구조화된 트리로 볼 수 있습니다.
+				</p>
+				<div class="callout warn">
+					<strong>v1 제약.</strong> 웨이브 진행 상태는 인메모리입니다 — 앱(서버)을 재시작하면
+					소실됩니다.
+				</div>
+
+				<h3>다이어그램 (조립 라인 보드)</h3>
+				<p>
+					한 태스크의 서브태스크 체인을 왼쪽 → 오른쪽 조립 라인처럼 요약해서 보여주는 보드입니다.
+					서브태스크별로 대기 · 진행 중 · 세션 종료 상태와 예정 기간을 카드로 확인할 수 있습니다.
+				</p>
+
+				<h3>캘린더 · 차단 기간</h3>
+				<p>
+					서브태스크의 예정일을 주/월 단위 캘린더에 배치하고 드래그로 재조정합니다. QA 기간처럼
+					작업을 진행하면 안 되는 구간은 차단 기간으로 표시해 캘린더에 줄무늬로 남깁니다(실제로
+					일정 등록을 막지는 않습니다).
+				</p>
+
+				<h3>팀 규칙</h3>
+				<p>
+					레포마다 다른 개발 관행(브랜치 네이밍, 커밋 포맷, 사전 문서화 요구 등)을 코드에 박지
+					않고 자유 텍스트로 등록해두면, 그 내용이 그대로 에이전트 지시문에 실려 전달됩니다.
+					OpenTask 코드는 이 텍스트를 파싱하지 않습니다 — "수행"은 그 지시문을 읽는 에이전트가
+					직접 가진 shell/MCP 툴로 합니다.
+				</p>
+
+				<h3>모델 배정</h3>
+				<p>
+					설계 · 태스크 매니저 · 관제 · 코딩 · 리뷰 · QA 등 16개 이상의 작업 종류별로 어떤 AI
+					모델을 쓸지 정책으로 지정합니다.
+				</p>
+
+				<h3>관제</h3>
+				<p>
+					태스크 하나가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 대화로 조작하는
+					최상위 에이전트입니다. 태스크 매니저와 이름 · 자리를 분리해, "이 태스크"가 아니라
+					"이 앱 전체"를 지휘합니다.
+				</p>
+
+				<h3>살아있는 연결 — PR 리뷰</h3>
+				<p>
+					PR 리뷰 코멘트에 <strong>리뷰 적용</strong>을 누르면 해당 서브태스크의 살아있는 터미널
+					세션에 실제 지시가 주입되고, 커밋 · 푸시까지 진행됩니다. <strong>리뷰 항의</strong>를
+					누르면 실제 GitHub에 공개 답글이 게시됩니다.
+				</p>
+				<div class="callout warn">
+					<strong>되돌릴 수 없는 액션.</strong> 위 두 동작은 로그성 정보가 아니라 실제로 되돌릴 수
+					없는 액션입니다. OpenTask는 이런 액션을 시각적으로 명확히 구분해 보여줍니다.
+				</div>
+			</section>
+
+			<section class="docs-section" id="use-tasks">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><circle cx="17" cy="16" r="3"/><path d="M17 14.5v3M15.5 16h3"/></svg></span>
+					<h2>사용 방법 — 태스크 만들기</h2>
+				</div>
+				<ol>
+					<li>사이드바 검색창 위 <strong>"태스크 추가"</strong>(또는 캘린더 빈 칸의 <strong>"+ 작업
+						추가"</strong>)를 누르면 <strong>"일감 생성"</strong> 모달이 열립니다.</li>
+					<li>상단 탭에서 <strong>메인 태스크</strong> / <strong>서브태스크</strong>를 고릅니다.</li>
+					<li>제목 칸에 직접 타이핑하거나, <strong>Figma · 슬랙 스레드 · Notion · PR 링크를 그대로
+						붙여넣으면</strong> 자동으로 종류가 인식됩니다.</li>
+					<li>예정일을 지정하면 캘린더에도 곧바로 반영됩니다(비워둘 수도 있음).</li>
+				</ol>
+				<p>
+					메인 태스크로 생성하면 그 순간 태스크 트리에 새 폴더가 생기고, 서브태스크가 붙는
+					즉시 <a href="#use-taskmanager">태스크 매니저</a>가 자동으로 오케스트레이션을 시작합니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-subtasks">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="17.5" cy="12" r="2.2"/><path d="M6 7.2V16.8M6 9c0 3 3 3 6.3 3h2.7"/></svg></span>
+					<h2>사용 방법 — 서브태스크 · 워크트리</h2>
+				</div>
+				<ol>
+					<li>"일감 생성" 모달에서 <strong>서브태스크</strong> 탭 선택 →
+						<strong>"메인 태스크 고르기…"</strong>로 대상 메인 태스크를 지정합니다(그 자리에서
+						새 메인 태스크를 만들 수도 있습니다).</li>
+					<li>제출하면 그 서브태스크 전용 git worktree + 브랜치가 자동으로 만들어집니다. 실제 코드
+						작업은 여기서만 일어납니다.</li>
+				</ol>
+				<p>
+					이미 로컬에 만들어둔 워크트리(브랜치)를 그대로 가져오고 싶다면, 사이드바 <strong>"워크트리"</strong>
+					섹션에서 아직 태스크로 등록되지 않은 브랜치 옆 <strong>"연결"</strong> 버튼을 누르면
+					새 워크트리를 만들지 않고 그 브랜치를 그대로 태스크로 편입합니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-taskmanager">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 2.5L7 14M12.5 14h4"/></svg></span>
+					<h2>사용 방법 — 태스크 매니저</h2>
+				</div>
+				<ul>
+					<li>서브태스크가 생기는 순간 별도 버튼 없이 자동으로 시작됩니다.</li>
+					<li>탭 본문의 라이브 터미널에 지휘자(conductor) 세션이 그대로 붙어 있어, 실제 대화가
+						여기서 오갑니다. 직접 지시하고 싶으면 <strong>터미널에 바로 타이핑</strong>하면
+						됩니다 — 별도 "메시지 보내기" 입력창은 없습니다.</li>
+					<li>"대화 로그"에서는 지휘자가 스스로 기록한 계획 · 지시 · 보고 · 메시지 · 오류를
+						구조화된 트리로 볼 수 있습니다(raw 터미널 스크롤과 별개).</li>
+				</ul>
+			</section>
+
+			<section class="docs-section" id="use-diagram">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="9" width="5.5" height="6" rx="1.1"/><rect x="9.2" y="9" width="5.5" height="6" rx="1.1"/><rect x="17" y="9" width="5.5" height="6" rx="1.1"/><path d="M7 12h2.2M14.7 12h2.3"/></svg></span>
+					<h2>사용 방법 — 다이어그램 보드</h2>
+				</div>
+				<p>
+					메인 태스크 탭에서 <strong>"다이어그램"</strong>을 열면, 그 태스크의 서브태스크 체인을
+					왼쪽 → 오른쪽 카드로 요약해서 보여줍니다. 카드마다 대기 · 진행 중 · 세션 종료 상태 점과
+					예정 기간이 표시되어, 지금 뭐가 어디까지 됐는지 한눈에 파악할 수 있습니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-panes">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18"/><path d="M6.5 12.3l2 1.7-2 1.7"/></svg></span>
+					<h2>사용 방법 — 터미널 · 로컬 서버 · 브라우저 · 클로드 세션</h2>
+				</div>
+				<p>서브태스크 탭 상단의 <strong>"+"</strong>로 아래 패널들을 추가로 열 수 있습니다.</p>
+				<table class="feature-table">
+					<tr><th>패널</th><th>용도</th></tr>
+					<tr><td>터미널</td><td>그 워크트리의 실제 tmux + node-pty 터미널. 여러 개 동시에 열어 여러 에이전트를 병행 조작 가능</td></tr>
+					<tr><td>로컬 서버</td><td>워크트리의 dev 서버를 바로 실행해 확인</td></tr>
+					<tr><td>브라우저</td><td>임베디드 브라우저로 실행 결과를 새 창 없이 미리보기</td></tr>
+					<tr><td>클로드 세션</td><td>버튼 없이 탭을 열면 바로 시작되는 독립 Claude Code 세션</td></tr>
+				</table>
+				<p>
+					메인 태스크 탭에는 추가로 <strong>상세 · 태스크 매니저 · 다이어그램 · 팀 규칙</strong>도
+					같은 "+"로 열 수 있습니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-calendar">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><path d="M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17.5h1M11.5 17.5h1" /></svg></span>
+					<h2>사용 방법 — 캘린더</h2>
+				</div>
+				<ol>
+					<li>사이드바 상단 <strong>"캘린더"</strong> 버튼으로 엽니다.</li>
+					<li>주/월 보기를 전환하며 일정을 훑어봅니다.</li>
+					<li>빈 칸의 <strong>"+ 작업 추가"</strong>로 그 날짜를 예정일로 하는 태스크를 바로 만들 수
+						있습니다.</li>
+					<li>일정 카드를 <strong>드래그</strong>하면 그 서브태스크의 실제 예정일이 바뀝니다(수동
+						입력과 동일하게 즉시 반영).</li>
+					<li>툴바의 <strong>"+ 일정 막기"</strong>로 QA 기간처럼 작업하면 안 되는 구간에 이유를
+						적어 등록합니다 — 캘린더에 줄무늬로 표시될 뿐, 실제 일정 등록 자체를 막지는
+						않습니다.</li>
+				</ol>
+			</section>
+
+			<section class="docs-section" id="use-pr-review">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-4 4V5z"/><path d="M8.5 10l2 2 4-4"/></svg></span>
+					<h2>사용 방법 — PR 리뷰</h2>
+				</div>
+				<ol>
+					<li>사이드바 태스크 행의 배지를 확인합니다 — 처리할 리뷰가 있으면 <strong>"이슈 N"</strong>,
+						없으면 <strong>"리뷰 완료"</strong>로 표시됩니다.</li>
+					<li>배지를 클릭하면 PR 리뷰 모달이 열립니다.</li>
+					<li>코멘트별로 <strong>리뷰 적용</strong>(해당 서브태스크의 살아있는 세션에 지시를
+						주입 — 확인 후 실제로 커밋 · 푸시까지 진행) 또는 <strong>리뷰 항의</strong>(왜 맞지
+						않는지 사유를 적으면 그대로 GitHub에 공개 답글로 게시)를 선택합니다.</li>
+				</ol>
+			</section>
+
+			<section class="docs-section" id="use-cronjobs">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><circle cx="15.5" cy="15.5" r="3.2" /><path d="M15.5 14v1.6l1.1.9" /></svg></span>
+					<h2>사용 방법 — 크론잡</h2>
+				</div>
+				<ol>
+					<li>사이드바 상단 <strong>"크론잡"</strong> 버튼 → 목록에서 새 자동화를 추가합니다.</li>
+					<li><strong>자동화 이름</strong>과 주기를 정합니다 — <strong>반복 간격</strong>(N분마다),
+						<strong>매일</strong>(시:분), <strong>매주</strong>(요일 + 시:분) 중 하나.</li>
+					<li><strong>생성할 일감 제목</strong>과 설명(선택), 레포가 여럿이면 대상 레포를
+						지정합니다.</li>
+				</ol>
+				<p>
+					정해진 시각이 되면 실제로 새 메인 태스크가 자동 생성됩니다. 액션은 <strong>"새 일감
+					생성"</strong> 하나로 의도적으로 제한되어 있습니다 — "AI가 스스로 작업 범위를 정하지
+					않는다"는 원칙에 따라, 사람이 미리 정한 스케줄만 그대로 실행합니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-model-policy">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M4 12h16M4 17h7"/><circle cx="16" cy="7" r="1.8"/><circle cx="9" cy="17" r="1.8"/></svg></span>
+					<h2>사용 방법 — 모델 배정</h2>
+				</div>
+				<p>
+					전역 탭 <strong>"모델 배정"</strong>에서, 설계 · 태스크 매니저(서브태스크 체인 조율) ·
+					관제(캘린더 · 크론잡 · 설정) · 코딩 · PR 리뷰 · 리뷰 반영 · QA 테스트케이스 생성 등
+					작업 종류마다 드롭다운으로 사용할 모델(Fable 5 / Opus 4.8 / Sonnet 4.6 등)을 지정합니다.
+					속도가 중요한 작업엔 가벼운 모델을, 판단이 중요한 작업엔 상위 모델을 배정하는 식으로
+					씁니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-team-rules">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
+					<h2>사용 방법 — 팀 규칙</h2>
+				</div>
+				<p>메인 태스크 탭을 열면 기본으로 함께 열리는 <strong>"팀 규칙"</strong>에서 레포당 자유
+					텍스트 4칸을 채울 수 있습니다.</p>
+				<table class="feature-table">
+					<tr><th>칸</th><th>언제 쓰이나</th></tr>
+					<tr><td>일반 규칙</td><td>모든 에이전트 지시문에 항상 함께 실림 — 커밋 메시지 포맷, PR 템플릿 등</td></tr>
+					<tr><td>태스크 작성 규칙</td><td>서브태스크를 쓰거나 다듬을 때 참고할 문체 · 필수 항목(예: 완료 기준 포함)</td></tr>
+					<tr><td>워크트리 · 브랜치 생성 규칙</td><td>브랜치 네이밍 컨벤션. 채우면 브랜치명이 자동으로 영문 슬러그로 번역됨</td></tr>
+					<tr><td>개발 시작 전 필수 조건</td><td>코드 작성 전에 먼저 끝내야 할 절차(예: 노션 스펙 문서 작성 후 링크 채우기)</td></tr>
+				</table>
+				<p>
+					OpenTask 코드는 이 텍스트의 내용을 파싱하지 않습니다 — 그대로 에이전트 지시문에 얹혀
+					전달되고, 실제 "수행"은 그 지시문을 읽는 에이전트가 이미 가진 shell/MCP 툴로 합니다.
+					네 칸을 전부 비워두면 지금과 완전히 동일하게 동작합니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-control">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6" /><circle cx="12" cy="11" r="2" /><path d="M12 13v8M8.5 21h7" /><path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.7a9 9 0 0 1 13 0" /></svg></span>
+					<h2>사용 방법 — 관제</h2>
+				</div>
+				<p>
+					사이드바 상단 <strong>"관제"</strong> 버튼 — 탭을 열면 버튼 없이 바로 대화 세션이
+					시작됩니다. 특정 태스크가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 자연어로
+					조작할 때 씁니다.
+				</p>
+				<p class="lede" style="margin:0;">예: "다음 주 화요일부터 금요일까지 QA 기간으로 막아줘",
+					"매일 아침 9시에 백로그 정리하는 크론잡 만들어줘"</p>
+			</section>
+
+			<section class="docs-section" id="features">
+				<h2>기능 요약</h2>
+				<p>대상 레포에 연결하면 아래 탭들이 워크스페이스 안에서 열립니다. 각 항목의 실제 사용법은
+					위 "사용 방법"을 참고하세요.</p>
+				<table class="feature-table">
+					<tr><th>탭</th><th>하는 일</th></tr>
+					<tr><td>태스크 매니저</td><td>서브태스크가 생기면 자동으로 시작되는 AI 지휘자. 순차 웨이브 실행 + 라이브 터미널 + 계획/지시/보고 로그</td></tr>
+					<tr><td>다이어그램</td><td>서브태스크 체인을 조립 라인처럼 요약한 보드 — 상태(대기/진행/종료)와 예정 기간</td></tr>
+					<tr><td>상세</td><td>태스크(폴더) 상세 — 기간 · 설명 · 개발 계획, AI 제안 적용</td></tr>
+					<tr><td>서브태스크</td><td>서브태스크 개별 상세 패널</td></tr>
+					<tr><td>터미널</td><td>서브태스크 워크트리의 실제 tmux + node-pty 터미널</td></tr>
+					<tr><td>로컬 서버</td><td>워크트리의 dev 서버를 바로 띄워 확인</td></tr>
+					<tr><td>브라우저</td><td>임베디드 브라우저로 실행 결과 미리보기</td></tr>
+					<tr><td>클로드 세션</td><td>버튼 없이 탭을 열면 바로 시작되는 즉석 Claude Code 세션</td></tr>
+					<tr><td>팀 규칙</td><td>레포당 자유 텍스트 4칸으로 에이전트 지시문에 실릴 팀 규칙 정의</td></tr>
+					<tr><td>크론잡</td><td>N분마다 · 매일 · 매주 예약 — 액션은 "새 일감 생성"으로 의도적으로 제한</td></tr>
+					<tr><td>모델 배정</td><td>설계 · 태스크 매니저 · 코딩 · 리뷰 · QA 등 작업 종류별 AI 모델 정책</td></tr>
+					<tr><td>캘린더</td><td>서브태스크 일정을 주/월 단위로 배치 · 드래그 재조정, 차단 기간 표시</td></tr>
+					<tr><td>관제</td><td>태스크 하나가 아니라 앱 전체(캘린더 · 크론잡 · 설정)를 대화로 조작</td></tr>
+				</table>
+				<h3>PR 리뷰</h3>
+				<p>
+					태스크/서브태스크에 연결된 PR에 리뷰 코멘트가 달리면 사이드바 배지로 알려주고, 모달에서
+					코멘트별로 <strong>리뷰 적용</strong>(커밋 · 푸시까지 진행) 또는 <strong>리뷰 항의</strong>
+					(GitHub에 공개 답글)를 선택할 수 있습니다.
+				</p>
+			</section>
+
+			<section class="docs-section" id="configuration">
+				<h2>설정</h2>
+				<p>
+					초기 설정(Setup)을 마치기 전에는 메인 화면 전체가 게이팅되어 접근할 수 없습니다.
+					설정 전에는 데모 데이터로 동작합니다.
+				</p>
+				<h3>연동</h3>
+				<ul>
+					<li><strong>필수</strong> — GitHub (PR/이슈/CI 상태를 읽고, 필요 시 코멘트를 게시)</li>
+					<li><strong>선택</strong> — Sentry, AWS, Slack, Notion, Figma. 필요한 것만 연결하면 됩니다.</li>
+				</ul>
+				<h3>네트워크</h3>
+				<p>
+					기본 바인딩은 <code>127.0.0.1</code>(loopback)입니다. LAN에 열려면
+					<code>OPENRM_HOST=0.0.0.0</code>으로 설정하고, 이 경우 토큰 인증이 자동으로 요구됩니다
+					(콘솔에 출력).
+				</p>
+				<div class="callout warn">
+					<strong>주의.</strong> git/셸/터미널을 직접 실행할 수 있는 서버입니다. 신뢰할 수 없는
+					네트워크에는 노출하지 마세요.
+				</div>
+			</section>
+
+			<section class="docs-section" id="security">
+				<h2>보안</h2>
+				<p>
+					로컬 실행을 전제로 설계되었습니다. 데이터는 내 컴퓨터에 저장되며(패키징 앱은 OS 표준
+					사용자 데이터 폴더), 외부 서버로 전송되지 않습니다.
+				</p>
+				<p>
+					되돌릴 수 없는 실제 액션(GitHub 공개 게시, 살아있는 세션에 지시 주입)은 일반 로그성
+					정보와 시각적으로 명확히 구분되도록 설계되어 있습니다.
+				</p>
+				<div class="callout">
+					<strong>미확정 영역.</strong> 다중 사용자 동시 접근/권한 분리는 아직 설계되지 않았습니다 —
+					1인 운영자 도구에서 팀 도구로 확장 중인 과도기입니다.
+				</div>
+			</section>
+
+			<section class="docs-section" id="faq">
+				<h2>FAQ</h2>
+
+				<div class="faq-item">
+					<h3>Windows / Linux도 지원하나요?</h3>
+					<p>현재는 macOS 빌드만 제공합니다. 오픈소스이므로 소스에서 직접 다른 플랫폼용으로 빌드를 시도해볼 수는 있지만, 공식 지원 대상은 아직 아닙니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>여러 명이 같이 쓸 수 있나요?</h3>
+					<p>소규모 팀이 함께 쓰는 것을 목표로 하지만, 다중 사용자 동시 접근/권한 분리는 아직 설계되지 않았습니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>앱(서버)을 재시작하면 진행 상태가 사라지나요?</h3>
+					<p>오케스트레이터 웨이브 상태는 인메모리라 재시작 시 소실됩니다 — v1 범위로 명시된 제약입니다. 다만 패키징된 앱은 백엔드가 detached 프로세스로 분리돼 있어, 앱 창만 닫는 것으로는(Cmd+Q 포함) 진행 중이던 세션이 죽지 않습니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>데이터는 어디에 저장되나요?</h3>
+					<p>로컬 컴퓨터에 저장됩니다. 패키징된 앱은 OS 표준 사용자 데이터 폴더를 사용합니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>오픈소스인가요?</h3>
+					<p>네, MIT 라이선스로 공개되어 있습니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>이전 이름이 있었나요?</h3>
+					<p>내부 코드네임 "MRM" → "OpenRM"을 거쳐 "OpenTask"로 리브랜딩했습니다 — 무엇을 최상위 단위로 삼는가를 기준으로 태스크 중심 정체성을 이름에 반영했습니다.</p>
+				</div>
+			</section>
+
+			<section class="docs-section" id="contributing">
+				<h2>기여하기</h2>
+				<p>버그 리포트, 기능 제안, PR은 GitHub 저장소에서 받습니다. 무엇이 바뀌었는지는 <a href="/changelog.html">릴리스 노트</a>에서 확인하세요.</p>
+				<div class="callout">
+					<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener"><strong>github.com/jxxh204/opentask</strong></a> ·
+					라이선스는 <a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">MIT</a>이며 저장소 루트 <code>LICENSE</code> 파일을 따릅니다.
+				</div>
+			</section>
+		</div>
+	</main>
+
+	<footer>
+		<div class="container footer-inner">
+			<a class="brand" href="/">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<div class="footer-links">
+				<a href="/docs.html">Docs</a>
+				<a href="/changelog.html">릴리스 노트</a>
+				<a href="/download.html">다운로드</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">라이선스 (MIT)</a>
+			</div>
+			<div class="footer-copy">© 2026 OpenTask</div>
+		</div>
+	</footer>
+
+	<script type="module" src="/src/main.js"></script>
+</body>
+</html>

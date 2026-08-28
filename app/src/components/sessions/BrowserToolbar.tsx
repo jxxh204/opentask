@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useDebugStore } from '../../store/useDebugStore'
-import { useSetupStore } from '../../store/useSetupStore'
 import ServerPane from './ServerPane'
 import styles from './BrowserToolbar.module.css'
 
@@ -25,11 +23,9 @@ const GLOBE = (
 		<path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
 	</svg>
 )
-const TARGET = (
+const DEVTOOLS = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-		<circle cx="12" cy="12" r="8" />
-		<circle cx="12" cy="12" r="2.4" />
-		<path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+		<path d="M8 4L3 12l5 8M16 4l5 8-5 8M14 4l-4 16" />
 	</svg>
 )
 const OVERFLOW = (
@@ -40,28 +36,48 @@ const OVERFLOW = (
 	</svg>
 )
 
-// 프로토타입의 실제 브라우저 크롬 스타일 툴바(뒤/앞/새로고침 + 주소창) — 기존 TargetPickerBar/
-// HierarchyBar를 대체한다. HierarchyBar의 ENV/SERVER/SESSION 브레드크럼은 애초에 고정 fixture라
-// 실데이터가 아니었고, 디바이스 토글·요소 선택은 여기 한 줄에 다시 모았다(⋯ 더보기 안 디바이스 토글).
-// env 버튼은 ServerPane(워크트리별 .env.local 실편집)을 드롭다운으로 그대로 재사용 — "로컬 서버" 탭에
-// 가지 않고도 바로 편집할 수 있게.
-export default function BrowserToolbar({ taskId, cwd }: { taskId: string; cwd: string | null }) {
-	const sessionId = useDebugStore((s) => s.sessionId)
-	const connecting = useDebugStore((s) => s.connecting)
-	const sessionError = useDebugStore((s) => s.sessionError)
-	const startSession = useDebugStore((s) => s.startSession)
-	const stopSession = useDebugStore((s) => s.stopSession)
-	const device = useDebugStore((s) => s.device)
-	const setDevice = useDebugStore((s) => s.setDevice)
-	const selecting = useDebugStore((s) => s.selecting)
-	const toggleSelect = useDebugStore((s) => s.toggleSelect)
-	const screenshotNonce = useDebugStore((s) => s.screenshotNonce)
-	const configuredDevUrl = useSetupStore((s) => s.connectors['dev']?.fields.devServerUrl)
-
-	const [url, setUrl] = useState(configuredDevUrl || 'http://localhost:3000')
+// 실제 브라우저 크롬 스타일 툴바(뒤/앞/새로고침 + 주소창) — Electron 네이티브 <webview>를 감싼다
+// (§BrowserPane.tsx — 예전 Playwright 스크린샷 폴링 방식을 대체). 뒤/앞/새로고침/주소창은 이제 진짜
+// webview 내비게이션에 그대로 연결된다(더 이상 흉내 UI가 아님). env 버튼은 ServerPane(워크트리별
+// .env.local 실편집)을 드롭다운으로 그대로 재사용.
+export default function BrowserToolbar({
+	url,
+	loading,
+	canGoBack,
+	canGoForward,
+	error,
+	device,
+	cwd,
+	onBack,
+	onForward,
+	onReload,
+	onNavigate,
+	onOpenDevtools,
+	onDeviceChange,
+}: {
+	url: string
+	loading: boolean
+	canGoBack: boolean
+	canGoForward: boolean
+	error: string | null
+	device: 'pc' | 'mobile'
+	cwd: string | null
+	onBack(): void
+	onForward(): void
+	onReload(): void
+	onNavigate(url: string): void
+	onOpenDevtools(): void
+	onDeviceChange(d: 'pc' | 'mobile'): void
+}) {
+	const [draft, setDraft] = useState(url)
 	const [envOpen, setEnvOpen] = useState(false)
 	const [overflowOpen, setOverflowOpen] = useState(false)
 	const rootRef = useRef<HTMLDivElement>(null)
+
+	// 사람이 주소창을 편집 중이 아닐 때만 실제 webview URL로 동기화 — 안 그러면 타이핑 중에 매 렌더마다 덮어써진다.
+	useEffect(() => {
+		setDraft(url)
+	}, [url])
 
 	useEffect(() => {
 		const onClick = (e: MouseEvent) => {
@@ -74,33 +90,38 @@ export default function BrowserToolbar({ taskId, cwd }: { taskId: string; cwd: s
 		return () => document.removeEventListener('click', onClick)
 	}, [])
 
+	const submit = () => {
+		if (draft.trim()) onNavigate(draft.trim())
+	}
+
 	return (
 		<div className={styles.toolbar} ref={rootRef}>
-			<span className={`${styles.iconBtn} ${styles.disabled}`}>{NAV_BACK}</span>
-			<span className={`${styles.iconBtn} ${styles.disabled}`}>{NAV_FWD}</span>
-			<span className={styles.iconBtn} onClick={() => sessionId && useDebugStore.setState({ screenshotNonce: screenshotNonce + 1 })} title="새로고침">
+			<span className={`${styles.iconBtn} ${canGoBack ? '' : styles.disabled}`} onClick={() => canGoBack && onBack()} title="뒤로">
+				{NAV_BACK}
+			</span>
+			<span className={`${styles.iconBtn} ${canGoForward ? '' : styles.disabled}`} onClick={() => canGoForward && onForward()} title="앞으로">
+				{NAV_FWD}
+			</span>
+			<span className={`${styles.iconBtn} ${loading ? styles.spinning : ''}`} onClick={onReload} title="새로고침">
 				{NAV_REFRESH}
 			</span>
 			<span className={styles.addressBar}>
 				{GLOBE}
-				<input value={url} disabled={!!sessionId} onChange={(e) => setUrl(e.target.value)} placeholder="http://localhost:3000" />
+				<input
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onKeyDown={(e) => e.key === 'Enter' && submit()}
+					onBlur={submit}
+					placeholder="http://localhost:3000"
+				/>
 			</span>
-			{sessionId ? (
-				<button className={`${styles.sessionBtn} ${styles.stop}`} onClick={stopSession}>
-					세션 종료
-				</button>
-			) : (
-				<button className={styles.sessionBtn} disabled={connecting} onClick={() => startSession(taskId, null, url, device)}>
-					{connecting ? '연결 중…' : '세션 시작'}
-				</button>
-			)}
-			{sessionError && (
-				<span className={styles.error} title={sessionError}>
-					{sessionError}
+			{error && (
+				<span className={styles.error} title={error}>
+					{error}
 				</span>
 			)}
-			<span className={`${styles.iconBtn} ${selecting ? styles.active : ''}`} onClick={toggleSelect} title="요소 선택">
-				{TARGET}
+			<span className={styles.iconBtn} onClick={onOpenDevtools} title="개발자 도구 열기">
+				{DEVTOOLS}
 			</span>
 			<span className={styles.envAnchor}>
 				<span
@@ -141,11 +162,11 @@ export default function BrowserToolbar({ taskId, cwd }: { taskId: string; cwd: s
 						<div className={styles.overflowRow}>
 							<span>디바이스</span>
 							<span className={styles.deviceToggle}>
-								<span className={`${styles.deviceOpt} ${device === 'pc' ? styles.deviceOptActive : ''}`} onClick={() => setDevice('pc')}>
+								<span className={`${styles.deviceOpt} ${device === 'pc' ? styles.deviceOptActive : ''}`} onClick={() => onDeviceChange('pc')}>
 									PC
 								</span>
-								<span className={`${styles.deviceOpt} ${device === 'webview' ? styles.deviceOptActive : ''}`} onClick={() => setDevice('webview')}>
-									웹뷰
+								<span className={`${styles.deviceOpt} ${device === 'mobile' ? styles.deviceOptActive : ''}`} onClick={() => onDeviceChange('mobile')}>
+									모바일
 								</span>
 							</span>
 						</div>

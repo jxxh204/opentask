@@ -87,18 +87,22 @@ const EnvVars = require('./store/envVars.cjs')
 // Sessions(개발실) CRUD store 계층. 기존 `Tasks`(flat-JSON, ./tasks.cjs)와 충돌하므로 Store* 로 별칭.
 const StoreFolders = require('./store/folders.cjs')
 const StoreTasks = require('./store/tasks.cjs')
+const StoreSubtasks = require('./store/subtasks.cjs') // 태스크 하나를 개발/개발자테스트/QA/배포 등으로 쪼갠 서브태스크
 const StoreBranches = require('./store/branches.cjs')
 const StoreRepos = require('./store/repos.cjs') // 멀티레포 프로젝트용 레포 레지스트리
+const StoreBlockedPeriods = require('./store/blockedPeriods.cjs') // 캘린더 "일정 막기"(QA 기간 등) CRUD
 const StoreDecisions = require('./store/decisions.cjs') // AI 판정 감사 로그(§12) — feed와 달리 재시작에도 안 날아감
 const RepoAdd = require('./repoAdd.cjs') // "레포 추가" 모달의 clone/새 프로젝트
 const RepoClassify = require('./repoClassify.cjs') // 새 태스크 → 레포 자동배정(헤드리스 claude)
 const DurationEstimate = require('./durationEstimate.cjs') // 태스크 설명 → 예상 소요 영업일 추정(헤드리스 claude, 제안만)
 const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
-const Control = require('./control.cjs') // "관제" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)
+const Control = require('./control.cjs') // "비서" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)
+const Transcript = require('./transcript.cjs') // 비서 대화형 UI용 — claude CLI 자신의 jsonl 대화 기록 파싱
 const PrReview = require('./prReview.cjs') // PR 리뷰 코멘트 fetch/apply/dispute (Phase 3.3)
-// Debug(디버깅) — Playwright 실브라우저 세션 (Phase 4b). playwright는 이 모듈들 안에서 lazy require라 부팅엔 영향 없음.
+// 지휘자 전용 headless 브라우저 자동화(§mcpDispatch.cjs browser_*). playwright는 이 모듈 안에서
+// lazy require라 부팅엔 영향 없음.
 const BrowserPool = require('./debug/browserPool.cjs')
-const Inspector = require('./debug/inspector.cjs')
+const Holidays = require('./holidays.cjs')
 
 // 프로젝트 루트를 정하면(개발실 게이트·설정 어디서든) 아키텍처의 API/Next 레이어를 흔한 컨벤션으로
 // 자동 스캔 — 사용자가 아키텍처 페이지에 따로 들어가 경로를 안 적어도 그래프가 채워지게. DB는 접속 정보가
@@ -258,7 +262,6 @@ function checkPort(port) {
   })
 }
 const Orch = require('./orch.cjs')
-const pty = require('node-pty')
 const { WebSocketServer } = require('ws')
 
 const PORT = Number(process.env.OPENRM_PORT || 8770)
@@ -530,7 +533,11 @@ const server = http.createServer((req, res) => {
   }
   if (url.startsWith('/api/folders/') && req.method === 'DELETE') {
     const id = decodeURIComponent(url.slice('/api/folders/'.length))
-    return sendJSON(res, 200, StoreFolders.remove(id))
+    // "메인 태스크 오른쪽 마우스 클릭하면 삭제" — 살아있는 지휘자 세션이 있으면 폴더 레코드만 지우고
+    // 그 pty는 그대로 버려두면 고아 프로세스로 계속 돈다. 먼저 정리하고 나서 지운다(실패해도 계속 진행).
+    return Orchestrator.stopConductor(id)
+      .catch(() => {})
+      .then(() => sendJSON(res, 200, StoreFolders.remove(id)))
   }
   // 보관함 — 완료된 폴더를 지우지 않고 archived=1로 표시만(board()는 archived=0만 반환).
   if (url === '/api/folders/archived' && req.method === 'GET') {
@@ -590,6 +597,21 @@ const server = http.createServer((req, res) => {
       .then((r) => sendJSON(res, 200, r))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
+  // "관제에 질문하는 버튼" — 관제가 떠 있으면 그 세션에, 없으면 콜드 스타트하며 이 요청을 최초 seed에
+  // 실어 안전하게 전달(§ control.cjs ask).
+  if (url === '/api/control/ask' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => Control.ask(b && b.text))
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // "대화형으로 가자" — raw 터미널 대신 claude CLI가 디스크에 쓰는 진짜 대화 기록(jsonl)을 읽어
+  // 채팅 턴으로 파싱해 돌려준다(§ transcript.cjs). 입력은 여전히 위 /ask가 담당 — 이 라우트는 읽기 전용.
+  if (url === '/api/control/transcript' && req.method === 'GET') {
+    const file = Transcript.findControlTranscript(Control.CONTROL_CWD)
+    if (!file) return sendJSON(res, 200, { ok: true, turns: [] })
+    return sendJSON(res, 200, { ok: true, turns: Transcript.parseTranscript(file) })
+  }
 
   // repos (멀티레포 프로젝트 — 레포 레지스트리)
   if (url === '/api/repos' && req.method === 'GET') {
@@ -610,6 +632,34 @@ const server = http.createServer((req, res) => {
   if (url.startsWith('/api/repos/') && req.method === 'DELETE') {
     const id = decodeURIComponent(url.slice('/api/repos/'.length))
     return sendJSON(res, 200, StoreRepos.remove(id))
+  }
+  // "캘린더에 대한민국 공휴일도 적용해줘 — 나라에 따라 나오게" — 나라 코드+연도별 공휴일 조회.
+  if (url === '/api/holidays/countries' && req.method === 'GET') {
+    return sendJSON(res, 200, { ok: true, countries: Holidays.listCountries() })
+  }
+  if (url === '/api/holidays' && req.method === 'GET') {
+    const sp = new URL(req.url, 'http://x').searchParams
+    const country = (sp.get('country') || 'KR').toUpperCase()
+    const years = (sp.get('years') || '').split(',').map((y) => Number(y)).filter((y) => Number.isInteger(y) && y > 1900 && y < 2200)
+    if (!years.length) return sendJSON(res, 400, { ok: false, error: 'years 필수 (예: years=2025,2026)' })
+    try {
+      return sendJSON(res, 200, { ok: true, country, holidays: Holidays.getHolidays(country, years) })
+    } catch (e) {
+      return sendJSON(res, 400, { ok: false, error: '알 수 없는 국가 코드: ' + country })
+    }
+  }
+  // "일정 막기 기능이 필요해. 중간에 QA기간같은게 있어서" — 캘린더 전용 차단 기간 CRUD.
+  if (url === '/api/blocked-periods' && req.method === 'GET') {
+    return sendJSON(res, 200, StoreBlockedPeriods.list())
+  }
+  if (url === '/api/blocked-periods' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => { const r = StoreBlockedPeriods.create(b || {}); sendJSON(res, r && r.ok === false ? 400 : 200, r) })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/blocked-periods/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/blocked-periods/'.length))
+    return sendJSON(res, 200, StoreBlockedPeriods.remove(id))
   }
   // 레포 관리 테이블의 워크트리 개수 배지 — list()의 무거운 per-worktree git 호출 없이 개수만.
   if (url.startsWith('/api/repos/') && url.endsWith('/worktrees/count') && req.method === 'GET') {
@@ -681,8 +731,8 @@ const server = http.createServer((req, res) => {
         b = b || {}
         const cur = StoreTasks.get(id)
         if (!cur) return sendJSON(res, 404, { ok: false, error: 'not found' })
-        // 편집(rename/desc/kind/시작 프롬프트/레포/예정일/기간/완료) — 해당 키가 있을 때만
-        if ('name' in b || 'desc' in b || 'kind' in b || 'startPrompt' in b || 'repoId' in b || 'dueDate' in b || 'durationDays' in b || 'completedAt' in b) StoreTasks.update(id, b)
+        // 편집(rename/desc/kind/시작 프롬프트/레포/예정일/기간/완료/색상) — 해당 키가 있을 때만
+        if ('name' in b || 'desc' in b || 'kind' in b || 'startPrompt' in b || 'repoId' in b || 'dueDate' in b || 'durationDays' in b || 'completedAt' in b || 'color' in b) StoreTasks.update(id, b)
         // refile/reorder — folderId 키가 있으면(명시적 null=inbox 포함) 그 값으로, 없고 beforeTaskId만 있으면 현재 폴더 유지
         if ('folderId' in b || 'beforeTaskId' in b) {
           const targetFolder = 'folderId' in b ? b.folderId : cur.folder_id
@@ -735,6 +785,73 @@ const server = http.createServer((req, res) => {
     const id = decodeURIComponent(url.slice('/api/tasks/'.length))
     return sendJSON(res, 200, StoreTasks.remove(id))
   }
+  // "메인 태스크를 고르는 기능도 필요해 — 서브태스크로 사용하려고 고른것일 수 있자나?" — 독립 태스크를
+  // 다른 태스크의 서브태스크로 편입.
+  if (url.match(/^\/api\/tasks\/[^/]+\/attach-as-subtask$/) && req.method === 'POST') {
+    const id = decodeURIComponent(url.split('/')[3])
+    return readBody(req)
+      .then((b) => {
+        const r = StoreTasks.attachAsSubtask(id, b && b.mainTaskId)
+        sendJSON(res, r.ok ? 200 : 400, r)
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // 서브태스크("태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든") — 태스크 설명과
+  // 별개의 설명 + 독립 예정일/기간. board가 이미 task.subtasks로 실어주니 별도 GET 목록 라우트는 안 둔다.
+  // "순서 변경도 내가 할 수 있게 해줘" — endsWith('/subtasks')보다 먼저 검사해야 함(같은 접두).
+  if (url.match(/^\/api\/tasks\/[^/]+\/subtasks\/reorder$/) && req.method === 'POST') {
+    const taskId = decodeURIComponent(url.split('/')[3])
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, { ok: true, subtasks: StoreSubtasks.reorder(taskId, (b && b.ids) || []) }))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/tasks/') && url.endsWith('/subtasks') && req.method === 'POST') {
+    const taskId = decodeURIComponent(url.slice('/api/tasks/'.length, url.length - '/subtasks'.length))
+    return readBody(req)
+      .then((b) => {
+        const r = StoreSubtasks.create({ ...(b || {}), taskId })
+        StoreTasks.recomputeFromSubtasks(taskId) // "모든 일정을 더하기해서 자동으로 적용"
+        sendJSON(res, 200, r)
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — task_id 없이 만드는
+  // 독립 서브태스크(메모, § db.cjs v20 nullable task_id). exact match라 아래 PATCH/DELETE(prefix)
+  // 나 :id/session/stop 라우트와 안 겹친다.
+  if (url === '/api/subtasks' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, StoreSubtasks.create({ ...(b || {}), taskId: null })))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url === '/api/subtasks/reorder' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, { ok: true, subtasks: StoreSubtasks.reorder(null, (b && b.ids) || []) }))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/subtasks/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(url.slice('/api/subtasks/'.length))
+    return readBody(req)
+      .then((b) => {
+        const r = StoreSubtasks.update(id, b || {})
+        if (r) StoreTasks.recomputeFromSubtasks(r.task_id)
+        sendJSON(res, r ? 200 : 404, r || { ok: false, error: 'not found' })
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  if (url.startsWith('/api/subtasks/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(url.slice('/api/subtasks/'.length))
+    const existing = StoreSubtasks.get(id)
+    const r = StoreSubtasks.remove(id)
+    if (existing) StoreTasks.recomputeFromSubtasks(existing.task_id)
+    return sendJSON(res, 200, r)
+  }
+  // "서브태스크 클로드 세션은 어떻게 킬지 고민이야" — 다음으로 안 넘기고 지금 세션만 끝낸다.
+  if (url.match(/^\/api\/subtasks\/[^/]+\/session\/stop$/) && req.method === 'POST') {
+    const id = decodeURIComponent(url.split('/')[3])
+    return Orchestrator.stopSubtaskSession(id)
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // branches (+ links)
   if (url === '/api/branches' && req.method === 'POST') {
     return readBody(req)
@@ -779,6 +896,20 @@ const server = http.createServer((req, res) => {
       if (action === 'start' && req.method === 'POST') return done(Orchestrator.start(fid))
       if (action === 'advance' && req.method === 'POST') return done(Orchestrator.advance(fid))
       if (action === 'stop' && req.method === 'POST') return done(Orchestrator.stop(fid))
+    }
+  }
+  // "코드작업은 무조건 서브태스크를 만들고 그 서브태스크에 워크트리를 만들어서... 순차로... pr도
+  // 체이닝으로" — 태스크 단위(위 폴더 오케스트레이션)와 별개로, 태스크 하나의 실제 코드 작업을
+  // 서브태스크(개발 단위) 체인으로 진행한다.
+  if (url.startsWith('/api/tasks/') && url.includes('/subtask-work/')) {
+    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state)$/)
+    if (sm) {
+      const tid = decodeURIComponent(sm[1])
+      const action = sm[2]
+      const done = (p) => p.then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      if (action === 'state' && req.method === 'GET') return done(Orchestrator.getSubtaskWorkState(tid))
+      if (action === 'start' && req.method === 'POST') return done(Orchestrator.startSubtaskWork(tid))
+      if (action === 'advance' && req.method === 'POST') return done(Orchestrator.advanceSubtaskWork(tid))
     }
   }
   // ── 지휘자(conductor) 세션 (Phase 3.4) — 오케스트레이터 자체의 클로드 세션. say/event는 지휘자
@@ -839,49 +970,48 @@ const server = http.createServer((req, res) => {
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
 
-  // ── Debug / 디버깅 (Phase 4b) — Playwright 실브라우저 세션 (스크린샷 폴링 / 엘리먼트 검사 / 네트워크·콘솔 / 스레드) ──
+  // ── Debug / 지휘자 브라우저 — headless Playwright 자동화 전용(§mcpDispatch.cjs browser_* 툴).
+  // 사람이 보는 "브라우저" 탭은 Electron 네이티브 <webview>로 바뀌어 이 API를 더 이상 안 쓴다.
   if (url === '/api/debug/sessions' && req.method === 'POST') {
     return readBody(req)
       .then((b) => BrowserPool.createSession(b || {}))
       .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
-  if (url.startsWith('/api/debug/threads/') && url.endsWith('/followup') && req.method === 'POST') {
-    const id = decodeURIComponent(url.slice('/api/debug/threads/'.length, url.length - '/followup'.length))
-    return readBody(req)
-      .then((b) => Inspector.followup(id, b && b.text))
-      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
-      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  // 지휘자 세션 재시작(--continue) 후에도 이 taskId(=폴더 id)로 이미 떠 있는 세션을 찾아 재사용하는 용도
+  // (browser_open). 아래 범용 /sessions/:id 라우트보다 먼저 매치해야 "active"가 세션 id로 오인되지 않는다.
+  if (url === '/api/debug/sessions/active' && req.method === 'GET') {
+    const taskId = new URL(req.url, 'http://x').searchParams.get('taskId') || ''
+    return sendJSON(res, 200, { ok: true, session: BrowserPool.findActiveByTaskId(taskId) })
   }
   if (url.startsWith('/api/debug/sessions/')) {
-    const dm = url.match(/^\/api\/debug\/sessions\/([^/]+)(?:\/(screenshot|inspect|network|console|threads))?$/)
+    const dm = url.match(/^\/api\/debug\/sessions\/([^/]+)(?:\/(navigate|click|type|text))?$/)
     if (dm) {
       const id = decodeURIComponent(dm[1])
       const sub = dm[2] || null
       if (!sub && req.method === 'DELETE') {
         return BrowserPool.closeSession(id).then((r) => sendJSON(res, 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
-      if (sub === 'screenshot' && req.method === 'GET') {
-        return BrowserPool.screenshot(id)
-          .then((r) => {
-            if (!r.ok) return sendJSON(res, r.error === 'session not found' ? 404 : 500, { ok: false, error: r.error })
-            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' })
-            res.end(r.buffer)
-          })
-          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
-      }
-      if (sub === 'inspect' && req.method === 'POST') {
+      if (sub === 'navigate' && req.method === 'POST') {
         return readBody(req)
-          .then((b) => Inspector.inspect(id, Number(b && b.x), Number(b && b.y)))
+          .then((b) => BrowserPool.navigate(id, b && b.url))
           .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
-      if (sub === 'network' && req.method === 'GET') return sendJSON(res, 200, { ok: true, network: Inspector.network(id) })
-      if (sub === 'console' && req.method === 'GET') return sendJSON(res, 200, { ok: true, console: Inspector.consoleList(id) })
-      if (sub === 'threads' && req.method === 'GET') return sendJSON(res, 200, { ok: true, threads: Inspector.listThreads(id) })
-      if (sub === 'threads' && req.method === 'POST') {
+      if (sub === 'click' && req.method === 'POST') {
         return readBody(req)
-          .then((b) => Inspector.createThread(id, b || {}))
+          .then((b) => BrowserPool.click(id, b && b.selector))
+          .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      if (sub === 'type' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => BrowserPool.type(id, b && b.selector, b && b.text, b && b.submit))
+          .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      if (sub === 'text' && req.method === 'GET') {
+        return BrowserPool.readText(id)
           .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
@@ -2110,7 +2240,6 @@ server.on('upgrade', async (req, socket, head) => {
     }
   }
   const session = u.searchParams.get('session') || ''
-  // orm- 접두 필수(안전). claude(cmux)가 세션명을 'orm-X_<ts>_..._/cwd_..'로 리네임하므로 / . 도 허용.
   if (!/^orm-[\w가-힣./-]+$/.test(session)) {
     socket.destroy()
     return
@@ -2126,121 +2255,35 @@ server.on('upgrade', async (req, socket, head) => {
       if (fs.statSync(cwdParam).isDirectory()) startDir = cwdParam
     } catch (_) {}
   }
-  // 요청 이름을 "살아있는 실제 세션"으로 해석 — cmux 리네임/중첩 방지.
-  // 정확히 있으면 그 이름, 베이스가 같은 게 있으면 그걸로 attach, 없으면 깨끗한 베이스로 생성.
-  let target = session
-  let creating = false
-  try {
-    const live = await Term.list()
-    const exact = live.find((s) => s.name === session)
-    if (exact) target = exact.name
-    else {
-      const b = Term.baseName(session)
-      const m = live.find((s) => Term.baseName(s.name) === b)
-      if (m) target = m.name
-      else {
-        target = b // 깨끗한 베이스명(. / 없음)으로 생성 → tmux 라운드트립 정상
-        creating = true
-      }
-    }
-  } catch (_) {
-    target = Term.baseName(session)
-    creating = true
+  // tmux 시절엔 claude(cmux)가 세션명을 리네임해서 baseName 매칭이 필요했다 — 지금은 우리가 만든
+  // 이름이 그대로 유지되므로 baseName(session)은 사실상 no-op(정상 케이스는 session과 동일).
+  const target = Term.baseName(session)
+  const r = Term.ensureNamed(target, startDir || process.env.HOME)
+  if (!r.ok) {
+    socket.destroy()
+    return
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
     ws.isAlive = true
     ws.on('pong', () => {
       ws.isAlive = true
     })
-    let p
-    try {
-      // -u는 tmux 전역 플래그(서브커맨드 앞) — UTF-8 강제(한글). 살아있으면 attach(-c 무시), 새로 만들 때만 -c.
-      const args = creating && startDir ? ['-u', 'new-session', '-A', '-s', target, '-c', startDir] : ['-u', 'new-session', '-A', '-s', target]
-      // 로케일 없으면 tmux가 비-UTF8 → 한글 깨짐. env에 LANG 보강.
-      const env = { ...process.env, LANG: process.env.LANG || 'en_US.UTF-8', LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8' }
-      p = pty.spawn('tmux', args, { name: 'xterm-256color', cols, rows, cwd: startDir || process.env.HOME, env })
-    } catch (e) {
-      try {
-        ws.send('\r\n[터미널 생성 실패: ' + String(e.message || e) + ']\r\n')
-        ws.close()
-      } catch (_) {}
-      return
-    }
-    p.onData((d) => {
-      try {
-        ws.send(d)
-      } catch (_) {}
-    })
-    p.onExit(() => {
-      try {
-        ws.close()
-      } catch (_) {}
-    })
+    // attach 순간 지금까지의 화면을 그대로 복원(@xterm/addon-serialize) — tmux attach와 동일 효과.
+    // WS가 끊겨도(detach) 세션(node-pty 프로세스) 자체는 살아있는다 — "닫아도 세션은 산다"의 핵심.
+    const detach = Term.attachWs(target, ws, { cols, rows })
     ws.on('message', (m) => {
       const s = m.toString()
       if (s[0] === '\x00') {
         // 리사이즈 제어: '\x00<cols>,<rows>'
         const mm = s.slice(1).match(/^(\d+),(\d+)$/)
-        if (mm) {
-          try {
-            p.resize(Number(mm[1]), Number(mm[2]))
-          } catch (_) {}
-        }
+        if (mm) Term.resize(target, Number(mm[1]), Number(mm[2]))
         return
       }
-      try {
-        p.write(s)
-      } catch (_) {}
+      Term.write(target, s)
     })
-    ws.on('close', () => {
-      try {
-        p.kill()
-      } catch (_) {}
-    })
+    ws.on('close', () => detach())
   })
 })
-
-// ── 1회성 tmux 세션 접두 마이그레이션 (레거시 → 'orm-') ──
-// 리브랜딩으로 세션 접두가 바뀌었으니, 이전 버전이 만든 레거시 접두 세션을 새 'orm-' 접두로 리네임한다.
-// 안 하면 진행 중이던 세션이 term.cjs allowlist(접두 검사)에서 사라져 orphan 된다. execFile 래퍼는 term.cjs tmux()와 동일 스타일.
-// 비치명적: tmux 미설치/서버 없음/실패 시 경고만 남기고 부팅을 계속한다.
-// (레거시 접두 문자열은 분리 표기 — 리브랜딩 grep 게이트가 구접두 잔재로 오탐하지 않게.)
-function migrateTmuxSessionPrefix() {
-  const LEGACY = 'mr' + 'm-' // 구접두 (리브랜딩 전)
-  const NEXT = 'orm-'
-  const DELIM = '|=|' // 인쇄가능 멀티문자 구분자 (tmux가 제어문자를 format 출력에서 삭제하는 이슈 회피)
-  const run = (args) =>
-    new Promise((resolve) =>
-      require('child_process').execFile('tmux', args, { timeout: 5000, maxBuffer: 4 << 20, env: process.env }, (e, out, err) =>
-        resolve({ ok: !e, out: String(out || ''), err: String(err || (e && e.message) || '') }),
-      ),
-    )
-  return run(['list-sessions', '-F', `#{session_id}${DELIM}#{session_name}`])
-    .then(async (r) => {
-      if (!r.ok) {
-        // tmux 서버 미기동(세션 0개)이면 조용히 넘어감 — 실제 오류만 경고.
-        if (r.err && !/no server running|no such file|error connecting/i.test(r.err)) console.log(`   ↪️  tmux 세션 마이그레이션 건너뜀: ${r.err.trim()}`)
-        else console.log('   ↪️  tmux 세션 마이그레이션: 실행 중인 tmux 세션 없음')
-        return
-      }
-      const targets = []
-      for (const line of r.out.split('\n')) {
-        if (!line) continue
-        const [id, name] = line.split(DELIM)
-        if (name && name.startsWith(LEGACY)) targets.push({ id, name, next: NEXT + name.slice(LEGACY.length) })
-      }
-      if (!targets.length) { console.log('   ↪️  tmux 세션 마이그레이션: 대상 없음 (레거시 접두 세션 없음)'); return }
-      let done = 0
-      for (const t of targets) {
-        // 이름에 . / 가 섞인 cmux 리네임 세션은 -t 이름 타겟이 깨지므로 session_id($N)로 타겟.
-        const rr = await run(['rename-session', '-t', t.id || t.name, t.next])
-        if (rr.ok) { done++; console.log(`   ↪️  tmux 세션 리네임: ${t.name} → ${t.next}`) }
-        else console.log(`   ⚠️  tmux 세션 리네임 실패(${t.name}): ${rr.err.trim()}`)
-      }
-      console.log(`   ↪️  tmux 세션 접두 마이그레이션 완료: ${done}/${targets.length}건`)
-    })
-    .catch((e) => console.log(`   ⚠️  tmux 세션 마이그레이션 오류: ${String((e && e.message) || e)}`))
-}
 
 // startServer — listen을 함수로 감싸서 호출 시점/포트를 호출자(Electron main 등)가 통제할 수 있게 함.
 // `node server/index.cjs`로 직접 실행할 땐 아래 require.main 체크에서 자동으로 호출되어 기존과 동일하게 동작.
@@ -2253,10 +2296,6 @@ function startServer(opts = {}) {
       console.log(`\n🪪  OpenRM 백엔드 — http://${host}:${port}`)
       console.log(`   repo : ${C.REPO}`)
       console.log(`   state: ${C.STATE_PATH || '(없음)'}\n`)
-      // 레거시 접두 세션 → 'orm-' 1회성 리네임. tmux 세션은 이 앱 전용 네임스페이스가 아니라
-      // 머신 전역이라, 자동 실행 시 이 리포와 무관한 다른 'mrm-' 세션(다른 프로젝트/툴)까지 건드릴 수
-      // 있음이 실제로 확인됨 — 그래서 기본은 비활성, 명시적으로 켠 경우에만 실행한다.
-      if (process.env.OPENRM_MIGRATE_TMUX === '1') migrateTmuxSessionPrefix()
       watchState()
       watchSrc()
       Preview.setOnSignin((id, pwd) => DevUsers.saveLogin(id, pwd)) // iframe 직접 로그인 → 계정 자동저장
@@ -2271,6 +2310,12 @@ function startServer(opts = {}) {
       console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작')
       Scheduler.start() // Automations(§07 "크론잡 생성") — 30초마다 due job 확인
       console.log('   🗓  Automations: 스케줄러 시작\n')
+      // "맥북 껏다킬거야. 세션전부 다시 살아나고 태스크도 살아나야해... 당연히 내가 킨 세션만" —
+      // 서버가 뜨자마자, 재시작 전 실제로 떠 있었던 세션(스냅샷 있는 것)만 골라 한 번에 복원한다.
+      // 한 번도 시작 안 한 지휘자/서브태스크는 새로 안 만든다. 부팅을 막지 않도록 fire-and-forget.
+      Orchestrator.restoreAllOnBoot()
+        .then((r) => console.log(`   🔁  세션 복원: 태스크 매니저 ${r.restoredConductors}건 (폴더 ${r.folders}개 확인)\n`))
+        .catch((e) => console.log(`   ⚠️  세션 복원 실패: ${String((e && e.message) || e)}\n`))
       resolve({ port, host, server })
     })
   })

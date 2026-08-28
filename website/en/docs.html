@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Docs — OpenTask</title>
+	<meta name="description" content="OpenTask documentation — quickstart, install, core concepts, how to use every feature, configuration, security, FAQ." />
+	<link rel="icon" type="image/png" href="/favicon-32.png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+	<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+	<header class="nav">
+		<div class="container nav-inner">
+			<a class="brand" href="/en/index.html">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<nav class="nav-links">
+				<a href="/en/index.html#features">Features</a>
+				<a href="/en/docs.html" class="active">Docs</a>
+				<a href="/en/changelog.html">Changelog</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+			</nav>
+			<div class="nav-cta">
+				<a class="lang-switch" href="/docs.html">한국어</a>
+				<a class="btn btn-ghost" href="/en/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/en/download.html">Download</a>
+			</div>
+			<button class="nav-toggle" aria-label="Open menu">☰</button>
+		</div>
+	</header>
+
+	<main class="container docs-shell">
+		<aside class="docs-nav">
+			<div class="group-label">Getting Started</div>
+			<a href="#overview">Overview</a>
+			<a href="#quickstart">Quickstart</a>
+			<a href="#install">Install</a>
+			<a href="#concepts">Core Concepts</a>
+
+			<div class="group-label">How to Use</div>
+			<a href="#use-tasks">Creating a Task</a>
+			<a href="#use-subtasks">Subtasks · Worktrees</a>
+			<a href="#use-taskmanager">Task Manager</a>
+			<a href="#use-diagram">Diagram Board</a>
+			<a href="#use-panes">Terminal · Server · Browser</a>
+			<a href="#use-calendar">Calendar</a>
+			<a href="#use-pr-review">PR Review</a>
+			<a href="#use-cronjobs">Cron Jobs</a>
+			<a href="#use-model-policy">Model Policy</a>
+			<a href="#use-team-rules">Team Rules</a>
+			<a href="#use-control">Control</a>
+
+			<div class="group-label">Reference</div>
+			<a href="#features">Feature Summary</a>
+			<a href="#configuration">Configuration</a>
+
+			<div class="group-label">Operations</div>
+			<a href="#security">Security</a>
+			<a href="#faq">FAQ</a>
+
+			<div class="group-label">Contributing</div>
+			<a href="/en/changelog.html">Changelog ↗</a>
+			<a href="#contributing">Contributing</a>
+		</aside>
+
+		<div class="docs-content">
+			<h1>Docs</h1>
+			<p class="lede">How to install OpenTask, how each feature actually works, and what to watch out for.</p>
+
+			<section class="docs-section" id="overview">
+				<h2>Overview</h2>
+				<p>
+					OpenTask is a parallel dev control tower: add a subtask under a task and it gets its own
+					isolated git worktree plus an AI coding agent (Claude Code, etc.). The goal is to keep the
+					loop — create a task → subtask (worktree) → agent wave → PR review → calendar sync —
+					alive in one place, without bouncing between GitHub and terminal tabs.
+				</p>
+				<p>
+					It started as a tool for a single operator, and broadened as it went open source: several
+					people now use it together to watch and direct agents, PRs, and monitoring signals across
+					many worktrees at once, as a small dev team.
+				</p>
+				<div class="callout">
+					<strong>Two ways to run it.</strong> ① Dev mode, launched straight from source (a Vite dev
+					server plus a separate Node backend process). ② The packaged macOS Electron desktop app.
+					Both run the exact same frontend/backend code with no feature difference — Electron is
+					just the distribution format, not a separate feature set. In the packaged app the backend
+					runs as its own detached process, so quitting the app window entirely (Cmd+Q) doesn't kill
+					an agent session that's still working.
+				</div>
+			</section>
+
+			<section class="docs-section" id="quickstart">
+				<h2>Quickstart</h2>
+				<p>Until the official signed build ships, you can get it running from source in three steps.</p>
+				<div class="codeblock"><code>git clone https://github.com/jxxh204/opentask
+cd opentask/app
+npm install
+npm run electron:dev</code></div>
+				<p>
+					When the command finishes, the OpenTask desktop window opens. With nothing configured yet,
+					you get <strong>demo data</strong> so you can explore the whole screen layout (task tree ·
+					calendar · cron jobs · control) right away. To connect your real repo, hit "Add Repo" on
+					the onboarding screen — see <a href="#install">Install</a> and
+					<a href="#use-tasks">Creating a Task</a> for the full walkthrough.
+				</p>
+				<div class="callout">
+					<strong>Just want to look around faster?</strong> Run <code>npm run start</code> instead
+					of <code>npm run electron:dev</code> and open <code>http://localhost:5180</code> in your
+					browser to see the same screen without a desktop window.
+				</div>
+			</section>
+
+			<section class="docs-section" id="install">
+				<h2>Install</h2>
+
+				<h3>Option A · Download the app (coming soon)</h3>
+				<p>
+					A signed and notarized macOS app is currently in progress. Once it's out, you'll be able
+					to grab it straight from the <a href="/en/download.html">download page</a>.
+				</p>
+
+				<h3>Option B · Build from source (available right now)</h3>
+				<p>Clone the repository and run it from the <code>app/</code> folder.</p>
+				<div class="codeblock"><code>git clone https://github.com/jxxh204/opentask
+cd opentask/app
+npm install
+npm run start   # backend (8770) + frontend (5180) together</code></div>
+				<p>To launch it straight as a desktop window (Electron):</p>
+				<div class="codeblock"><code>npm run electron:dev</code></div>
+				<p>
+					On first launch you connect a repo from the onboarding screen. You can also explore the
+					layout first with demo data before connecting anything.
+				</p>
+
+				<h3>Requirements</h3>
+				<table class="feature-table">
+					<tr><th>Item</th><th>Detail</th></tr>
+					<tr><td>Node.js</td><td>20 or later (per the <code>engines</code> field in <code>package.json</code>)</td></tr>
+					<tr><td>OS</td><td>macOS for the Electron desktop app. The source doesn't block cross-platform runs, but only macOS is officially supported</td></tr>
+					<tr><td>Package manager</td><td>Both npm and yarn are supported (both lockfiles are present)</td></tr>
+				</table>
+
+				<h3>Troubleshooting — native module build errors</h3>
+				<p>
+					<code>better-sqlite3</code> and <code>node-pty</code> are native modules, so a Node/Electron
+					version bump may require rebuilding them.
+				</p>
+				<div class="codeblock"><code># Rebuild for Node (plain npm run start / npm run server)
+npm run rebuild:node
+
+# Rebuild for Electron (electron:dev / electron:build)
+npm run electron:rebuild</code></div>
+			</section>
+
+			<section class="docs-section" id="concepts">
+				<h2>Core Concepts</h2>
+
+				<h3>Tasks and subtasks</h3>
+				<p>
+					A task (a "main task," really a "folder" under the hood) is a unit that groups work.
+					Subtasks created under it each get mapped to an isolated git worktree with a real
+					tmux/Claude Code terminal session. All actual code work happens only inside those
+					per-subtask worktrees — the main task itself only handles orchestration.
+				</p>
+
+				<h3>Task Manager · waves</h3>
+				<p>
+					The Task Manager (orchestrator) has no separate "start" button — the instant a subtask is
+					created under a task, it automatically takes control and drives subtasks one at a time in
+					sequential "waves." Alongside the live terminal, you can see the plan · dispatch · report ·
+					message · error log the conductor keeps for itself, organized as a structured tree.
+				</p>
+				<div class="callout warn">
+					<strong>v1 limitation.</strong> Wave progress state lives in memory — it's lost if the app
+					(server) restarts.
+				</div>
+
+				<h3>Diagram (assembly-line board)</h3>
+				<p>
+					A board that summarizes a task's subtask chain left-to-right, like an assembly line. Each
+					card shows a subtask's status — waiting, in progress, or session ended — along with its
+					scheduled duration.
+				</p>
+
+				<h3>Calendar · blocked periods</h3>
+				<p>
+					Place subtasks' due dates on a week/month calendar and drag to reschedule. Stretches where
+					work shouldn't happen — a QA freeze, say — are marked as blocked periods and shown as
+					stripes on the calendar (they don't actually prevent scheduling).
+				</p>
+
+				<h3>Team Rules</h3>
+				<p>
+					Instead of hardcoding one team's conventions (branch naming, commit format, required
+					pre-docs, etc.) into the app, you register them as free text per repo, and that text is
+					carried straight into every agent's instructions. OpenTask's code never parses this text —
+					"following" it is entirely up to the agent reading those instructions, using the shell/MCP
+					tools it already has.
+				</p>
+
+				<h3>Model Policy</h3>
+				<p>
+					Assign which AI model to use for each of 16+ task types — design, Task Manager, control,
+					coding, review, QA, and more — as a policy.
+				</p>
+
+				<h3>Control</h3>
+				<p>
+					A top-level agent that runs the whole app by conversation — not a single task, but the
+					calendar, cron jobs, and operational settings together. It's deliberately kept separate
+					(name and place) from the Task Manager: this one directs "the whole app," not "this task."
+				</p>
+
+				<h3>A live connection — PR review</h3>
+				<p>
+					Click <strong>Apply</strong> on a PR review comment and a real instruction is injected into
+					that subtask's live terminal session, all the way through commit and push. Click
+					<strong>Dispute</strong> and a public reply is actually posted to GitHub.
+				</p>
+				<div class="callout warn">
+					<strong>Irreversible actions.</strong> Neither of those is mere log information — both are
+					genuinely irreversible actions. OpenTask makes a point of visually setting these apart.
+				</div>
+			</section>
+
+			<section class="docs-section" id="use-tasks">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><circle cx="17" cy="16" r="3"/><path d="M17 14.5v3M15.5 16h3"/></svg></span>
+					<h2>How to Use — Creating a Task</h2>
+				</div>
+				<ol>
+					<li>Click <strong>"Add Task"</strong> above the sidebar search box (or <strong>"+ Add
+						Item"</strong> on an empty calendar cell) to open the <strong>"New Item"</strong>
+						modal.</li>
+					<li>Pick <strong>Main Task</strong> or <strong>Subtask</strong> from the tabs at the top.</li>
+					<li>Type a title directly, or <strong>paste a Figma, Slack thread, Notion, or PR link
+						as-is</strong> and its type is detected automatically.</li>
+					<li>Set a due date to have it reflected on the calendar immediately (you can also leave it empty).</li>
+				</ol>
+				<p>
+					Creating it as a main task immediately adds a new folder to the task tree, and the moment
+					a subtask is attached, <a href="#use-taskmanager">Task Manager</a> automatically starts
+					orchestrating it.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-subtasks">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="17.5" cy="12" r="2.2"/><path d="M6 7.2V16.8M6 9c0 3 3 3 6.3 3h2.7"/></svg></span>
+					<h2>How to Use — Subtasks · Worktrees</h2>
+				</div>
+				<ol>
+					<li>In the "New Item" modal, choose the <strong>Subtask</strong> tab, then
+						<strong>"Pick a main task…"</strong> to target one (you can also create a new main task right there).</li>
+					<li>Submitting it automatically creates a dedicated git worktree and branch for that
+						subtask. All real code work happens there.</li>
+				</ol>
+				<p>
+					If you already have a worktree (branch) locally and want to bring it in as-is, use the
+					<strong>"Connect"</strong> button next to any untracked branch in the sidebar's
+					<strong>"Worktrees"</strong> section — it adopts the branch as a task without creating a
+					new worktree.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-taskmanager">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 2.5L7 14M12.5 14h4"/></svg></span>
+					<h2>How to Use — Task Manager</h2>
+				</div>
+				<ul>
+					<li>Starts automatically, with no button, the moment a subtask exists.</li>
+					<li>The conductor session is attached directly to the tab's live terminal, so the real
+						conversation happens right there. To direct it yourself, just
+						<strong>type into the terminal</strong> — there's no separate "send message" box.</li>
+					<li>The "Conversation Log" shows the plan · dispatch · report · message · error trail the
+						conductor keeps for itself, as a structured tree (separate from the raw terminal scroll).</li>
+				</ul>
+			</section>
+
+			<section class="docs-section" id="use-diagram">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="9" width="5.5" height="6" rx="1.1"/><rect x="9.2" y="9" width="5.5" height="6" rx="1.1"/><rect x="17" y="9" width="5.5" height="6" rx="1.1"/><path d="M7 12h2.2M14.7 12h2.3"/></svg></span>
+					<h2>How to Use — Diagram Board</h2>
+				</div>
+				<p>
+					Open <strong>"Diagram"</strong> on a main task tab to see its subtask chain summarized as
+					cards left-to-right. Each card shows a status dot — waiting, in progress, or session ended
+					— along with its scheduled duration, so you can tell at a glance how far things have gotten.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-panes">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18"/><path d="M6.5 12.3l2 1.7-2 1.7"/></svg></span>
+					<h2>How to Use — Terminal · Local Server · Browser · Claude Session</h2>
+				</div>
+				<p>Use the <strong>"+"</strong> at the top of a subtask tab to open any of these panels.</p>
+				<table class="feature-table">
+					<tr><th>Panel</th><th>Purpose</th></tr>
+					<tr><td>Terminal</td><td>A real tmux + node-pty terminal for that worktree. Open several at once to run multiple agents side by side</td></tr>
+					<tr><td>Local Server</td><td>Run the worktree's dev server directly to check it</td></tr>
+					<tr><td>Browser</td><td>Preview results in an embedded browser without opening a new window</td></tr>
+					<tr><td>Claude Session</td><td>A standalone Claude Code session that starts the instant you open the tab, no button needed</td></tr>
+				</table>
+				<p>
+					A main task tab also lets you open <strong>Detail · Task Manager · Diagram · Team Rules</strong>
+					from the same "+".
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-calendar">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><path d="M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17.5h1M11.5 17.5h1" /></svg></span>
+					<h2>How to Use — Calendar</h2>
+				</div>
+				<ol>
+					<li>Open it from the <strong>"Calendar"</strong> button at the top of the sidebar.</li>
+					<li>Switch between week and month views to scan your schedule.</li>
+					<li>Use <strong>"+ Add Item"</strong> on an empty cell to create a task due on that date
+						right away.</li>
+					<li><strong>Drag</strong> a scheduled item and that subtask's actual due date changes
+						(reflected instantly, exactly like a manual edit).</li>
+					<li>Use <strong>"+ Block Period"</strong> in the toolbar to register a reason for a
+						stretch where work shouldn't happen, like a QA freeze — it only shows up as stripes on
+						the calendar and doesn't actually prevent scheduling.</li>
+				</ol>
+			</section>
+
+			<section class="docs-section" id="use-pr-review">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-4 4V5z"/><path d="M8.5 10l2 2 4-4"/></svg></span>
+					<h2>How to Use — PR Review</h2>
+				</div>
+				<ol>
+					<li>Check the badge on a task row in the sidebar — <strong>"N issues"</strong> if there's a
+						review to handle, or <strong>"Reviewed"</strong> if not.</li>
+					<li>Clicking the badge opens the PR review modal.</li>
+					<li>For each comment, choose <strong>Apply</strong> (injects an instruction into that
+						subtask's live session — confirm, and it actually commits and pushes) or
+						<strong>Dispute</strong> (write why it's wrong and it's posted as a public reply on
+						GitHub as-is).</li>
+				</ol>
+			</section>
+
+			<section class="docs-section" id="use-cronjobs">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><circle cx="15.5" cy="15.5" r="3.2" /><path d="M15.5 14v1.6l1.1.9" /></svg></span>
+					<h2>How to Use — Cron Jobs</h2>
+				</div>
+				<ol>
+					<li>Open the <strong>"Cron Jobs"</strong> button at the top of the sidebar, then add a new
+						automation from the list.</li>
+					<li>Set the <strong>automation name</strong> and schedule — <strong>interval</strong>
+						(every N minutes), <strong>daily</strong> (a time), or <strong>weekly</strong> (a day
+						of week plus a time).</li>
+					<li>Set the <strong>task title to create</strong> and an optional description, and pick a
+						target repo if you have more than one.</li>
+				</ol>
+				<p>
+					At the scheduled time, a new main task is genuinely created automatically. The action is
+					deliberately limited to just <strong>"create a new task"</strong> — in keeping with the
+					principle that "AI doesn't decide its own scope of work," it only ever runs the schedule a
+					human already set.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-model-policy">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M4 12h16M4 17h7"/><circle cx="16" cy="7" r="1.8"/><circle cx="9" cy="17" r="1.8"/></svg></span>
+					<h2>How to Use — Model Policy</h2>
+				</div>
+				<p>
+					In the global <strong>"Model Policy"</strong> tab, pick a model (Fable 5 / Opus 4.8 /
+					Sonnet 4.6, etc.) from a dropdown for each task type — design, Task Manager (subtask chain
+					orchestration), Control (calendar · cron jobs · settings), coding, PR review, applying
+					review feedback, generating QA test cases, and more. A common pattern is a lighter model
+					where speed matters and a stronger one where judgment matters.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-team-rules">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
+					<h2>How to Use — Team Rules</h2>
+				</div>
+				<p>A main task tab opens with <strong>"Team Rules"</strong> by default, where you can fill in
+					four free-text fields per repo.</p>
+				<table class="feature-table">
+					<tr><th>Field</th><th>When it's used</th></tr>
+					<tr><td>General rules</td><td>Always included in every agent instruction — commit message format, PR template, etc.</td></tr>
+					<tr><td>Task-writing rules</td><td>Style and required fields to follow when writing or refining subtasks (e.g. include acceptance criteria)</td></tr>
+					<tr><td>Worktree · branch creation rules</td><td>Branch naming convention. Fill it in and branch names get auto-translated into an English slug</td></tr>
+					<tr><td>Prerequisites before starting dev</td><td>Steps that must be finished before writing code (e.g. write a Notion spec doc first, then fill in the link)</td></tr>
+				</table>
+				<p>
+					OpenTask's code never parses the content of this text — it's carried as-is into the
+					agent's instructions, and "following" it is entirely up to the agent, using the shell/MCP
+					tools it already has. Leave all four fields empty and behavior is identical to today.
+				</p>
+			</section>
+
+			<section class="docs-section" id="use-control">
+				<div class="docs-section-head">
+					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6" /><circle cx="12" cy="11" r="2" /><path d="M12 13v8M8.5 21h7" /><path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.7a9 9 0 0 1 13 0" /></svg></span>
+					<h2>How to Use — Control</h2>
+				</div>
+				<p>
+					The <strong>"Control"</strong> button at the top of the sidebar — opening the tab starts a
+					conversation session immediately, no button needed. Use it to operate the whole app by
+					natural language, not one task — calendar schedule, cron jobs, operational settings.
+				</p>
+				<p class="lede" style="margin:0;">e.g. "Block next Tuesday through Friday as a QA freeze,"
+					"create a cron job that tidies the backlog every morning at 9"</p>
+			</section>
+
+			<section class="docs-section" id="features">
+				<h2>Feature Summary</h2>
+				<p>Once connected to a target repo, the tabs below become active in the workspace. For actual
+					usage, see "How to Use" above.</p>
+				<table class="feature-table">
+					<tr><th>Tab</th><th>What it does</th></tr>
+					<tr><td>Task Manager</td><td>The AI conductor that starts automatically once a subtask exists. Runs sequential waves + a live terminal + plan/dispatch/report log</td></tr>
+					<tr><td>Diagram</td><td>A board summarizing the subtask chain like an assembly line — status (waiting/in progress/done) and scheduled duration</td></tr>
+					<tr><td>Detail</td><td>Task (folder) detail — duration · description · dev plan, apply AI suggestions</td></tr>
+					<tr><td>Subtask</td><td>Individual subtask detail panel</td></tr>
+					<tr><td>Terminal</td><td>Real tmux + node-pty terminal for the subtask's worktree</td></tr>
+					<tr><td>Local Server</td><td>Run the worktree's dev server directly to check it</td></tr>
+					<tr><td>Browser</td><td>Preview execution results in an embedded browser</td></tr>
+					<tr><td>Claude Session</td><td>A standalone Claude Code session that starts instantly, no button needed</td></tr>
+					<tr><td>Team Rules</td><td>Four free-text fields per repo defining team rules folded into agent instructions</td></tr>
+					<tr><td>Cron Jobs</td><td>Interval / daily / weekly schedules — deliberately limited to the single action "create a new task"</td></tr>
+					<tr><td>Model Policy</td><td>Per-task-type (design, coding, review, QA, etc.) AI model policy</td></tr>
+					<tr><td>Calendar</td><td>Week/month layout of subtask schedules, drag-to-reschedule, blocked periods</td></tr>
+					<tr><td>Control</td><td>Runs the whole app (calendar · cron jobs · settings) by conversation, not a single task</td></tr>
+				</table>
+				<h3>PR Review</h3>
+				<p>
+					When a review comment lands on a PR linked to a task/subtask, the sidebar badge flags it,
+					and the modal lets you choose <strong>Apply</strong> (commits and pushes) or
+					<strong>Dispute</strong> (a public reply on GitHub) per comment.
+				</p>
+			</section>
+
+			<section class="docs-section" id="configuration">
+				<h2>Configuration</h2>
+				<p>
+					The entire main screen is gated until initial setup is complete. Before that, it runs on
+					demo data.
+				</p>
+				<h3>Integrations</h3>
+				<ul>
+					<li><strong>Required</strong> — GitHub (reads PR/issue/CI status, posts comments when needed)</li>
+					<li><strong>Optional</strong> — Sentry, AWS, Slack, Notion, Figma. Connect only what you need.</li>
+				</ul>
+				<h3>Network</h3>
+				<p>
+					The default bind is <code>127.0.0.1</code> (loopback). To open it on the LAN, set
+					<code>OPENRM_HOST=0.0.0.0</code> — this automatically requires token auth (printed to the console).
+				</p>
+				<div class="callout warn">
+					<strong>Caution.</strong> This server can execute git/shell/terminal directly. Don't expose it on an untrusted network.
+				</div>
+			</section>
+
+			<section class="docs-section" id="security">
+				<h2>Security</h2>
+				<p>
+					Designed for local execution. Data is stored on your machine (the packaged app uses the OS
+					standard user-data folder) and never sent to an external server.
+				</p>
+				<p>
+					Irreversible real actions (public GitHub posts, injecting into a live session) are
+					designed to be visually distinct from mere log information.
+				</p>
+				<div class="callout">
+					<strong>Not yet decided.</strong> Concurrent multi-user access and permission separation
+					aren't designed yet — it's mid-transition from a single-operator tool to a team tool.
+				</div>
+			</section>
+
+			<section class="docs-section" id="faq">
+				<h2>FAQ</h2>
+
+				<div class="faq-item">
+					<h3>Does it support Windows / Linux?</h3>
+					<p>Only macOS builds are provided today. Since it's open source you can try building it for another platform from source, but that isn't officially supported yet.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Can multiple people use it together?</h3>
+					<p>The goal is for a small team to use it together, but concurrent multi-user access and permission separation aren't designed yet.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Does progress get lost if the app (server) restarts?</h3>
+					<p>Orchestrator wave state lives in memory and is lost on restart — a documented v1 limitation. That said, in the packaged app the backend runs as a detached process, so merely closing the app window (including Cmd+Q) doesn't kill a session that's still in progress.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Where is data stored?</h3>
+					<p>On your local machine. The packaged app uses the OS standard user-data folder.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Is it open source?</h3>
+					<p>Yes, released under the MIT license.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Did it have a different name before?</h3>
+					<p>It was rebranded from the internal codename "MRM" → "OpenRM" → "OpenTask" — reflecting a task-centered identity in the name, based on what the top-level unit of work should be.</p>
+				</div>
+			</section>
+
+			<section class="docs-section" id="contributing">
+				<h2>Contributing</h2>
+				<p>Bug reports, feature requests, and PRs are welcome on the GitHub repository. See the <a href="/en/changelog.html">changelog</a> for what's changed.</p>
+				<div class="callout">
+					<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener"><strong>github.com/jxxh204/opentask</strong></a> ·
+					Licensed under <a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">MIT</a>, per the <code>LICENSE</code> file at the repo root.
+				</div>
+			</section>
+		</div>
+	</main>
+
+	<footer>
+		<div class="container footer-inner">
+			<a class="brand" href="/en/index.html">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<div class="footer-links">
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/changelog.html">Changelog</a>
+				<a href="/en/download.html">Download</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">License (MIT)</a>
+			</div>
+			<div class="footer-copy">© 2026 OpenTask</div>
+		</div>
+	</footer>
+
+	<script type="module" src="/src/main.js"></script>
+</body>
+</html>

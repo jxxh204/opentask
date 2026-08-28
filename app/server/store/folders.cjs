@@ -45,16 +45,33 @@ function update(id, patch) {
 	const retryLimit = 'retryLimit' in patch ? Math.max(1, Number(patch.retryLimit) || 3) : cur.retry_limit
 	// 레포는 이제 폴더 단위로 하나만 — 'repoId' in patch로 명시적 null(선택 해제)도 받는다.
 	const repoId = 'repoId' in patch ? patch.repoId || null : cur.repo_id
-	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, repo_id = ?, updated_at = ? WHERE id = ?').run(
+	// "이건 태스크의 유니크한 규칙이야" — 레포 전체(§ repos.rule_*)가 아니라 이 메인 태스크(폴더) 하나만의
+	// 예외 규칙(§ db.cjs v23). 빈 문자열은 null로 접어 "규칙 없음"을 하나로 통일한다.
+	const ruleTask = 'ruleTask' in patch ? patch.ruleTask?.trim() || null : cur.rule_task
+	// "세션이 바뀌면 안 돼" — 지휘자 세션의 진짜 이름(§ db.cjs v24). 폴더 이름이 나중에 바뀌어도 이
+	// 값은 그대로라, 복원할 때 이름을 다시 지어낼 필요 없이 정확히 그 세션을 다시 찾는다.
+	const conductorSession = 'conductorSession' in patch ? patch.conductorSession || null : cur.conductor_session
+	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, repo_id = ?, rule_task = ?, conductor_session = ?, updated_at = ? WHERE id = ?').run(
 		name,
 		base,
 		order_idx,
 		autoMerge,
 		retryLimit,
 		repoId,
+		ruleTask,
+		conductorSession,
 		Date.now(),
 		id,
 	)
+	// "레포 조정 코드가 하나로 통합되어있지 않고 흩어져있는거야?" — tasks.repo_id는 폴더로 승격되는
+	// 순간 한 번 복사된 뒤로 다시는 folders.repo_id를 따라가지 않아, 폴더에서 레포를 바꾸면 그 값만
+	// 어긋난 채 영영 옛 값으로 남았다(실제 오케스트레이션은 항상 folders.repo_id를 우선하니 동작은
+	// 맞았지만, DB를 직접 보거나 나중에 이 필드를 참조할 코드 입장에선 헷갈리는 stale 데이터였다).
+	// tasks.repo_id를 그 사본 취급하지 말고, 폴더 레포가 바뀔 때마다 이 폴더의 태스크 전부를 같이 맞춘다.
+	// (subtasks.repo_id는 건드리지 않는다 — 그건 사람이 명시적으로 준 서브태스크별 오버라이드다.)
+	if ('repoId' in patch) {
+		db.prepare('UPDATE tasks SET repo_id = ? WHERE folder_id = ?').run(repoId, id)
+	}
 	return get(id)
 }
 

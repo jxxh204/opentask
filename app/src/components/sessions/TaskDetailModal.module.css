@@ -24,6 +24,24 @@
 	transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* "메인태스크 상세 탭" — 드로어와 같은 내용(TaskDetailContent)을 오버레이/슬라이드 없이 탭 본문에
+   그대로 채운다. "화면 전체를 사용해줘" — 440px 드로어 폭에 갇히지 않고 탭 전체 폭을 그대로 쓴다.
+   .body/.subtasksSection 등 안쪽 요소는 폭에 맞춰 늘어나도 자연스럽게 짜여 있어(flex 행 나열) 별도
+   보정 없이 그대로 넓어진다. */
+.tabWrap {
+	height: 100%;
+	min-height: 0;
+	display: flex;
+	background: var(--card);
+}
+.tabWrapInner {
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
 .head {
 	flex: none;
 	display: flex;
@@ -32,20 +50,93 @@
 	padding: 18px 14px 14px 20px;
 	border-bottom: 1px solid var(--line);
 }
+/* "태스크하나를 색하나로 보여주는거야" — 레포 색상 피커(SessionShell .repoColorDot 등)와 같은
+   패턴. 제목 맨 앞에 둬서 "이 태스크의 정체성 색"이라는 인상을 준다. */
+.taskColorDot {
+	flex: none;
+	align-self: center;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: 0 0 0 1px var(--line2);
+	margin-top: 2px;
+}
+.taskColorModalTitle {
+	padding: 14px 14px 0;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.taskColorGrid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 10px;
+	padding: 14px;
+}
+.taskColorSwatch {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	cursor: pointer;
+}
+.taskColorSwatch:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--line2);
+}
+.taskColorSwatchActive {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
+}
+.taskColorSwatchActive:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
+}
+.taskColorSwatchNone {
+	background: var(--card2);
+	border: 1px dashed var(--line2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t3);
+	font-size: 13px;
+}
 /* "일감 완료 체크가 있으면 좋겠어" — 되돌릴 수 있는 유일한 자리라 제목 옆에 항상 보이게. */
 .doneToggle {
 	flex: none;
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding: 3px 4px;
+	gap: 5px;
+	padding: 4px 9px;
+	margin-right: 6px;
 	font-size: 11px;
-	font-weight: 600;
+	font-weight: 700;
 	color: var(--t3);
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-chip);
 	cursor: pointer;
 }
-.doneToggle input {
-	cursor: pointer;
+.doneToggle:hover {
+	background: var(--card-hover);
+}
+.doneToggleActive {
+	color: var(--green);
+	border-color: var(--green);
+	background: var(--gtint);
+}
+.doneCheck {
+	flex: none;
+	width: 13px;
+	height: 13px;
+	border-radius: 4px;
+	border: 1.5px solid var(--line2);
+	background: var(--card2);
+}
+.doneToggleActive .doneCheck {
+	border-color: var(--green);
+	background: var(--green);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 9px 9px;
 }
 .closeBtn {
 	flex: none;
@@ -94,7 +185,8 @@
 }
 .metaLabel {
 	flex: none;
-	width: 48px;
+	width: 62px;
+	white-space: nowrap;
 	font-size: 11.5px;
 	font-weight: 700;
 	color: var(--t2);
@@ -114,6 +206,142 @@
 }
 .metaHint {
 	font-size: 10.5px;
+	color: var(--t3);
+}
+/* "적용이 되면 일반 UI로 수정이 안되는 UI로" — 입력창 대신 이 읽기 전용 표시(§ TaskDetailModal.tsx applied). */
+.metaLockedValue {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--ink);
+	padding: 0 2px;
+}
+
+/* "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든... 서브태스크 설명란이
+   따로 존재해야해" — 태스크 설명과 별개로 자기만의 설명·예정일·기간을 갖는 목록. */
+.subtasksSection {
+	margin-bottom: 14px;
+}
+.subtasksHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+.subtaskAddBtn {
+	flex: none;
+	border: none;
+	background: none;
+	color: var(--violet);
+	font-size: 11px;
+	font-weight: 700;
+	cursor: pointer;
+	padding: 2px 4px;
+}
+.subtaskAddBtn:hover {
+	text-decoration: underline;
+}
+.subtasksEmpty {
+	font-size: 11px;
+	color: var(--t3);
+	padding: 2px 0 4px 48px;
+}
+.subtaskRow {
+	border: 1px solid var(--line);
+	border-radius: var(--radius-control);
+	padding: 8px 10px;
+	margin-bottom: 6px;
+	background: var(--card2);
+}
+.subtaskRowHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* "코드작업은 무조건 서브태스크를 만들고 그 서브태스크에 워크트리를 만들어서... 순차로" — 실제
+   워크트리+클로드 세션이 뜬 서브태스크만 배지가 보인다(직접 추가한 QA/배포처럼 코드 작업이 아닌
+   서브태스크는 배지 없음 — 그런 건 이 체이닝 대상이 아니라서). alive=진행 중(초록), 아니면 세션이
+   꺼졌다는 뜻(컴퓨터 재시작 등으로 tmux가 죽었지만 기록은 남아있음 — amber로 구분).*/
+.subtaskWorkBadge {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 2px 6px;
+	border-radius: var(--radius-chip);
+}
+.subtaskWorkBadgeAlive {
+	color: var(--green);
+	background: var(--gtint);
+}
+.subtaskWorkBadgeDone {
+	color: var(--amber);
+	background: var(--atint);
+}
+.subtaskNameInput {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	background: none;
+	color: var(--ink);
+	font-size: 12px;
+	font-weight: 700;
+	padding: 4px 2px;
+}
+.subtaskNameInput:focus {
+	outline: none;
+	background: var(--card);
+	border-radius: var(--radius-chip);
+}
+.subtaskRemoveBtn {
+	flex: none;
+	border: none;
+	background: none;
+	color: var(--t3);
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 2px 4px;
+}
+.subtaskRemoveBtn:hover {
+	color: var(--red);
+}
+/* "서브태스크 완료 버튼 필요" — 삭제 버튼 옆의 작은 체크 토글. */
+.subtaskDoneBtn {
+	flex: none;
+	width: 18px;
+	height: 18px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1.5px solid var(--line2);
+	border-radius: 5px;
+	background: none;
+	color: transparent;
+	font-size: 11px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0;
+}
+.subtaskDoneBtn:hover {
+	border-color: var(--violet);
+}
+.subtaskDoneBtnActive {
+	background: var(--violet);
+	border-color: var(--violet);
+	color: #fff;
+}
+.subtaskDescInput {
+	width: 100%;
+	min-height: 44px;
+	resize: vertical;
+	margin-top: 6px;
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	background: var(--card);
+	color: var(--ink);
+	font-size: 11.5px;
+	padding: 6px 8px;
+}
+.subtaskDescInput::placeholder {
 	color: var(--t3);
 }
 
@@ -198,6 +426,13 @@
 .repoSelectOptSelected {
 	color: var(--violet);
 	background: var(--vtint);
+}
+.repoSelectOptNew {
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+	color: var(--violet);
+	font-weight: 600;
 }
 .repoSelectOptName {
 	flex: 1;
@@ -317,6 +552,24 @@
 .aiReportLink:hover {
 	color: var(--violet);
 }
+/* "너가 작업한다고 가정했을때를 개발기한으로, 개발자 테스트 기한은 확인하는 작업으로" — 총합 아래
+   Claude 구현 시간 vs 사람 검증 시간을 나눠 보여주는 보조 라인(총합 배지보다 한 단계 옅은 톤). */
+.aiSuggestSplit {
+	font-size: 10.5px;
+	color: var(--t3);
+	margin-bottom: 8px;
+}
+/* "만약 길게잡힌게 맞다면. 강조를 해줬으면해" — 총합이 1일을 넘길 때만 뜨는 핵심 이유 강조 박스.
+   agent 판단이라는 의미로 violet 틴트(경고 아님 — amber는 tooVague처럼 진짜 "확인 필요" 상태 전용). */
+.aiWhyLong {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--violet);
+	background: var(--vtint);
+	border-radius: var(--radius-chip);
+	padding: 7px 9px;
+	margin-bottom: 8px;
+}
 /* "오래 걸리는데 토큰을 보여주고 프로그레스바도 보여줘야" — 실제 도구 호출(grep/read)마다 올라가는
    percent + 지금 뭘 하고 있는지 라벨 + 누적 토큰 수를 실시간 폴링으로 보여준다. */
 .aiProgressLabel {
@@ -366,10 +619,11 @@
 }
 .aiBreakdownDays {
 	flex: none;
-	width: 22px;
+	width: 58px;
 	font-size: 10.5px;
 	font-weight: 700;
 	color: var(--ink);
+	font-variant-numeric: tabular-nums;
 }
 .aiBreakdownNote {
 	flex: 1;
@@ -427,10 +681,61 @@
 }
 
 .descLabel {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	font-size: 11.5px;
 	font-weight: 700;
 	color: var(--t2);
 	margin: 14px 0 6px;
+}
+/* SubtaskDetailPanel 전용 — "메인 태스크"로 돌아가는 링크 버튼 + 세션 상태 배지. */
+.mainTaskLink {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	margin-bottom: 16px;
+	padding: 8px 11px;
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--violet);
+	background: var(--vtint);
+	border: none;
+	border-radius: var(--radius-control);
+	cursor: pointer;
+	text-align: left;
+}
+.mainTaskLink:hover {
+	background: color-mix(in srgb, var(--violet) 20%, var(--vtint));
+}
+.mainTaskLink:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.sessionBadge {
+	font-size: 10px;
+	font-weight: 700;
+	padding: 2px 8px;
+	border-radius: var(--radius-chip);
+}
+.sessionBadgeAlive {
+	background: var(--gtint);
+	color: var(--green);
+}
+.sessionBadgeDone {
+	background: var(--atint);
+	color: var(--amber);
+}
+.sessionBadgeIdle {
+	background: var(--card2);
+	color: var(--t3);
+	border: 1px solid var(--line2);
+}
+.descLockedHint {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--t3);
 }
 .descInput {
 	width: 100%;
@@ -445,6 +750,63 @@
 }
 .descInput::placeholder {
 	color: var(--t3);
+}
+/* "link는 자동으로 ui를 나누어주고 글도 나누어줘서 한눈에 볼 수 있게" — 편집 중이 아닐 땐 이 읽기
+   전용 뷰로 보여준다(.descInput과 같은 박스 톤 유지, 클릭하면 편집 모드로 전환). */
+.descView {
+	width: 100%;
+	min-height: 110px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	padding: 10px 11px;
+	cursor: text;
+}
+.descView:hover {
+	border-color: var(--t3);
+}
+.descViewLocked {
+	cursor: default;
+	background: var(--card2);
+	opacity: 0.85;
+}
+.descViewLocked:hover {
+	border-color: var(--line2);
+}
+.descPlaceholder {
+	font-size: 12.5px;
+	color: var(--t3);
+}
+.descLinkRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+.descLinkChip {
+	display: inline-flex;
+	align-items: center;
+	height: 22px;
+	padding: 0 9px;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+	color: var(--violet);
+	font-size: 10.5px;
+	font-weight: 700;
+	text-decoration: none;
+}
+.descLinkChip:hover {
+	background: var(--violet);
+	color: #fff;
+}
+.descPara {
+	margin: 0 0 8px;
+	font-size: 12.5px;
+	line-height: 1.6;
+	color: var(--ink);
+}
+.descPara:last-child {
+	margin-bottom: 0;
 }
 
 .branchSection {

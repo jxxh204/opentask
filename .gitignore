@@ -4,3 +4,5 @@ scrub.mjs
 rebuild.mjs
 agents-skills.json
 node_modules
+.impeccable/
+.playwright-mcp/

@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { SessionsBoard, Folder, Task, Branch, BranchLink, Review, Repo } from '../store/types'
+import type { SessionsBoard, Folder, Task, Branch, BranchLink, Review, Repo, DurationEstimateResult, BlockedPeriod, Subtask } from '../store/types'
 
 export function getBoard() {
 	return api.get<SessionsBoard>('/api/sessions/board')
@@ -8,7 +8,7 @@ export function getBoard() {
 export function createFolder(input: { name: string; base?: string | null; autoMerge?: boolean; retryLimit?: number; repoId?: string | null }) {
 	return api.post<Folder>('/api/folders', input)
 }
-export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean; repoId: string | null }>) {
+export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean; repoId: string | null; ruleTask: string | null }>) {
 	return api.patch<Folder>(`/api/folders/${id}`, patch)
 }
 export function removeFolder(id: string) {
@@ -32,17 +32,76 @@ export function moveTask(id: string, folderId: string | null, beforeTaskId?: str
 }
 export function updateTask(
 	id: string,
-	patch: Partial<{ name: string; desc: string; kind: Task['kind']; startPrompt: string | null; repoId: string | null; dueDate: number | null; durationDays: number | null; completedAt: number | null }>,
+	patch: Partial<{
+		name: string
+		desc: string
+		kind: Task['kind']
+		startPrompt: string | null
+		repoId: string | null
+		dueDate: number | null
+		durationDays: number | null
+		completedAt: number | null
+		color: string | null
+	}>,
 ) {
 	return api.patch<Task>(`/api/tasks/${id}`, patch)
 }
 export function removeTask(id: string) {
 	return api.delete<{ ok: boolean }>(`/api/tasks/${id}`)
 }
-export interface DurationEstimateItem {
-	item: string
-	days: number
-	note: string
+
+// 서브태스크("태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든") — board가 이미
+// task.subtasks로 실어주므로 별도 목록 조회 함수는 없다.
+export function createSubtask(taskId: string, input: { name: string; desc?: string; dueDate?: number | null; durationDays?: number | null }) {
+	return api.post<Subtask>(`/api/tasks/${taskId}/subtasks`, input)
+}
+export function updateSubtask(id: string, patch: Partial<{ name: string; desc: string; dueDate: number | null; durationDays: number | null; repoId: string | null; completedAt: number | null }>) {
+	return api.patch<Subtask>(`/api/subtasks/${id}`, patch)
+}
+export function removeSubtask(id: string) {
+	return api.delete<{ ok: boolean }>(`/api/subtasks/${id}`)
+}
+// "순서 변경도 내가 할 수 있게 해줘" — 사이드바 드래그로 다시 정렬한 순서를 그대로 넘긴다.
+export function reorderSubtasks(taskId: string, ids: string[]) {
+	return api.post<{ ok: true; subtasks: Subtask[] }>(`/api/tasks/${taskId}/subtasks/reorder`, { ids })
+}
+// "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — task_id 없이 만드는
+// 독립 서브태스크(메모). 수정/삭제는 위 updateSubtask/removeSubtask를 그대로 재사용(id 기반이라 무관).
+export function createNote(input: { name: string; desc?: string; dueDate?: number | null; durationDays?: number | null }) {
+	return api.post<Subtask>('/api/subtasks', input)
+}
+export function reorderNotes(ids: string[]) {
+	return api.post<{ ok: true; subtasks: Subtask[] }>('/api/subtasks/reorder', { ids })
+}
+
+// "코드작업은 무조건 서브태스크를 만들고 그 서브태스크에 워크트리를 만들어서... 순차로... pr도
+// 체이닝으로" — 태스크의 서브태스크(개발 단위)를 하나씩 워크트리+클로드 세션으로 체이닝 진행.
+export interface SubtaskWorkStatus {
+	id: string
+	name: string
+	started: boolean
+	alive: boolean
+	tmuxSession: string | null
+	worktreePath: string | null
+	branch: string | null
+}
+export function startSubtaskWork(taskId: string) {
+	return api.post<{ ok: true; already?: boolean; subtaskId: string; subtaskName: string; tmuxSession: string } | { ok: false; error: string }>(`/api/tasks/${taskId}/subtask-work/start`)
+}
+export function advanceSubtaskWork(taskId: string) {
+	return api.post<{ ok: true; done?: boolean; subtaskId?: string; subtaskName?: string; tmuxSession?: string } | { ok: false; error: string }>(`/api/tasks/${taskId}/subtask-work/advance`)
+}
+export function getSubtaskWorkState(taskId: string) {
+	return api.get<{ ok: true; subtasks: SubtaskWorkStatus[] } | { ok: false; error: string }>(`/api/tasks/${taskId}/subtask-work/state`)
+}
+// "서브태스크 클로드 세션은 어떻게 킬지 고민이야" — 다음으로 안 넘기고 지금 세션만 끝낸다.
+export function stopSubtaskSession(subtaskId: string) {
+	return api.post<{ ok: true } | { ok: false; error: string }>(`/api/subtasks/${subtaskId}/session/stop`)
+}
+// "메인 태스크를 고르는 기능도 필요해 — 서브태스크로 사용하려고 고른것일 수 있자나?" — 독립 태스크를
+// 다른 태스크의 서브태스크로 편입한다.
+export function attachTaskAsSubtask(taskId: string, mainTaskId: string) {
+	return api.post<{ ok: true; subtask: Subtask } | { ok: false; error: string }>(`/api/tasks/${taskId}/attach-as-subtask`, { mainTaskId })
 }
 export interface DurationEstimateTokens {
 	input: number
@@ -64,7 +123,7 @@ export interface DurationEstimateStatus {
 	// 가능한 순서 있는 문장 배열. changes(AS-IS/TO-BE 코드 스케치)는 좁은 드로어에선 안 쓰고 HTML
 	// 리포트에서만 렌더링하므로 여기 타입엔 넣지 않는다(드로어 쪽 화면에서 참조하지 않음).
 	// betterDesc: "일감 내용 자체를 변경해버리면" — "설명 적용"으로 desc 필드를 통째로 교체 가능.
-	result: ({ ok: true; days: number; breakdown: DurationEstimateItem[]; detail: string; plan: string[]; betterDesc: string } | { ok: false; error: string; tooVague?: boolean }) | null
+	result: DurationEstimateResult | null
 }
 // 태스크 상세 "AI 추정" 버튼 — 설명+실제 코드 기반 항목별(화면/로직/설계/영향범위) 예상 소요 영업일.
 // 코드 탐색 때문에 30초~수 분 걸릴 수 있어("토큰/프로그레스바를 보여줘야" 피드백) 잡 방식으로 바뀜 —
@@ -95,7 +154,10 @@ export function listRepos() {
 export function createRepo(input: { name: string; path: string; base?: string; description?: string }) {
 	return api.post<Repo>('/api/repos', input)
 }
-export function updateRepo(id: string, patch: Partial<{ name: string; path: string; base: string; description: string; color: string | null }>) {
+export function updateRepo(
+	id: string,
+	patch: Partial<{ name: string; path: string; base: string; description: string; color: string | null; ruleGeneral: string | null; ruleTaskWriting: string | null; ruleBranch: string | null; rulePredev: string | null }>,
+) {
 	return api.patch<Repo>(`/api/repos/${id}`, patch)
 }
 export function removeRepo(id: string) {
@@ -106,6 +168,17 @@ export function cloneRepo(input: { url: string; parentPath: string; name?: strin
 }
 export function initRepo(input: { parentPath: string; name: string }) {
 	return api.post<{ ok: boolean; repo?: Repo; error?: string }>('/api/repos/init', input)
+}
+
+// "일정 막기 기능이 필요해. QA기간같은게 있어서" — 캘린더 전용 차단 기간 CRUD.
+export function listBlockedPeriods() {
+	return api.get<BlockedPeriod[]>('/api/blocked-periods')
+}
+export function createBlockedPeriod(input: { name: string; startDate: number; endDate: number }) {
+	return api.post<BlockedPeriod | { ok: false; error: string }>('/api/blocked-periods', input)
+}
+export function removeBlockedPeriod(id: string) {
+	return api.delete<{ ok: boolean }>(`/api/blocked-periods/${id}`)
 }
 
 export function createBranch(input: { taskId: string; name: string; repo?: string }) {
@@ -222,6 +295,12 @@ export function getCockpit() {
 
 export function getHealth() {
 	return api.get<{ ok: boolean; repo: string; host: string; port: number }>('/api/health')
+}
+// "모바일 테스트할 때 로컬 서버를 모바일앱에서 접속할 때 사용해야해" — 127.0.0.1은 다른 기기에서
+// 못 쓰니(루프백 전용), 같은 Wi-Fi의 실기기가 실제로 쓸 수 있는 이 맥의 LAN IP를 대신 보여준다
+// (§ SessionShell.tsx apiAddress — 기존에 안 쓰이던 /api/localip를 여기서 처음 소비).
+export function getLocalIp() {
+	return api.get<{ ok: boolean; ip: string | null; ssid: string | null; ssidRedacted: boolean }>('/api/localip')
 }
 
 export function syncReviews(branchId: string) {

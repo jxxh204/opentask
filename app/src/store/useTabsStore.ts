@@ -7,10 +7,15 @@ import { create } from 'zustand'
 //
 // VSCode처럼 탭은 종류당 하나가 아니다 — "+"를 누를 때마다 항상 새 탭 인스턴스가 생기고(TabInstance.id
 // 로 구분), ×로 닫으면 사라진다. TabKind는 그 탭이 무슨 콘텐츠를 보여줄지만 정할 뿐 유일 키가 아니다.
-export type TabKind = 'orchestrator' | 'terminal' | 'server' | 'browser' | 'claude' | 'cronjobs' | 'modelPolicy' | 'calendar' | 'control'
+export type TabKind = 'orchestrator' | 'diagram' | 'detail' | 'subtask' | 'terminal' | 'server' | 'browser' | 'claude' | 'cronjobs' | 'modelPolicy' | 'calendar' | 'control' | 'teamRules'
 
+// kind 값 자체(orchestrator)는 그대로 둔다 — server/orchestrator.cjs·conductor 등 실제 백엔드 개념과
+// 이름이 묶여 있어 여기서 바꾸면 득 없이 넓게 손대야 한다. 화면에 보이는 이름만 "태스크 매니저"로.
 export const TAB_LABEL: Record<TabKind, string> = {
-	orchestrator: '오케스트레이터',
+	orchestrator: '태스크 매니저',
+	diagram: '다이어그램',
+	detail: '상세',
+	subtask: '서브태스크',
 	terminal: '터미널',
 	server: '로컬 서버',
 	browser: '브라우저',
@@ -18,7 +23,8 @@ export const TAB_LABEL: Record<TabKind, string> = {
 	cronjobs: '크론잡',
 	modelPolicy: '모델 배정',
 	calendar: '캘린더',
-	control: '관제',
+	control: '비서',
+	teamRules: '팀 규칙',
 }
 
 // 크론잡/모델배정/캘린더처럼 태스크·워크트리에 속하지 않는 전역 메뉴는 트리 노드와 같은 탭 인프라
@@ -27,9 +33,12 @@ export const TAB_LABEL: Record<TabKind, string> = {
 export const CRONJOBS_NODE_ID = '__cronjobs__'
 export const MODEL_POLICY_NODE_ID = '__modelPolicy__'
 export const CALENDAR_NODE_ID = '__calendar__'
-// 태스크 지휘자(orchestrator)와 이름·자리를 분리한 "관제" 에이전트 — 태스크 하나가 아니라 앱
-// 전체(캘린더/크론잡/설정)를 대화로 조작한다(server/control.cjs).
+// 태스크 지휘자(orchestrator)와 이름·자리를 분리한 "비서" 에이전트(구 "관제") — 태스크 하나가 아니라
+// 앱 전체(캘린더/크론잡/설정)를 대화로 조작한다(server/control.cjs — 내부 파일·심볼명은 그대로 둠).
 export const CONTROL_NODE_ID = '__control__'
+// "태스크 매니저처럼 팀 규칙도 탭으로" — 모델 배정과 같은 패턴(설정 모달엔 진입 링크 한 줄만, 실제
+// 화면은 독립 전역 탭). 레포별 브랜치·문서 규칙(§ db.cjs v22)을 여기서 관리한다.
+export const TEAM_RULES_NODE_ID = '__teamRules__'
 
 // 워크트리 목록에서 "미추적" 워크트리를 클릭하면 여는 즉석 터미널 탭 — OpenTask가 태스크로 추적하지
 // 않는 경로라 UUID 노드가 없다. 경로 자체를 가짜 노드 id로 삼는다(경로마다 별도 탭 세트 유지).
@@ -45,6 +54,9 @@ export interface TabInstance {
 	id: string
 	kind: TabKind
 	label?: string // 우클릭 "이름 변경"으로 덮어쓴 커스텀 라벨 — 없으면 TAB_LABEL[kind]
+	// kind === 'subtask' 전용 — 다이어그램에서 서브태스크 박스를 눌러 열 때만 채워진다.
+	subtaskId?: string
+	parentTaskId?: string
 }
 
 function genTabId() {
@@ -66,6 +78,8 @@ interface TabsState {
 
 	setActiveNode(id: string, defaultTab: TabKind): void
 	openTab(id: string, kind: TabKind): void
+	openOrFocusTab(id: string, kind: TabKind): void
+	openSubtaskTab(id: string, subtaskId: string, parentTaskId: string, label: string): void
 	closeTab(id: string, tabId: string): void
 	reopenLastClosed(id: string): void
 	setActiveTab(id: string, tabId: string): void
@@ -87,10 +101,18 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 			const existing = s.tabsByNode[id]
 			if (existing) return { activeNodeId: id }
 			const first: TabInstance = { id: genTabId(), kind: defaultTab }
+			// "메인태스크 누르면 이제 메인태스크의 상세페이지가 탭으로 나와야한다" — 폴더(메인 태스크)
+			// 노드를 처음 열 때 태스크 매니저·다이어그램과 함께 상세 탭도 같이 만들어두고, 실제로 화면에
+			// 보이는(활성) 탭은 상세로 시작한다("+"로 매번 열 필요 없이 클릭만 하면 바로 상세가 보이게).
+			const detailTab: TabInstance = { id: genTabId(), kind: 'detail' }
+			// "기본으로 켜져있도록 해줘" — 팀 규칙도 상세·다이어그램처럼 폴더를 처음 열 때 같이 만들어둔다
+			// (활성 탭은 여전히 상세 — 팀 규칙은 매번 보는 화면은 아니라 포커스까진 안 가져간다).
+			const seeded = defaultTab === 'orchestrator' ? [detailTab, first, { id: genTabId(), kind: 'diagram' as TabKind }, { id: genTabId(), kind: 'teamRules' as TabKind }] : [first]
+			const activeId = defaultTab === 'orchestrator' ? detailTab.id : first.id
 			return {
 				activeNodeId: id,
-				tabsByNode: { ...s.tabsByNode, [id]: [first] },
-				activeTabByNode: { ...s.activeTabByNode, [id]: first.id },
+				tabsByNode: { ...s.tabsByNode, [id]: seeded },
+				activeTabByNode: { ...s.activeTabByNode, [id]: activeId },
 			}
 		})
 	},
@@ -99,6 +121,38 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 		set((s) => {
 			const tabs = s.tabsByNode[id] ?? []
 			const next: TabInstance = { id: genTabId(), kind }
+			return {
+				tabsByNode: { ...s.tabsByNode, [id]: [...tabs, next] },
+				activeTabByNode: { ...s.activeTabByNode, [id]: next.id },
+			}
+		})
+	},
+
+	// "서브태스크 내에 설정된 메인태스크를 누르면 메인태스크 다이어그램으로 넘어가서" — 이미 그 종류의
+	// 탭이 열려 있으면 새로 안 만들고 그걸로 전환만 한다(다이어그램 탭은 setActiveNode가 기본으로
+	// 이미 만들어두므로 대개 이 경로를 탄다).
+	openOrFocusTab: (id, kind) => {
+		set((s) => {
+			const tabs = s.tabsByNode[id] ?? []
+			const existing = tabs.find((t) => t.kind === kind)
+			if (existing) return { activeTabByNode: { ...s.activeTabByNode, [id]: existing.id } }
+			const next: TabInstance = { id: genTabId(), kind }
+			return {
+				tabsByNode: { ...s.tabsByNode, [id]: [...tabs, next] },
+				activeTabByNode: { ...s.activeTabByNode, [id]: next.id },
+			}
+		})
+	},
+
+	// "모든 서브태스크는 클릭해서 탭을 추가할 수 있고... 탭 리스트는 메인태스크 기준으로" — 다이어그램의
+	// 서브태스크 박스를 누르면 그 서브태스크의 메인 태스크(=폴더) 노드의 탭 리스트에 탭이 하나 추가된다.
+	// 같은 서브태스크를 다시 누르면 새로 안 열고 이미 열린 탭으로만 전환한다(중복 탭 방지).
+	openSubtaskTab: (id, subtaskId, parentTaskId, label) => {
+		set((s) => {
+			const tabs = s.tabsByNode[id] ?? []
+			const existing = tabs.find((t) => t.kind === 'subtask' && t.subtaskId === subtaskId)
+			if (existing) return { activeTabByNode: { ...s.activeTabByNode, [id]: existing.id } }
+			const next: TabInstance = { id: genTabId(), kind: 'subtask', subtaskId, parentTaskId, label }
 			return {
 				tabsByNode: { ...s.tabsByNode, [id]: [...tabs, next] },
 				activeTabByNode: { ...s.activeTabByNode, [id]: next.id },

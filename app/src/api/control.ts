@@ -19,3 +19,20 @@ export function startControl() {
 export function stopControl() {
 	return api.post<{ ok: boolean }>('/api/control/stop', {})
 }
+// "비서에게 질문하는 버튼" — 비서가 떠 있으면 그 세션에 바로, 없으면 콜드 스타트하며 이 텍스트를
+// 최초 지시에 실어 보낸다(§ server/control.cjs ask).
+export function askControl(text: string) {
+	return api.post<ControlState & { ok: boolean; already?: boolean; error?: string }>('/api/control/ask', { text })
+}
+
+// "대화형으로 가자" — raw 터미널 대신 claude CLI 자신의 jsonl 대화 기록을 파싱한 채팅 턴(§ ControlPane.tsx).
+export type ChatPart = { kind: 'text'; text: string } | { kind: 'tool'; name: string; input: unknown; result: string | null }
+export interface ChatTurn {
+	id: string
+	role: 'user' | 'assistant'
+	ts: string
+	parts: ChatPart[]
+}
+export function getControlTranscript() {
+	return api.get<{ ok: boolean; turns: ChatTurn[] }>('/api/control/transcript')
+}

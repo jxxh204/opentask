@@ -11,6 +11,7 @@
 	align-items: center;
 	gap: 8px;
 	padding: 16px 20px;
+	border-bottom: 1px solid var(--line);
 }
 .state {
 	font-size: 13px;
@@ -65,16 +66,23 @@
 	padding: 14px 20px 20px;
 }
 
-.sessions {
+/* "세션 목록"은 지금 뭐가 도는지 훑어보는 용도라 세로 리스트보다 가로 칩 줄이 한눈에 더 잘 들어온다
+   (BranchChain 등 이 시스템의 칩 관례 재사용 — tint 배경 없이 상태 점 하나로만 신호). */
+.sessionStrip {
 	margin-top: 14px;
 	display: flex;
-	flex-direction: column;
-	gap: 4px;
+	flex-wrap: wrap;
+	gap: 6px;
 }
-.sessionRow {
+.sessionChip {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: 6px;
+	height: 24px;
+	padding: 0 9px;
+	border-radius: var(--radius-chip);
+	border: 1px solid var(--line2);
+	background: var(--card2);
 	font-size: 11px;
 	color: var(--t2);
 }
@@ -94,14 +102,16 @@
 	color: var(--t3);
 	letter-spacing: 0.02em;
 }
+.logEmpty {
+	font-size: 11px;
+	color: var(--t3);
+}
+/* "판정 로그·활동 로그"는 실제 대화가 아니라 기계적 기록이라 대화 로그보다 조용하게 — 카드도
+   레일도 없는 flat한 한 줄. 종류 구분은 StatusDot 색 하나로만(§ Status-Icon Rule과 같은 절제). */
 .log {
 	display: flex;
 	flex-direction: column;
 	gap: 7px;
-}
-.logEmpty {
-	font-size: 11px;
-	color: var(--t3);
 }
 .logRow {
 	display: flex;
@@ -114,18 +124,67 @@
 	color: var(--t2);
 	line-height: 1.6;
 }
+.logKind {
+	font-weight: 700;
+	color: var(--t2);
+	margin-right: 5px;
+}
+.logTime {
+	flex: none;
+	font-size: 9.5px;
+	color: var(--t3);
+	margin-left: auto;
+	padding-left: 8px;
+}
 
-/* 지휘자의 대화 로그 — 일반 터미널 라인이 아니라 다중 에이전트 대화(from → to). 프로토타입의
-   .orch-feed-row 그대로. */
-.feedList {
-	display: flex;
-	flex-direction: column;
+/* 지휘자의 대화 로그 — 일반 터미널 라인이 아니라 다중 에이전트 대화(from → to). "평문 나열이라 안
+   읽힘" 피드백으로 흐르는 목록 대신, BranchChain의 시그널 레일과 같은 타임라인 지오메트리(절대위치
+   레일+원형 노드)로 순서를 눈으로 따라가게 하고 항목마다 자기 카드를 준다. 레일 색은 BranchChain의
+   진행형 그라데이션과 구분하기 위해(그건 브랜치 진행 전용 신호) 중립 라인 컬러로 고정. */
+.feedTimeline {
+	position: relative;
+	padding-left: 20px;
 }
-.feedRow {
-	padding: 9px 0;
+.feedRail {
+	position: absolute;
+	left: 4px;
+	top: 6px;
+	bottom: 6px;
+	width: 2px;
+	background: var(--line2);
 }
-.feedRow + .feedRow {
-	border-top: 1px solid var(--line);
+.feedEntry {
+	position: relative;
+	margin-bottom: 8px;
+}
+.feedEntry:last-child {
+	margin-bottom: 0;
+}
+.feedNode {
+	position: absolute;
+	left: -20px;
+	top: 13px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--card);
+	border: 2px solid var(--t3);
+}
+.node_plan,
+.node_dispatch {
+	border-color: var(--violet);
+}
+.node_result {
+	border-color: var(--blue);
+}
+.node_error {
+	border-color: var(--red);
+}
+.feedCard {
+	background: var(--card2);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	padding: 9px 11px;
 }
 .feedMeta {
 	display: flex;
@@ -163,7 +222,7 @@
 	color: var(--blue);
 }
 .kind_msg {
-	background: var(--card2);
+	background: var(--card);
 	color: var(--t3);
 	border: 1px solid var(--line2);
 }

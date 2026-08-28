@@ -1,6 +1,6 @@
 ---
 name: show-app
-description: OpenRM 앱(app/) 작업(구현/수정/버그픽스)이 끝날 때마다 항상 실행 — 실행 중인 Electron 창을 안전하게 포그라운드로 띄워 사용자가 직접 확인할 수 있게 한다. 동명 프로세스 오작동 방지를 위해 반드시 PID 기반으로 활성화한다.
+description: OpenTask 앱(app/) 작업(구현/수정/버그픽스)이 끝날 때마다 항상 실행 — 실행 중인 Electron 창을 안전하게 포그라운드로 띄워 사용자가 직접 확인할 수 있게 한다. 동명 프로세스 오작동 방지를 위해 반드시 PID 기반으로 활성화한다.
 category: "process"
 trigger: "auto-trigger"
 allowed-tools: Bash, Read
@@ -10,7 +10,7 @@ allowed-tools: Bash, Read
 
 ## Core Principle
 
-`app/`(OpenRM Electron 앱) 관련 작업 한 라운드가 끝나면, 채팅으로 결과만 요약하고 끝내지 말고
+`app/`(OpenTask Electron 앱) 관련 작업 한 라운드가 끝나면, 채팅으로 결과만 요약하고 끝내지 말고
 **항상** 실행 중인 Electron 창을 사용자가 볼 수 있게 포그라운드로 띄운다. 텍스트 요약을 신뢰하게
 하지 말고 직접 확인시킨다.
 
@@ -73,7 +73,7 @@ tell application "System Events"
 end tell
 ```
 
-- `name of front window`가 `"OpenRM"`인지 반드시 확인한 뒤에만 스크린샷 등 다음 단계로 진행한다.
+- `name of front window`가 `"OpenTask"`인지 반드시 확인한 뒤에만 스크린샷 등 다음 단계로 진행한다.
 - `count of windows`가 0이면 아래 4번(좀비 상태 복구)으로.
 
 ### 4. 창이 0개(좀비 상태)면 `open -a`로 복구

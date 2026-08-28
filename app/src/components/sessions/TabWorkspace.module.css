@@ -146,6 +146,20 @@
 	color: var(--ink);
 	cursor: pointer;
 }
+.cmdkItemLabel {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+/* "탭에 아이콘 넣어줘 실제 아이콘" — 탭바·탭 추가 메뉴 공용. 태스크 매니저의 <img>(실제 앱 아이콘)만
+   자체 색을 갖고, 나머지 그려진 아이콘은 라벨과 같은 색을 물려받아(currentColor) 탭 활성/비활성 색
+   전환에 자연히 따라간다. */
+.tabIcon {
+	flex: none;
+	display: flex;
+	align-items: center;
+	opacity: 0.85;
+}
 .cmdkItem:hover {
 	background: var(--card-hover);
 }

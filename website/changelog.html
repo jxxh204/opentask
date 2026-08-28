@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>릴리스 노트 — OpenTask</title>
+	<meta name="description" content="OpenTask 버전별 변경사항. 정식 다운로드 빌드가 공개되면 이 페이지에 릴리스가 쌓입니다." />
+	<link rel="icon" type="image/png" href="/favicon-32.png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+	<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+	<header class="nav">
+		<div class="container nav-inner">
+			<a class="brand" href="/">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<nav class="nav-links">
+				<a href="/#features">기능</a>
+				<a href="/docs.html">Docs</a>
+				<a href="/changelog.html" class="active">릴리스 노트</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+			</nav>
+			<div class="nav-cta">
+				<a class="lang-switch" href="/en/changelog.html">EN</a>
+				<a class="btn btn-ghost" href="/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/download.html">다운로드</a>
+			</div>
+			<button class="nav-toggle" aria-label="메뉴 열기">☰</button>
+		</div>
+	</header>
+
+	<main>
+		<section style="padding-top: 56px; padding-bottom: 24px;">
+			<div class="container">
+				<div class="section-head">
+					<div class="eyebrow">Changelog</div>
+					<h2>릴리스 노트</h2>
+					<p>OpenTask에 새로 생기거나 바뀐 것들을 여기 정리합니다.</p>
+				</div>
+			</div>
+		</section>
+
+		<section style="padding-top: 0;">
+			<div class="container" style="max-width: 720px;">
+				<div class="callout warn" style="margin-bottom: 32px;">
+					<strong>정식 첫 릴리스 전입니다.</strong> 서명 · 공증이 끝나고 다운로드 가능한 빌드가
+					올라오면, 그때부터 실제 버전 태그를 기준으로 이 페이지에 릴리스가 쌓입니다. 아래는
+					지금까지 소스에 구현된 기능을 정리한 사전 요약입니다.
+				</div>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.0</h3>
+						<span class="chip chip-amber">출시 준비 중</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>태스크 · 서브태스크 · 워크트리 기반 병렬 에이전트 오케스트레이션(태스크 매니저) — 서브태스크 생성 즉시 자동으로 웨이브 지휘 시작</li>
+						<li>다이어그램 보드로 서브태스크 체인 상태를 조립 라인처럼 요약</li>
+						<li>캘린더 — 서브태스크 일정 주/월 뷰, 드래그 재조정, 차단 기간</li>
+						<li>크론잡 — 반복 간격 · 매일 · 매주 예약으로 새 일감 자동 생성</li>
+						<li>모델 배정 — 작업 종류별(설계 · 코딩 · 리뷰 · QA 등) AI 모델 정책</li>
+						<li>팀 규칙 — 레포당 자유 텍스트 4칸으로 에이전트 지시문에 실릴 팀 규칙 정의</li>
+						<li>관제 — 캘린더 · 크론잡 · 설정을 대화로 조작하는 앱 전체 에이전트</li>
+						<li>PR 리뷰 — 코멘트에 리뷰 적용(살아있는 세션에 지시 주입) / 리뷰 항의(GitHub 공개 답글)</li>
+						<li>macOS Electron 데스크톱 앱 셸 — 백엔드를 detached 프로세스로 분리해 앱 종료 후에도 세션 유지</li>
+						<li>electron-updater + GitHub Releases 기반 자동 업데이트 배선(서명 완료 후 활성화)</li>
+					</ul>
+				</article>
+
+				<div style="text-align:center; padding: 24px 0;">
+					<p style="color:var(--t3); font-size:13px; margin:0;">
+						버전 태그가 붙은 첫 릴리스가 나오면 이 자리에 날짜와 함께 추가됩니다.
+					</p>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer>
+		<div class="container footer-inner">
+			<a class="brand" href="/">
+				<img src="/icon.png" alt="" />
+				OpenTask
+			</a>
+			<div class="footer-links">
+				<a href="/docs.html">Docs</a>
+				<a href="/changelog.html">릴리스 노트</a>
+				<a href="/download.html">다운로드</a>
+				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">라이선스 (MIT)</a>
+			</div>
+			<div class="footer-copy">© 2026 OpenTask</div>
+		</div>
+	</footer>
+
+	<script type="module" src="/src/main.js"></script>
+</body>
+</html>

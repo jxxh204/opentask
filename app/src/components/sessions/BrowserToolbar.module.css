@@ -74,35 +74,17 @@
 	font-size: 11.5px;
 	color: var(--ink);
 }
-.addressBar input:disabled {
-	color: var(--t2);
-}
 .addressBar input:focus {
 	outline: none;
 }
 
-.sessionBtn {
-	flex: none;
-	font-size: 10.5px;
-	font-weight: 700;
-	padding: 7px 13px;
-	border-radius: 999px;
-	cursor: pointer;
-	border: none;
-	background: var(--violet);
-	color: #fff;
+.spinning svg {
+	animation: browserToolbarSpin 0.9s linear infinite;
 }
-.sessionBtn.stop {
-	background: none;
-	border: 1px solid var(--line2);
-	color: var(--red);
-}
-.sessionBtn:hover {
-	opacity: 0.9;
-}
-.sessionBtn:disabled {
-	opacity: 0.6;
-	cursor: default;
+@keyframes browserToolbarSpin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 
 .error {

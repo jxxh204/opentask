@@ -1,0 +1,45 @@
+.dot {
+	flex: none;
+	align-self: center;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: 0 0 0 1px var(--line2);
+}
+.modalTitle {
+	padding: 14px 14px 0;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 10px;
+	padding: 14px;
+}
+.swatch {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	cursor: pointer;
+}
+.swatch:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--line2);
+}
+.swatchActive {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
+}
+.swatchActive:hover {
+	box-shadow: 0 0 0 2px var(--card2), 0 0 0 4px var(--ink);
+}
+.swatchNone {
+	background: var(--card2);
+	border: 1px dashed var(--line2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--t3);
+	font-size: 13px;
+}

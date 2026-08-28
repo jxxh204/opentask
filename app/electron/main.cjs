@@ -1,15 +1,26 @@
 #!/usr/bin/env node
 // electron/main.cjs — OpenRM 데스크톱 셸.
-// 기존 server/index.cjs(HTTP+WS, 무변경)를 in-process로 구동하고 BrowserWindow가
+// server/index.cjs(HTTP+WS, 무변경)를 detached 자식 프로세스로 따로 띄우고 BrowserWindow가
 // http://127.0.0.1:<port>를 로드한다 (file:// 아님 — BrowserRouter/상대경로 fetch 무변경 유지).
-// dev 모드에선 ELECTRON_START_URL(Vite dev server, 기본 :5180)을 그대로 로드 — 백엔드는
-// `yarn dev`/`yarn start`가 이미 별도 프로세스로 띄운다(HMR 유지, 기존 dev 워크플로 무변경).
+// "앱을 끄더라도 클로드 세션이 계속 일하고 있었으면 좋겠다" — 백엔드를 이 프로세스 안에서 in-process로
+// 구동하면 앱 종료(Cmd+Q)에 지휘자·서브태스크 세션까지 전부 같이 죽는다. 그래서 detached 자식으로
+// 분리해 Electron이 죽어도 백엔드+세션은 산다(§ resolveDetachedBackendUrl). dev 모드에선
+// ELECTRON_START_URL(Vite dev server)을 그대로 로드 — 백엔드는 `yarn dev`/`yarn electron:dev`가 이미
+// 별도 프로세스로 띄운다(HMR 유지, 기존 dev 워크플로 무변경 — 이 파일은 그 경로를 안 건드린다).
 'use strict'
 
-const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const { execFileSync } = require('child_process')
+const http = require('http')
+const { execFileSync, spawn } = require('child_process')
+const { autoUpdater } = require('electron-updater')
+
+const APP_ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png')
+
+// 패키징 시엔 electron-builder(build.icon)가 앱 번들 아이콘을 심어주지만, `electron .`으로 띄우는
+// 개발 모드는 그 과정을 안 거치므로 Dock 아이콘이 기본 Electron 로고로 나온다 — 여기서 직접 세팅.
+app.setName('OpenTask')
 
 // ── PATH 상속 보정 ──────────────────────────────────────────────────────
 // macOS에서 Dock/Finder로 띄운 GUI 앱은 로그인 셸의 PATH(.zshrc/.zprofile 등에서 추가된
@@ -83,18 +94,96 @@ if (!gotLock) {
     }
   }
 
+  // "클로드 세션이 백엔드에서 돌아서 내가 앱을 끄더라도 계속 업무를 하고있었으면 좋겠는데" — 예전엔
+  // 백엔드를 이 Electron 프로세스 안에서 in-process로 구동해서, 앱을 완전히 종료(Cmd+Q)하면 지휘자·
+  // 서브태스크·관제 세션까지 전부 같이 죽었다(전부 이 프로세스의 자식 pty였으므로). 지금은 dev
+  // 모드(`yarn electron:dev`)가 이미 이렇게 동작한다 — Vite+백엔드가 Electron과 완전히 분리된
+  // 프로세스라 창을 닫아도(심지어 Cmd+Q로 완전 종료해도) 백엔드는 안 죽는다. 프로덕션도 같은 모양으로
+  // 맞춘다: 백엔드를 in-process로 요구하는 대신 detached 자식 프로세스로 따로 띄우고, 이 Electron
+  // 프로세스가 죽어도(quit) 그 자식은 살아남는다. 다음 실행 때는 PID 파일로 "이미 떠 있나" 확인해서
+  // 중복 스폰을 막는다(§ resolveDetachedBackendUrl).
+  const BACKEND_PIDFILE_NAME = 'backend.json'
+
+  function pidIsAlive(pid) {
+    try {
+      process.kill(pid, 0) // 시그널 0 — 실제로 죽이지 않고 존재 여부만 확인
+      return true
+    } catch (_) {
+      return false
+    }
+  }
+
+  function pingHttp(url, timeoutMs = 1500) {
+    return new Promise((resolve) => {
+      const req = http.get(url, { timeout: timeoutMs }, (res) => {
+        res.resume() // 응답 바디를 소비해 소켓 정리
+        resolve(true)
+      })
+      req.on('error', () => resolve(false))
+      req.on('timeout', () => {
+        req.destroy()
+        resolve(false)
+      })
+    })
+  }
+
+  async function waitForHealthy(url, { attempts = 40, intervalMs = 300 } = {}) {
+    for (let i = 0; i < attempts; i++) {
+      if (await pingHttp(url)) return true
+      await new Promise((r) => setTimeout(r, intervalMs))
+    }
+    return false
+  }
+
+  async function resolveDetachedBackendUrl() {
+    setDataEnv()
+    const port = Number(process.env.OPENRM_PORT || 8770)
+    const host = '127.0.0.1'
+    const url = `http://${host}:${port}/`
+    const pidFile = path.join(app.getPath('userData'), BACKEND_PIDFILE_NAME)
+
+    // 이미 떠 있는 백엔드가 있으면(이전 실행에서 종료 없이 남아있던 것) 그대로 재사용 — PID 생존 +
+    // 실제로 그 포트가 응답하는지 이중 확인(PID 재사용 오탐 방지).
+    try {
+      const saved = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
+      if (saved && saved.pid && pidIsAlive(saved.pid) && (await pingHttp(url))) {
+        console.log(`♻️  기존 백엔드 재사용 (pid ${saved.pid}) — ${url}`)
+        return url
+      }
+    } catch (_) {
+      // 파일 없음/파싱 실패 — 새로 띄운다
+    }
+
+    // asar 안의 경로를 그대로 spawn하면 OS가 그 파일을 못 연다(asar는 Electron이 patch한 fs/require
+    // 레벨에서만 이해하는 가상 아카이브 — 일반 OS 프로세스 실행엔 실제 경로가 필요). server/**는
+    // electron-builder 설정(asarUnpack)에서 이미 풀어두므로 패키징 시엔 .asar.unpacked로 치환한다.
+    let serverEntry = path.join(__dirname, '..', 'server', 'index.cjs')
+    if (app.isPackaged) serverEntry = serverEntry.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
+    const logPath = path.join(app.getPath('userData'), 'backend.log')
+    const logFd = fs.openSync(logPath, 'a')
+    const child = spawn(process.execPath, [serverEntry], {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      cwd: path.join(__dirname, '..'), // 이 Electron 프로세스의 실제 cwd는 예측 불가 — 앱 루트로 고정
+      // ELECTRON_RUN_AS_NODE — 패키징된 앱엔 별도 node 바이너리가 없다(Electron 바이너리 자체를
+      // Node 런타임으로 쓰는 표준 우회). 이 값이 있으면 Electron이 GUI 없이 순수 Node 스크립트처럼
+      // server/index.cjs를 실행한다(그 파일의 require.main===module 자동 기동 그대로 탄다).
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', OPENRM_PORT: String(port) },
+    })
+    fs.closeSync(logFd) // 자식이 이미 이어받았다 — 이 프로세스(오래 사는 GUI 앱)에서 fd 누수 방지
+    fs.writeFileSync(pidFile, JSON.stringify({ pid: child.pid, port, startedAt: Date.now() }))
+    child.unref() // 이 Electron 프로세스가 죽어도(quit) 저 자식은 살아남는다 — 오늘 요청의 핵심.
+
+    const healthy = await waitForHealthy(url)
+    if (!healthy) throw new Error(`백엔드가 응답하지 않습니다(로그: ${logPath})`)
+    console.log(`🚀  백엔드 새로 기동 (pid ${child.pid}) — ${url}`)
+    return url
+  }
+
   async function resolveTargetUrl() {
     const devUrl = process.env.ELECTRON_START_URL
     if (devUrl) return devUrl
-
-    // 패키징/프로덕션: 백엔드를 in-process로 직접 구동하고 그 포트를 로드.
-    setDataEnv()
-    const { startServer } = require('../server/index.cjs')
-    const { port, host } = await startServer({
-      port: Number(process.env.OPENRM_PORT || 8770),
-      host: '127.0.0.1',
-    })
-    return `http://${host}:${port}/`
+    return await resolveDetachedBackendUrl()
   }
 
   async function createWindow() {
@@ -104,12 +193,16 @@ if (!gotLock) {
       minWidth: 960,
       minHeight: 640,
       title: 'OpenTask',
+      icon: APP_ICON_PATH,
       backgroundColor: '#0b0d10',
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        // "인앱 브라우저를 Electron 네이티브 <webview>로" — "브라우저" 탭이 진짜 브라우저 화면을
+        // 그대로 붙이고(스크린샷 폴링 아님) 로그인 세션도 유지하려면 이 플래그가 필요하다(기본 false).
+        webviewTag: true,
       },
     })
     mainWindow.setMenuBarVisibility(false)
@@ -118,6 +211,16 @@ if (!gotLock) {
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       shell.openExternal(url)
       return { action: 'deny' }
+    })
+
+    // <webview>가 붙을 때마다 게스트 페이지 쪽 preferences를 강제로 잠근다 — "브라우저" 탭은 사람이
+    // 임의 URL(외부 사이트)을 여는 자리라, 게스트 안에서 Node API에 닿을 수 있으면 안 된다. src 자체는
+    // 막지 않는다(범용 인앱 브라우저 — 특정 도메인으로 제한하지 않음).
+    mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
+      delete webPreferences.preload
+      webPreferences.nodeIntegration = false
+      webPreferences.contextIsolation = true
+      webPreferences.sandbox = true
     })
 
     mainWindow.on('closed', () => {
@@ -201,11 +304,27 @@ if (!gotLock) {
     Menu.setApplicationMenu(Menu.buildFromTemplate(template))
   }
 
+  // ── 자동 업데이트 ────────────────────────────────────────────────────────
+  // GitHub Releases(build.publish, package.json)를 피드로 사용 — dmg는 수동 설치용,
+  // Squirrel.Mac이 실제로 받아 적용하는 건 zip 타깃. Apple 서명 없이는 macOS가 업데이트 설치를
+  // 거부하므로, 서명·공증 파이프라인이 붙기 전까진 아래 체크는 조용히 실패한다(비치명적).
+  // 개발 모드(app.isPackaged=false)에서는 애초에 실행하지 않는다 — 로컬 electron .에는 의미 없음.
+  function checkForUpdates() {
+    if (!app.isPackaged) return
+    autoUpdater.checkForUpdatesAndNotify().catch((e) => {
+      console.warn('⚠️  업데이트 확인 실패(무시 가능):', (e && e.message) || e)
+    })
+  }
+
   app.whenReady().then(() => {
+    if (process.platform === 'darwin' && fs.existsSync(APP_ICON_PATH)) {
+      app.dock.setIcon(nativeImage.createFromPath(APP_ICON_PATH))
+    }
     buildAppMenu()
     createWindow().catch((e) => {
       console.error('❌ OpenRM 창 초기화 실패:', (e && e.stack) || e)
     })
+    checkForUpdates()
   })
 
   app.on('window-all-closed', () => {

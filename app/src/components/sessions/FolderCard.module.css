@@ -48,6 +48,18 @@
 .ctxMenuItem:hover {
 	background: var(--card-hover);
 }
+/* "삭제 UI 넣고 기능까지" — 되돌릴 수 없는 항목이라 구분선으로 위쪽 항목들과 떼어놓고 red로. */
+.ctxMenuSep {
+	height: 1px;
+	margin: 5px 2px;
+	background: var(--line2);
+}
+.ctxMenuItemDanger {
+	color: var(--red);
+}
+.ctxMenuItemDanger:hover {
+	background: var(--rtint);
+}
 
 /* 링크 클러스터(Figma/Notion/Slack/PR) — 이 태스크 산하 서브태스크·브랜치 링크 전체를 종류별로
    모아 아이콘 하나씩만 보여준다. 프로토타입의 .link-cluster/.link-panel 그대로. */
@@ -265,8 +277,8 @@
 /* 프로토타입의 task-body — 오케스트레이터는 사이드바 노드가 아니라 워크스페이스 탭이라
    (TabWorkspace 참고) 여기 나열되는 건 서브태스크(작업)뿐이다. 들여쓰기는 한 단계만. */
 .taskBody {
-	margin: 3px 0 6px 21px;
-	padding-left: 10px;
+	margin: 2px 0 4px 18px;
+	padding-left: 8px;
 	border-left: 1px dashed var(--line);
 	display: flex;
 	flex-direction: column;
