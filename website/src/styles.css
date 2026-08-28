@@ -147,7 +147,7 @@ code, pre, .mono {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	height: 60px;
+	height: 68px;
 }
 
 .brand {
@@ -161,9 +161,9 @@ code, pre, .mono {
 }
 
 .brand img {
-	width: 20px;
-	height: 20px;
-	border-radius: 5px;
+	width: 42px;
+	height: 42px;
+	border-radius: 10px;
 }
 
 .nav-links {
@@ -355,15 +355,6 @@ section + section {
 	text-align: center;
 }
 
-.section-head .eyebrow {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--t3);
-	margin-bottom: 10px;
-}
-
 .section-head h2 {
 	font-size: 28px;
 	margin: 0 0 12px;
@@ -416,11 +407,6 @@ section + section {
 	border: 1px solid var(--line);
 	border-radius: var(--radius-card);
 	padding: 22px;
-}
-
-.card .icon {
-	font-size: 20px;
-	margin-bottom: 12px;
 }
 
 .card h3 {
@@ -495,15 +481,6 @@ section + section {
 
 .principle:last-child {
 	border-bottom: none;
-}
-
-.principle .num {
-	font-family: var(--font-mono);
-	color: var(--t3);
-	font-size: 13px;
-	flex-shrink: 0;
-	width: 24px;
-	padding-top: 2px;
 }
 
 .principle .body h4 {
@@ -773,35 +750,6 @@ footer {
 	margin: 0 0 14px;
 }
 
-.docs-section-head {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	margin: 0 0 14px;
-}
-
-.docs-section-head h2 {
-	margin: 0;
-}
-
-.section-icon {
-	flex: none;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 44px;
-	height: 44px;
-	border-radius: var(--radius-card);
-	background: var(--card2);
-	border: 1px solid var(--line);
-	color: var(--t2);
-}
-
-.section-icon svg {
-	width: 22px;
-	height: 22px;
-}
-
 .docs-section h3 {
 	font-size: 15.5px;
 	margin: 22px 0 8px;
@@ -961,7 +909,7 @@ table.feature-table th {
 @media (max-width: 640px) {
 	.nav-links {
 		position: fixed;
-		top: 60px;
+		top: 68px;
 		left: 0;
 		right: 0;
 		background: var(--bg);

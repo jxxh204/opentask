@@ -44,6 +44,7 @@
 			<div class="group-label">How to Use</div>
 			<a href="#use-tasks">Creating a Task</a>
 			<a href="#use-subtasks">Subtasks · Worktrees</a>
+			<a href="#use-notes">Notes</a>
 			<a href="#use-taskmanager">Task Manager</a>
 			<a href="#use-diagram">Diagram Board</a>
 			<a href="#use-panes">Terminal · Server · Browser</a>
@@ -96,7 +97,7 @@
 
 			<section class="docs-section" id="quickstart">
 				<h2>Quickstart</h2>
-				<p>Until the official signed build ships, you can get it running from source in three steps.</p>
+				<p>Grab the signed app from the <a href="/en/download.html">download page</a>, or get it running from source in three steps.</p>
 				<div class="codeblock"><code>git clone https://github.com/jxxh204/opentask
 cd opentask/app
 npm install
@@ -118,10 +119,10 @@ npm run electron:dev</code></div>
 			<section class="docs-section" id="install">
 				<h2>Install</h2>
 
-				<h3>Option A · Download the app (coming soon)</h3>
+				<h3>Option A · Download the app</h3>
 				<p>
-					A signed and notarized macOS app is currently in progress. Once it's out, you'll be able
-					to grab it straight from the <a href="/en/download.html">download page</a>.
+					A macOS app signed and notarized with an Apple Developer ID is available right now on the
+					<a href="/en/download.html">download page</a>.
 				</p>
 
 				<h3>Option B · Build from source (available right now)</h3>
@@ -229,10 +230,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-tasks">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><circle cx="17" cy="16" r="3"/><path d="M17 14.5v3M15.5 16h3"/></svg></span>
-					<h2>How to Use — Creating a Task</h2>
-				</div>
+				<h2>How to Use — Creating a Task</h2>
 				<ol>
 					<li>Click <strong>"Add Task"</strong> above the sidebar search box (or <strong>"+ Add
 						Item"</strong> on an empty calendar cell) to open the <strong>"New Item"</strong>
@@ -250,10 +248,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-subtasks">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="17.5" cy="12" r="2.2"/><path d="M6 7.2V16.8M6 9c0 3 3 3 6.3 3h2.7"/></svg></span>
-					<h2>How to Use — Subtasks · Worktrees</h2>
-				</div>
+				<h2>How to Use — Subtasks · Worktrees</h2>
 				<ol>
 					<li>In the "New Item" modal, choose the <strong>Subtask</strong> tab, then
 						<strong>"Pick a main task…"</strong> to target one (you can also create a new main task right there).</li>
@@ -268,11 +263,18 @@ npm run electron:rebuild</code></div>
 				</p>
 			</section>
 
+			<section class="docs-section" id="use-notes">
+				<h2>How to Use — Notes</h2>
+				<p>
+					Not every subtask needs to belong to a main task. Hit <strong>"+"</strong> in the sidebar's
+					<strong>"Notes"</strong> section to create a subtask with no parent — no git worktree, no
+					terminal session, just a name and a description.
+				</p>
+				<p>Drag notes to reorder them, and click one to open a panel where you can edit its name and description.</p>
+			</section>
+
 			<section class="docs-section" id="use-taskmanager">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 2.5L7 14M12.5 14h4"/></svg></span>
-					<h2>How to Use — Task Manager</h2>
-				</div>
+				<h2>How to Use — Task Manager</h2>
 				<ul>
 					<li>Starts automatically, with no button, the moment a subtask exists.</li>
 					<li>The conductor session is attached directly to the tab's live terminal, so the real
@@ -284,10 +286,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-diagram">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="9" width="5.5" height="6" rx="1.1"/><rect x="9.2" y="9" width="5.5" height="6" rx="1.1"/><rect x="17" y="9" width="5.5" height="6" rx="1.1"/><path d="M7 12h2.2M14.7 12h2.3"/></svg></span>
-					<h2>How to Use — Diagram Board</h2>
-				</div>
+				<h2>How to Use — Diagram Board</h2>
 				<p>
 					Open <strong>"Diagram"</strong> on a main task tab to see its subtask chain summarized as
 					cards left-to-right. Each card shows a status dot — waiting, in progress, or session ended
@@ -296,10 +295,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-panes">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18"/><path d="M6.5 12.3l2 1.7-2 1.7"/></svg></span>
-					<h2>How to Use — Terminal · Local Server · Browser · Claude Session</h2>
-				</div>
+				<h2>How to Use — Terminal · Local Server · Browser · Claude Session</h2>
 				<p>Use the <strong>"+"</strong> at the top of a subtask tab to open any of these panels.</p>
 				<table class="feature-table">
 					<tr><th>Panel</th><th>Purpose</th></tr>
@@ -315,10 +311,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-calendar">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><path d="M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17.5h1M11.5 17.5h1" /></svg></span>
-					<h2>How to Use — Calendar</h2>
-				</div>
+				<h2>How to Use — Calendar</h2>
 				<ol>
 					<li>Open it from the <strong>"Calendar"</strong> button at the top of the sidebar.</li>
 					<li>Switch between week and month views to scan your schedule.</li>
@@ -333,10 +326,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-pr-review">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-4 4V5z"/><path d="M8.5 10l2 2 4-4"/></svg></span>
-					<h2>How to Use — PR Review</h2>
-				</div>
+				<h2>How to Use — PR Review</h2>
 				<ol>
 					<li>Check the badge on a task row in the sidebar — <strong>"N issues"</strong> if there's a
 						review to handle, or <strong>"Reviewed"</strong> if not.</li>
@@ -349,10 +339,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-cronjobs">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /><circle cx="15.5" cy="15.5" r="3.2" /><path d="M15.5 14v1.6l1.1.9" /></svg></span>
-					<h2>How to Use — Cron Jobs</h2>
-				</div>
+				<h2>How to Use — Cron Jobs</h2>
 				<ol>
 					<li>Open the <strong>"Cron Jobs"</strong> button at the top of the sidebar, then add a new
 						automation from the list.</li>
@@ -371,10 +358,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-model-policy">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M4 12h16M4 17h7"/><circle cx="16" cy="7" r="1.8"/><circle cx="9" cy="17" r="1.8"/></svg></span>
-					<h2>How to Use — Model Policy</h2>
-				</div>
+				<h2>How to Use — Model Policy</h2>
 				<p>
 					In the global <strong>"Model Policy"</strong> tab, pick a model (Fable 5 / Opus 4.8 /
 					Sonnet 4.6, etc.) from a dropdown for each task type — design, Task Manager (subtask chain
@@ -385,10 +369,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-team-rules">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
-					<h2>How to Use — Team Rules</h2>
-				</div>
+				<h2>How to Use — Team Rules</h2>
 				<p>A main task tab opens with <strong>"Team Rules"</strong> by default, where you can fill in
 					four free-text fields per repo.</p>
 				<table class="feature-table">
@@ -406,10 +387,7 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-control">
-				<div class="docs-section-head">
-					<span class="section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6" /><circle cx="12" cy="11" r="2" /><path d="M12 13v8M8.5 21h7" /><path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.7a9 9 0 0 1 13 0" /></svg></span>
-					<h2>How to Use — Control</h2>
-				</div>
+				<h2>How to Use — Control</h2>
 				<p>
 					The <strong>"Control"</strong> button at the top of the sidebar — opening the tab starts a
 					conversation session immediately, no button needed. Use it to operate the whole app by
@@ -429,6 +407,7 @@ npm run electron:rebuild</code></div>
 					<tr><td>Diagram</td><td>A board summarizing the subtask chain like an assembly line — status (waiting/in progress/done) and scheduled duration</td></tr>
 					<tr><td>Detail</td><td>Task (folder) detail — duration · description · dev plan, apply AI suggestions</td></tr>
 					<tr><td>Subtask</td><td>Individual subtask detail panel</td></tr>
+					<tr><td>Notes</td><td>A subtask with no main task — a lightweight note with just a name and description</td></tr>
 					<tr><td>Terminal</td><td>Real tmux + node-pty terminal for the subtask's worktree</td></tr>
 					<tr><td>Local Server</td><td>Run the worktree's dev server directly to check it</td></tr>
 					<tr><td>Browser</td><td>Preview execution results in an embedded browser</td></tr>

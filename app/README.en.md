@@ -61,6 +61,7 @@ subtask opens the tabs below inside the workspace.
 
 | Tab | What it does |
 |---|---|
+| Notes | A subtask with no main task — a lightweight note with just a name and description, reorderable in the sidebar |
 | Task Manager | The AI conductor that starts automatically once a subtask exists — runs sequential waves + a live terminal + plan/dispatch/report log |
 | Diagram | A board summarizing the subtask chain like an assembly line — status (waiting/in progress/done) and scheduled duration |
 | Calendar | Week/month layout of subtask schedules, drag-to-reschedule, blocked periods (e.g. a QA freeze) |
