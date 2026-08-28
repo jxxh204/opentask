@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -10,6 +10,10 @@ import '@xterm/xterm/css/xterm.css'
 // VSCode 통합 터미널처럼 패널 자체가 곧 터미널이다 — 별도 "확대" 토글 없이 패널 크기 그대로 쓴다.
 export default function XTerm({ session, cwd, onClose, modelLabel }: { session: string; cwd?: string; onClose?: () => void; modelLabel?: string | null }) {
 	const hostRef = useRef<HTMLDivElement>(null)
+	// "이런 경우 복구가 안돼" — WS가 끊기면 [연결 오류]/[연결 종료]만 찍고 그대로 죽어있었다(재시도 없음).
+	// 지수 백오프로 자동 재연결하고, 그래도 안 되면 사용자가 직접 누를 수 있게 버튼도 노출한다.
+	const [disconnected, setDisconnected] = useState(false)
+	const reconnectRef = useRef<() => void>(() => {})
 
 	useEffect(() => {
 		if (!hostRef.current) return
@@ -44,19 +48,55 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 		const proto = location.protocol === 'https:' ? 'wss' : 'ws'
 		// cwd 전달 → 세션이 아직 없으면 그 워크트리에서 생성(-c). 이미 있으면 attach라 무시됨.
 		const cwdQ = cwd ? `&cwd=${encodeURIComponent(cwd)}` : ''
-		const ws = new WebSocket(`${proto}://${location.host}/term?session=${encodeURIComponent(session)}&cols=${term.cols}&rows=${term.rows}${cwdQ}`)
-		ws.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : '')
-		ws.onclose = () => term.write('\r\n\x1b[90m[연결 종료]\x1b[0m\r\n')
-		ws.onerror = () => term.write('\r\n\x1b[31m[연결 오류]\x1b[0m\r\n')
+		const url = `${proto}://${location.host}/term?session=${encodeURIComponent(session)}&cols=${term.cols}&rows=${term.rows}${cwdQ}`
+
+		let ws: WebSocket
+		let disposed = false
+		let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+		let attempt = 0
+
 		const sendResize = () => {
-			if (ws.readyState === WebSocket.OPEN) ws.send('\x00' + term.cols + ',' + term.rows)
+			if (ws && ws.readyState === WebSocket.OPEN) ws.send('\x00' + term.cols + ',' + term.rows)
 		}
-		ws.onopen = () => {
-			term.focus()
-			sendResize()
+
+		function scheduleReconnect() {
+			if (disposed) return
+			attempt += 1
+			const delay = Math.min(1000 * attempt, 8000)
+			reconnectTimer = setTimeout(connect, delay)
 		}
+
+		function connect() {
+			if (disposed) return
+			ws = new WebSocket(url)
+			ws.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : '')
+			ws.onopen = () => {
+				attempt = 0
+				setDisconnected(false)
+				term.focus()
+				sendResize()
+			}
+			ws.onclose = () => {
+				if (disposed) return
+				setDisconnected(true)
+				term.write('\r\n\x1b[90m[연결 종료 — 자동 재연결 중…]\x1b[0m\r\n')
+				scheduleReconnect()
+			}
+			ws.onerror = () => {
+				term.write('\r\n\x1b[31m[연결 오류]\x1b[0m\r\n')
+			}
+		}
+
+		reconnectRef.current = () => {
+			if (reconnectTimer) clearTimeout(reconnectTimer)
+			attempt = 0
+			connect()
+		}
+
+		connect()
+
 		const onData = term.onData((d) => {
-			if (ws.readyState === WebSocket.OPEN) ws.send(d)
+			if (ws && ws.readyState === WebSocket.OPEN) ws.send(d)
 		})
 
 		const ro = new ResizeObserver(() => {
@@ -70,6 +110,8 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 		ro.observe(hostRef.current)
 
 		return () => {
+			disposed = true
+			if (reconnectTimer) clearTimeout(reconnectTimer)
 			ro.disconnect()
 			onData.dispose()
 			try {
@@ -86,6 +128,11 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 			<div className="xterm-bar">
 				<span className="xterm-name">🖥️ {session}</span>
 				<span style={{ flex: 1 }} />
+				{disconnected && (
+					<button className="btn-dry" onClick={() => reconnectRef.current()} title="터미널에 다시 연결합니다">
+						⟳ 재연결
+					</button>
+				)}
 				{modelLabel && (
 					<span className="xterm-model">
 						<span className="dot" />

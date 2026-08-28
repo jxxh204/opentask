@@ -87,13 +87,13 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 						<button className={styles.btn} disabled={busy} onClick={() => advance(folderId)}>
 							▶ 진행
 						</button>
-						<button className={styles.btn} disabled={busy} onClick={() => stop(folderId)}>
-							중지
+						<button className={styles.btn} disabled={busy} onClick={() => stop(folderId)} title="웨이브 진행만 멈춥니다 — 태스크 매니저 세션은 그대로 유지됩니다">
+							웨이브 중지
 						</button>
 					</>
 				)}
 				{orch.conductor && (
-					<button className={styles.btn} disabled={busy} onClick={() => stopConductor(folderId)}>
+					<button className={styles.btn} disabled={busy} onClick={() => stopConductor(folderId)} title="태스크 매니저 세션 자체를 종료합니다 — 다시 시작하려면 탭을 새로 열어야 합니다">
 						태스크 매니저 중지
 					</button>
 				)}
