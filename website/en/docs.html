@@ -80,6 +80,7 @@
 					loop — create a task → subtask (worktree) → agent wave → PR review → calendar sync —
 					alive in one place, without bouncing between GitHub and terminal tabs.
 				</p>
+				<img class="docs-shot" src="/screenshots/overview.png" alt="OpenTask sidebar and main screen — task tree, notes, entry points for cron jobs, calendar, and the assistant" loading="lazy" />
 				<p>
 					It started as a tool for a single operator, and broadened as it went open source: several
 					people now use it together to watch and direct agents, PRs, and monitoring signals across
@@ -114,6 +115,9 @@ npm run electron:dev</code></div>
 					of <code>npm run electron:dev</code> and open <code>http://localhost:5180</code> in your
 					browser to see the same screen without a desktop window.
 				</div>
+				<img class="docs-shot" src="/screenshots/quickstart.png" alt="The OpenTask quickstart modal shown on first launch — a 5-step summary" loading="lazy" />
+				<p>Want to see it again later? Open the sidebar <strong>"Settings"</strong> → <strong>"Show quickstart again"</strong> any time.</p>
+				<img class="docs-shot" src="/screenshots/settings.png" alt="Settings modal — theme, internal terminology language, calendar holiday country, entry points for team rules, model policy, and quickstart" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="install">
@@ -240,6 +244,7 @@ npm run electron:rebuild</code></div>
 						as-is</strong> and its type is detected automatically.</li>
 					<li>Set a due date to have it reflected on the calendar immediately (you can also leave it empty).</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/new-task-modal.png" alt="New item modal — Main Task/Subtask tabs, title field, due date" loading="lazy" />
 				<p>
 					Creating it as a main task immediately adds a new folder to the task tree, and the moment
 					a subtask is attached, <a href="#use-taskmanager">Task Manager</a> automatically starts
@@ -323,6 +328,7 @@ npm run electron:rebuild</code></div>
 						stretch where work shouldn't happen, like a QA freeze — it only shows up as stripes on
 						the calendar and doesn't actually prevent scheduling.</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/calendar.png" alt="Calendar week view — date columns, block-period toolbar" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="use-pr-review">
@@ -349,6 +355,7 @@ npm run electron:rebuild</code></div>
 					<li>Set the <strong>task title to create</strong> and an optional description, and pick a
 						target repo if you have more than one.</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/cronjob-form.png" alt="Cron job creation form — automation name, schedule (daily/weekly/interval), task title to create" loading="lazy" />
 				<p>
 					At the scheduled time, a new main task is genuinely created automatically. The action is
 					deliberately limited to just <strong>"create a new task"</strong> — in keeping with the
@@ -366,6 +373,7 @@ npm run electron:rebuild</code></div>
 					review feedback, generating QA test cases, and more. A common pattern is a lighter model
 					where speed matters and a stronger one where judgment matters.
 				</p>
+				<img class="docs-shot" src="/screenshots/model-policy.png" alt="Model Policy tab — a dropdown list of AI models per task type" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="use-team-rules">

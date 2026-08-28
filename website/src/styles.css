@@ -685,6 +685,11 @@ footer {
 	flex-direction: column;
 	gap: 2px;
 	font-size: 13.5px;
+	/* "모바일화면 패딩 조절 필요" — 모바일에서 .docs-nav가 가로 한 줄(flex-wrap:wrap) 태그 목록으로
+	   바뀌는데(§ 860px 미디어쿼리), 그리드 아이템의 기본 min-width:auto 때문에 감싸질 내용의 최소
+	   너비만큼 줄어들길 거부해 .docs-shell 전체(따라서 .docs-content 본문까지)가 뷰포트 밖으로
+	   밀려났다. .docs-content는 이미 min-width:0을 갖고 있었는데 같은 그리드의 이 쪽만 빠져 있었다. */
+	min-width: 0;
 }
 
 .docs-nav .group-label {
@@ -853,6 +858,16 @@ table.feature-table th {
 
 .callout strong {
 	color: var(--ink);
+}
+
+.docs-shot {
+	display: block;
+	width: 100%;
+	height: auto;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-card);
+	margin: 4px 0 18px;
 }
 
 .faq-item {

@@ -80,6 +80,7 @@
 					에이전트 웨이브 → PR 리뷰 → 캘린더 반영까지 이어지는 루프를 GitHub · 터미널 탭을 오가지
 					않고 한 곳에서 살아있는 상태로 조작하는 것이 목적입니다.
 				</p>
+				<img class="docs-shot" src="/screenshots/overview.png" alt="OpenTask 사이드바와 메인 화면 — 태스크 트리, 메모, 크론잡·캘린더·비서 진입점" loading="lazy" />
 				<p>
 					원래는 1인 운영자(오퍼레이터) 도구로 시작했고, 오픈소스로 공개되며 여러 명이 함께 여러
 					워크트리에서 동시에 도는 에이전트 · PR · 모니터링 신호를 감시하는 소규모 개발팀 대상으로
@@ -112,6 +113,9 @@ npm run electron:dev</code></div>
 					<code>npm run start</code>를 실행하면 브라우저에서 <code>http://localhost:5180</code>으로
 					같은 화면을 볼 수 있습니다(데스크톱 창 없이).
 				</div>
+				<img class="docs-shot" src="/screenshots/quickstart.png" alt="첫 실행 시 뜨는 OpenTask 퀵스타트 모달 — 5단계 요약" loading="lazy" />
+				<p>나중에 다시 보고 싶으면 사이드바 <strong>"설정"</strong> → <strong>"퀵스타트 다시 보기"</strong>로 언제든 다시 열 수 있습니다.</p>
+				<img class="docs-shot" src="/screenshots/settings.png" alt="설정 모달 — 테마, 내부 용어 언어, 캘린더 공휴일 국가, 팀 규칙·모델 배정·퀵스타트 진입점" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="install">
@@ -235,6 +239,7 @@ npm run electron:rebuild</code></div>
 						붙여넣으면</strong> 자동으로 종류가 인식됩니다.</li>
 					<li>예정일을 지정하면 캘린더에도 곧바로 반영됩니다(비워둘 수도 있음).</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/new-task-modal.png" alt="일감 생성 모달 — 메인 태스크/서브태스크 탭, 제목 입력, 예정일" loading="lazy" />
 				<p>
 					메인 태스크로 생성하면 그 순간 태스크 트리에 새 폴더가 생기고, 서브태스크가 붙는
 					즉시 <a href="#use-taskmanager">태스크 매니저</a>가 자동으로 오케스트레이션을 시작합니다.
@@ -317,6 +322,7 @@ npm run electron:rebuild</code></div>
 						적어 등록합니다 — 캘린더에 줄무늬로 표시될 뿐, 실제 일정 등록 자체를 막지는
 						않습니다.</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/calendar.png" alt="캘린더 주간 보기 — 날짜별 칸, 일정 막기 툴바" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="use-pr-review">
@@ -340,6 +346,7 @@ npm run electron:rebuild</code></div>
 					<li><strong>생성할 일감 제목</strong>과 설명(선택), 레포가 여럿이면 대상 레포를
 						지정합니다.</li>
 				</ol>
+				<img class="docs-shot" src="/screenshots/cronjob-form.png" alt="크론잡 생성 폼 — 자동화 이름, 주기(매일/매주/반복 간격), 생성할 일감 제목" loading="lazy" />
 				<p>
 					정해진 시각이 되면 실제로 새 메인 태스크가 자동 생성됩니다. 액션은 <strong>"새 일감
 					생성"</strong> 하나로 의도적으로 제한되어 있습니다 — "AI가 스스로 작업 범위를 정하지
@@ -356,6 +363,7 @@ npm run electron:rebuild</code></div>
 					속도가 중요한 작업엔 가벼운 모델을, 판단이 중요한 작업엔 상위 모델을 배정하는 식으로
 					씁니다.
 				</p>
+				<img class="docs-shot" src="/screenshots/model-policy.png" alt="모델 배정 탭 — 작업 종류별 AI 모델 드롭다운 목록" loading="lazy" />
 			</section>
 
 			<section class="docs-section" id="use-team-rules">
