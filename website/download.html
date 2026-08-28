@@ -4,7 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>다운로드 — OpenTask</title>
-	<meta name="description" content="OpenTask macOS 데스크톱 앱 다운로드. v0.1.0 베타 빌드를 바로 받거나 소스에서 직접 빌드할 수 있습니다." />
+	<meta name="description" content="OpenTask macOS 데스크톱 앱 다운로드. Apple 서명·공증이 적용된 v0.1.1 빌드를 바로 받거나 소스에서 직접 빌드할 수 있습니다." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,7 +12,7 @@
 	<link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-	<div class="banner">⚠️ 아직 Apple 공증 전 빌드입니다 — 실행 시 "확인되지 않은 개발자" 경고가 뜨면 아래 안내를 따라주세요</div>
+	<div class="banner">✅ Apple Developer ID 서명 · 공증이 적용된 빌드입니다 — 다운로드 후 바로 실행할 수 있어요</div>
 
 	<header class="nav">
 		<div class="container nav-inner">
@@ -42,50 +42,17 @@
 				<div class="section-head">
 					<div class="eyebrow">Download</div>
 					<h2>OpenTask 다운로드</h2>
-					<p>macOS용 데스크톱 앱입니다. v0.1.0 베타 빌드를 바로 받을 수 있어요.</p>
+					<p>macOS용 데스크톱 앱입니다. v0.1.1 빌드를 바로 받을 수 있어요.</p>
 				</div>
 
 				<div class="download-card">
 					<img src="/icon.png" alt="OpenTask 아이콘" />
 					<h3>OpenTask.app</h3>
-					<div class="ver">v0.1.0 베타 · Apple 공증 전</div>
-					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.0/OpenTask-0.1.0-arm64.dmg">Apple Silicon (arm64) · .dmg 다운로드</a>
+					<div class="ver">v0.1.1 · Apple 서명 · 공증 완료</div>
+					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.1/OpenTask-0.1.1-arm64.dmg">Apple Silicon (arm64) · .dmg 다운로드</a>
 					<div style="height:10px"></div>
-					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.0/OpenTask-0.1.0-arm64-mac.zip">.zip으로 다운로드</a>
+					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.1/OpenTask-0.1.1-arm64-mac.zip">.zip으로 다운로드</a>
 					<div class="arch-note">Intel(x64) 빌드는 준비 중입니다. 모든 릴리스는 <a href="https://github.com/jxxh204/opentask/releases" target="_blank" rel="noopener">GitHub Releases</a>에서도 받을 수 있어요.</div>
-				</div>
-			</div>
-		</section>
-
-		<section>
-			<div class="container">
-				<div class="section-head">
-					<div class="eyebrow">설치 안내</div>
-					<h2>"확인되지 않은 개발자" 경고가 뜬다면</h2>
-					<p>Apple Developer ID 공증 전 빌드라 macOS Gatekeeper가 경고를 띄웁니다. 아래 순서로 한 번만 허용해주세요.</p>
-				</div>
-				<div class="steps">
-					<div class="step">
-						<div class="marker"></div>
-						<div>
-							<h4>Finder에서 OpenTask.app을 우클릭(또는 Control+클릭)</h4>
-							<p>다운로드한 .dmg를 열어 Applications로 옮긴 뒤 실행하세요.</p>
-						</div>
-					</div>
-					<div class="step">
-						<div class="marker"></div>
-						<div>
-							<h4>메뉴에서 "열기" 선택</h4>
-							<p>더블클릭 대신 우클릭 메뉴의 "열기"를 선택해야 경고를 건너뛸 수 있습니다.</p>
-						</div>
-					</div>
-					<div class="step">
-						<div class="marker"></div>
-						<div>
-							<h4>경고 창에서 다시 "열기" 클릭</h4>
-							<p>이후부터는 더블클릭으로 정상 실행됩니다.</p>
-						</div>
-					</div>
 				</div>
 			</div>
 		</section>
@@ -116,7 +83,7 @@
 						<div class="marker"></div>
 						<div>
 							<h4>배포용 앱으로 패키징 (선택)</h4>
-							<p><code>npm run electron:build</code>로 <code>.dmg</code>/<code>.zip</code>을 직접 만들 수 있습니다. Apple Developer ID 서명 설정 방법은 Docs를 참고하세요.</p>
+							<p><code>npm run electron:build</code>로 <code>.dmg</code>/<code>.zip</code>을 직접 만들 수 있습니다.</p>
 						</div>
 					</div>
 				</div>
@@ -140,7 +107,7 @@ npm run electron:dev</code></div>
 				</div>
 				<table class="req-table">
 					<tr><th>운영체제</th><td>macOS (Apple Silicon / Intel 모두 지원 예정)</td></tr>
-					<tr><th>배포 형태</th><td>.dmg / .zip — 현재 미서명 빌드 (Apple Developer ID 서명 · 공증 적용 예정)</td></tr>
+					<tr><th>배포 형태</th><td>.dmg / .zip — Apple Developer ID 서명 · 공증 적용</td></tr>
 					<tr><th>런타임</th><td>별도 설치 불필요 (Electron 번들 포함)</td></tr>
 					<tr><th>선택 연동</th><td>GitHub 계정(PR/이슈 조작 기능 사용 시), Sentry/AWS/Slack/Notion/Figma(선택)</td></tr>
 					<tr><th>데이터</th><td>로컬 컴퓨터에 저장, 기본값은 외부 네트워크에 열리지 않음(127.0.0.1)</td></tr>
