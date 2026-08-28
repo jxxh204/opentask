@@ -3,6 +3,7 @@ import { useUiStore, applyTheme } from '../../store/useUiStore'
 import type { Theme, Lang } from '../../store/useUiStore'
 import { useTabsStore, MODEL_POLICY_NODE_ID, TEAM_RULES_NODE_ID } from '../../store/useTabsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
+import { useQuickstartStore } from '../../store/useQuickstartStore'
 import Modal from '../common/Modal'
 import styles from './SettingsModal.module.css'
 
@@ -45,6 +46,11 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 		if (!s.tabsByNode[TEAM_RULES_NODE_ID]?.length) s.openTab(TEAM_RULES_NODE_ID, 'teamRules')
 		s.setActiveNode(TEAM_RULES_NODE_ID, 'teamRules')
 		onClose()
+	}
+
+	function openQuickstart() {
+		onClose()
+		useQuickstartStore.getState().show()
 	}
 
 	return (
@@ -117,6 +123,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 					<div>
 						<div className={styles.rowLabel}>모델 배정 →</div>
 						<div className={styles.rowHint}>작업 종류별로 어떤 모델을 쓸지 탭에서 확인하고 바꿉니다.</div>
+					</div>
+				</div>
+				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openQuickstart}>
+					<div>
+						<div className={styles.rowLabel}>퀵스타트 다시 보기 →</div>
+						<div className={styles.rowHint}>처음 앱을 켰을 때 봤던 사용법 안내를 다시 엽니다.</div>
 					</div>
 				</div>
 			</div>

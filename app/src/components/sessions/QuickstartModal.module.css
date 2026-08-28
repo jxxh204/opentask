@@ -1,0 +1,107 @@
+.head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 13px 16px;
+	border-bottom: 1px solid var(--line);
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.close {
+	cursor: pointer;
+	color: var(--t3);
+	font-size: 14px;
+}
+.close:hover {
+	color: var(--ink);
+}
+
+.body {
+	padding: 18px 20px 20px;
+	overflow-y: auto;
+	min-height: 0;
+	max-height: 72vh;
+}
+
+.lede {
+	margin: 0 0 18px;
+	font-size: 12.5px;
+	line-height: 1.6;
+	color: var(--t2);
+}
+
+.steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.step {
+	display: flex;
+	gap: 12px;
+}
+
+.marker {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	border-radius: 999px;
+	background: var(--vtint);
+	color: var(--violet);
+	font-size: 11px;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.stepTitle {
+	font-size: 12.5px;
+	font-weight: 700;
+	color: var(--ink);
+	margin-bottom: 3px;
+}
+
+.stepBody {
+	font-size: 12px;
+	line-height: 1.6;
+	color: var(--t2);
+}
+
+.footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 22px;
+	padding-top: 16px;
+	border-top: 1px solid var(--line);
+}
+
+.docsLink {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--t2);
+	text-decoration: none;
+}
+.docsLink:hover {
+	color: var(--ink);
+}
+
+.startBtn {
+	height: 32px;
+	padding: 0 16px;
+	border-radius: var(--radius-control);
+	border: none;
+	background: var(--violet);
+	color: #fff;
+	font-size: 12.5px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.startBtn:hover {
+	opacity: 0.9;
+}

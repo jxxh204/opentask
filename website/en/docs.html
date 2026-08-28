@@ -53,7 +53,7 @@
 			<a href="#use-cronjobs">Cron Jobs</a>
 			<a href="#use-model-policy">Model Policy</a>
 			<a href="#use-team-rules">Team Rules</a>
-			<a href="#use-control">Control</a>
+			<a href="#use-assistant">Assistant</a>
 
 			<div class="group-label">Reference</div>
 			<a href="#features">Feature Summary</a>
@@ -105,7 +105,7 @@ npm run electron:dev</code></div>
 				<p>
 					When the command finishes, the OpenTask desktop window opens. With nothing configured yet,
 					you get <strong>demo data</strong> so you can explore the whole screen layout (task tree ·
-					calendar · cron jobs · control) right away. To connect your real repo, hit "Add Repo" on
+					calendar · cron jobs · assistant) right away. To connect your real repo, hit "Add Repo" on
 					the onboarding screen — see <a href="#install">Install</a> and
 					<a href="#use-tasks">Creating a Task</a> for the full walkthrough.
 				</p>
@@ -210,7 +210,7 @@ npm run electron:rebuild</code></div>
 					coding, review, QA, and more — as a policy.
 				</p>
 
-				<h3>Control</h3>
+				<h3>Assistant</h3>
 				<p>
 					A top-level agent that runs the whole app by conversation — not a single task, but the
 					calendar, cron jobs, and operational settings together. It's deliberately kept separate
@@ -362,7 +362,7 @@ npm run electron:rebuild</code></div>
 				<p>
 					In the global <strong>"Model Policy"</strong> tab, pick a model (Fable 5 / Opus 4.8 /
 					Sonnet 4.6, etc.) from a dropdown for each task type — design, Task Manager (subtask chain
-					orchestration), Control (calendar · cron jobs · settings), coding, PR review, applying
+					orchestration), Assistant (calendar · cron jobs · settings), coding, PR review, applying
 					review feedback, generating QA test cases, and more. A common pattern is a lighter model
 					where speed matters and a stronger one where judgment matters.
 				</p>
@@ -386,10 +386,10 @@ npm run electron:rebuild</code></div>
 				</p>
 			</section>
 
-			<section class="docs-section" id="use-control">
-				<h2>How to Use — Control</h2>
+			<section class="docs-section" id="use-assistant">
+				<h2>How to Use — Assistant</h2>
 				<p>
-					The <strong>"Control"</strong> button at the top of the sidebar — opening the tab starts a
+					The <strong>"Assistant"</strong> button at the top of the sidebar — opening the tab starts a
 					conversation session immediately, no button needed. Use it to operate the whole app by
 					natural language, not one task — calendar schedule, cron jobs, operational settings.
 				</p>
@@ -416,7 +416,7 @@ npm run electron:rebuild</code></div>
 					<tr><td>Cron Jobs</td><td>Interval / daily / weekly schedules — deliberately limited to the single action "create a new task"</td></tr>
 					<tr><td>Model Policy</td><td>Per-task-type (design, coding, review, QA, etc.) AI model policy</td></tr>
 					<tr><td>Calendar</td><td>Week/month layout of subtask schedules, drag-to-reschedule, blocked periods</td></tr>
-					<tr><td>Control</td><td>Runs the whole app (calendar · cron jobs · settings) by conversation, not a single task</td></tr>
+					<tr><td>Assistant</td><td>Runs the whole app (calendar · cron jobs · settings) by conversation, not a single task</td></tr>
 				</table>
 				<h3>PR Review</h3>
 				<p>

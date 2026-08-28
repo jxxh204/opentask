@@ -38,7 +38,7 @@ npm run electron:dev
 ```
 
 Run it with no configuration and you get **demo data** so you can explore the whole screen layout (task
-tree · calendar · cron jobs · control) right away. To connect your real repo, hit "Add Repo" on the
+tree · calendar · cron jobs · assistant) right away. To connect your real repo, hit "Add Repo" on the
 onboarding screen.
 
 ## Structure
@@ -68,7 +68,7 @@ subtask opens the tabs below inside the workspace.
 | Cron Jobs | Interval / daily / weekly schedules — deliberately limited to the single action "create a new task" |
 | Model Policy | Per-task-type (design, Task Manager, coding, review, QA, etc.) AI model policy |
 | Team Rules | Four free-text fields per repo (general rules / task-writing rules / branch rules / pre-dev prerequisites) folded into agent instructions |
-| Control | A top-level agent that runs the whole app (calendar · cron jobs · settings) by conversation, not a single task |
+| Assistant | A top-level agent that runs the whole app (calendar · cron jobs · settings) by conversation, not a single task |
 | Terminal · Local Server · Browser · Claude Session | The real dev environment for a subtask's worktree — tmux terminal, dev server, embedded browser, standalone Claude Code session |
 | PR Review | "Apply" a review comment (injects into a live session, through commit and push) or "Dispute" it (a public reply on GitHub) |
 

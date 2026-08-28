@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSetupStore, isSetupConfigured } from '../store/useSetupStore'
 import { useSessionsStore } from '../store/useSessionsStore'
+import { useQuickstartStore } from '../store/useQuickstartStore'
 import FolderPicker from '../components/sessions/FolderPicker'
 import SetupGate from '../components/common/SetupGate'
 import SessionShell from '../components/sessions/SessionShell'
+import QuickstartModal from '../components/sessions/QuickstartModal'
 
 // Reuses the same rootPath/wtPath/branchPrefix fields the Setup page's 'paths'
 // step edits (single source of truth, two entry points) — see plan principle 5.
@@ -67,6 +69,9 @@ export default function SessionsPage() {
 	const loadBoard = useSessionsStore((s) => s.loadBoard)
 	const loadRepos = useSessionsStore((s) => s.loadRepos)
 	const loadBlockedPeriods = useSessionsStore((s) => s.loadBlockedPeriods)
+	const quickstartOpen = useQuickstartStore((s) => s.open)
+	const openQuickstartIfUnseen = useQuickstartStore((s) => s.openIfUnseen)
+	const hideQuickstart = useQuickstartStore((s) => s.hide)
 
 	useEffect(() => {
 		hydrateSetup()
@@ -77,10 +82,16 @@ export default function SessionsPage() {
 			loadBoard()
 			loadRepos()
 			loadBlockedPeriods()
+			openQuickstartIfUnseen()
 		}
-	}, [configured, loadBoard, loadRepos, loadBlockedPeriods])
+	}, [configured, loadBoard, loadRepos, loadBlockedPeriods, openQuickstartIfUnseen])
 
 	if (!configured) return <SessionsSetupGate />
 
-	return <SessionShell />
+	return (
+		<>
+			<SessionShell />
+			<QuickstartModal open={quickstartOpen} onClose={hideQuickstart} />
+		</>
+	)
 }

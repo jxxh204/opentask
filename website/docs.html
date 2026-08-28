@@ -53,7 +53,7 @@
 			<a href="#use-cronjobs">크론잡</a>
 			<a href="#use-model-policy">모델 배정</a>
 			<a href="#use-team-rules">팀 규칙</a>
-			<a href="#use-control">관제</a>
+			<a href="#use-assistant">비서</a>
 
 			<div class="group-label">레퍼런스</div>
 			<a href="#features">기능 요약</a>
@@ -103,7 +103,7 @@ npm install
 npm run electron:dev</code></div>
 				<p>
 					명령이 끝나면 OpenTask 데스크톱 창이 뜹니다. 아무 설정도 하지 않은 상태라면 <strong>데모
-					데이터</strong>로 전체 화면 구조(태스크 트리 · 캘린더 · 크론잡 · 관제)를 바로 둘러볼 수
+					데이터</strong>로 전체 화면 구조(태스크 트리 · 캘린더 · 크론잡 · 비서)를 바로 둘러볼 수
 					있습니다. 실제 내 레포에 연결하려면 온보딩 화면에서 "레포 추가"를 누르세요 — 자세한
 					절차는 <a href="#install">설치</a>와 <a href="#use-tasks">태스크 만들기</a>를 참고하세요.
 				</p>
@@ -202,11 +202,11 @@ npm run electron:rebuild</code></div>
 
 				<h3>모델 배정</h3>
 				<p>
-					설계 · 태스크 매니저 · 관제 · 코딩 · 리뷰 · QA 등 16개 이상의 작업 종류별로 어떤 AI
+					설계 · 태스크 매니저 · 비서 · 코딩 · 리뷰 · QA 등 16개 이상의 작업 종류별로 어떤 AI
 					모델을 쓸지 정책으로 지정합니다.
 				</p>
 
-				<h3>관제</h3>
+				<h3>비서</h3>
 				<p>
 					태스크 하나가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 대화로 조작하는
 					최상위 에이전트입니다. 태스크 매니저와 이름 · 자리를 분리해, "이 태스크"가 아니라
@@ -351,7 +351,7 @@ npm run electron:rebuild</code></div>
 				<h2>사용 방법 — 모델 배정</h2>
 				<p>
 					전역 탭 <strong>"모델 배정"</strong>에서, 설계 · 태스크 매니저(서브태스크 체인 조율) ·
-					관제(캘린더 · 크론잡 · 설정) · 코딩 · PR 리뷰 · 리뷰 반영 · QA 테스트케이스 생성 등
+					비서(캘린더 · 크론잡 · 설정) · 코딩 · PR 리뷰 · 리뷰 반영 · QA 테스트케이스 생성 등
 					작업 종류마다 드롭다운으로 사용할 모델(Fable 5 / Opus 4.8 / Sonnet 4.6 등)을 지정합니다.
 					속도가 중요한 작업엔 가벼운 모델을, 판단이 중요한 작업엔 상위 모델을 배정하는 식으로
 					씁니다.
@@ -376,10 +376,10 @@ npm run electron:rebuild</code></div>
 				</p>
 			</section>
 
-			<section class="docs-section" id="use-control">
-				<h2>사용 방법 — 관제</h2>
+			<section class="docs-section" id="use-assistant">
+				<h2>사용 방법 — 비서</h2>
 				<p>
-					사이드바 상단 <strong>"관제"</strong> 버튼 — 탭을 열면 버튼 없이 바로 대화 세션이
+					사이드바 상단 <strong>"비서"</strong> 버튼 — 탭을 열면 버튼 없이 바로 대화 세션이
 					시작됩니다. 특정 태스크가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 자연어로
 					조작할 때 씁니다.
 				</p>
@@ -406,7 +406,7 @@ npm run electron:rebuild</code></div>
 					<tr><td>크론잡</td><td>N분마다 · 매일 · 매주 예약 — 액션은 "새 일감 생성"으로 의도적으로 제한</td></tr>
 					<tr><td>모델 배정</td><td>설계 · 태스크 매니저 · 코딩 · 리뷰 · QA 등 작업 종류별 AI 모델 정책</td></tr>
 					<tr><td>캘린더</td><td>서브태스크 일정을 주/월 단위로 배치 · 드래그 재조정, 차단 기간 표시</td></tr>
-					<tr><td>관제</td><td>태스크 하나가 아니라 앱 전체(캘린더 · 크론잡 · 설정)를 대화로 조작</td></tr>
+					<tr><td>비서</td><td>태스크 하나가 아니라 앱 전체(캘린더 · 크론잡 · 설정)를 대화로 조작</td></tr>
 				</table>
 				<h3>PR 리뷰</h3>
 				<p>
