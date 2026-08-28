@@ -4,7 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>Download — OpenTask</title>
-	<meta name="description" content="Download the OpenTask macOS desktop app. Until the signed build ships, you can build it from source yourself." />
+	<meta name="description" content="Download the OpenTask macOS desktop app. Grab the v0.1.0 beta build now, or build it from source yourself." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,7 +12,7 @@
 	<link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-	<div class="banner">🚧 The official build is going through signing and notarization — build from source below in the meantime</div>
+	<div class="banner">⚠️ This build has not been through Apple notarization yet — if you see an "unidentified developer" warning, follow the instructions below</div>
 
 	<header class="nav">
 		<div class="container nav-inner">
@@ -42,17 +42,50 @@
 				<div class="section-head">
 					<div class="eyebrow">Download</div>
 					<h2>Download OpenTask</h2>
-					<p>A macOS desktop app. Once the official build is ready, you'll be able to grab it right from this page.</p>
+					<p>A macOS desktop app. The v0.1.0 beta build is available right now.</p>
 				</div>
 
 				<div class="download-card">
 					<img src="/icon.png" alt="OpenTask icon" />
 					<h3>OpenTask.app</h3>
-					<div class="ver">Beta build in progress · Apple notarization pending</div>
-					<a class="btn btn-primary" href="#" aria-disabled="true">Apple Silicon (arm64) · Coming soon</a>
+					<div class="ver">v0.1.0 beta · not yet notarized</div>
+					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.0/OpenTask-0.1.0-arm64.dmg">Apple Silicon (arm64) · Download .dmg</a>
 					<div style="height:10px"></div>
-					<a class="btn btn-secondary" href="#" aria-disabled="true">Intel (x64) · Coming soon</a>
-					<div class="arch-note">Automatic updates will ship together with the first public build.</div>
+					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.0/OpenTask-0.1.0-arm64-mac.zip">Download .zip</a>
+					<div class="arch-note">Intel (x64) build coming soon. All releases are also available on <a href="https://github.com/jxxh204/opentask/releases" target="_blank" rel="noopener">GitHub Releases</a>.</div>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<div class="container">
+				<div class="section-head">
+					<div class="eyebrow">Installation</div>
+					<h2>Seeing "cannot verify developer"?</h2>
+					<p>This build hasn't gone through Apple Developer ID notarization yet, so macOS Gatekeeper will warn you. Allow it once with the steps below.</p>
+				</div>
+				<div class="steps">
+					<div class="step">
+						<div class="marker"></div>
+						<div>
+							<h4>Right-click (or Control-click) OpenTask.app in Finder</h4>
+							<p>Open the downloaded .dmg, drag it into Applications, then locate it there.</p>
+						</div>
+					</div>
+					<div class="step">
+						<div class="marker"></div>
+						<div>
+							<h4>Choose "Open" from the menu</h4>
+							<p>Use the right-click menu's "Open" instead of double-clicking to bypass the warning.</p>
+						</div>
+					</div>
+					<div class="step">
+						<div class="marker"></div>
+						<div>
+							<h4>Click "Open" again in the dialog</h4>
+							<p>After this, double-clicking will launch it normally.</p>
+						</div>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -107,7 +140,7 @@ npm run electron:dev</code></div>
 				</div>
 				<table class="req-table">
 					<tr><th>Operating system</th><td>macOS (Apple Silicon / Intel, both planned)</td></tr>
-					<tr><th>Distribution format</th><td>.dmg / .zip — Apple Developer ID signing and notarization planned</td></tr>
+					<tr><th>Distribution format</th><td>.dmg / .zip — currently unsigned (Apple Developer ID signing and notarization planned)</td></tr>
 					<tr><th>Runtime</th><td>No separate install needed (Electron is bundled)</td></tr>
 					<tr><th>Optional integrations</th><td>GitHub account (for PR/issue actions), Sentry/AWS/Slack/Notion/Figma (optional)</td></tr>
 					<tr><th>Data</th><td>Stored on your local machine; not exposed to the network by default (127.0.0.1)</td></tr>
