@@ -303,7 +303,11 @@ function capturePane(name) {
 async function watchContinueFallback(name, cmd, fallbackSeed) {
   if (!/--continue\b/.test(String(cmd))) return
   const start = Date.now()
-  while (Date.now() - start < 8000) {
+  // "처음엔 컨티뉴가없는데 명령하니까 문제가 생기는거였네" — 8초 안에 못 잡으면 이 워처는 그냥
+  // 조용히 포기하고, "No conversation found..." 에러만 화면에 남은 채 아무도 새로 안 켜준다.
+  // claude CLI 콜드스타트가 8초를 넘기는 경우가 실측됐다(병렬 세션 많을 때 특히) — 같은 이유로
+  // electron/main.cjs의 백엔드 헬스체크도 12초→120초로 늘린 전례가 있다. 60초로 넉넉하게.
+  while (Date.now() - start < 60000) {
     await new Promise((res) => setTimeout(res, 500))
     const entry = sessions.get(name)
     if (!entry || entry.exited) return
