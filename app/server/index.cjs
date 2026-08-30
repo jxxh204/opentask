@@ -448,6 +448,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ ok: true, repo: C.REPO, state: C.STATE_PATH, host: HOST, port: PORT }))
   }
+  // ── Electron 알림 클릭 브리지(§notify.cjs) — Electron 메인 프로세스가 살아있는 동안 이 두
+  // 엔드포인트를 5초 간격으로 폴링해서, osascript 대신 클릭 가능한 네이티브 Notification을 띄운다.
+  if (url === '/api/notify/heartbeat' && req.method === 'POST') {
+    require('./notify.cjs').heartbeat()
+    return sendJSON(res, 200, { ok: true })
+  }
+  if (url === '/api/notify/pending' && req.method === 'GET') {
+    return sendJSON(res, 200, { ok: true, items: require('./notify.cjs').drainPending() })
+  }
   // ── Setup / 온보딩 (Phase 2b) — SQLite 영속화 ──────────────────────
   if (url === '/api/setup/status' && req.method === 'GET') {
     return sendJSON(res, 200, setupStatus())

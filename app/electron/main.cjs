@@ -9,7 +9,7 @@
 // 별도 프로세스로 띄운다(HMR 유지, 기존 dev 워크플로 무변경 — 이 파일은 그 경로를 안 건드린다).
 'use strict'
 
-const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage } = require('electron')
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage, Notification } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const http = require('http')
@@ -260,6 +260,47 @@ if (!gotLock) {
     return await resolveDetachedBackendUrl()
   }
 
+  // resolveTargetUrl()이 창에 로드하는 URL과, 백엔드 API 베이스 URL은 프로덕션에선 같지만(같은
+  // 서버가 정적 프론트+API 둘 다 서빙) dev 모드에선 다르다 — ELECTRON_START_URL은 Vite(:5180)고,
+  // 백엔드는 vite.config.ts와 똑같은 규칙(OPENRM_PORT || 8770)으로 별도 포트에 떠 있다.
+  function backendApiBaseFor(loadedUrl) {
+    if (process.env.ELECTRON_START_URL) return `http://localhost:${process.env.OPENRM_PORT || 8770}/`
+    return loadedUrl
+  }
+
+  // ── 알림 클릭 브리지(§ server/notify.cjs) ────────────────────────────────
+  // "푸시알림 누르면 접속이 안됨" — server/notify.cjs가 쓰던 osascript display notification은 클릭
+  // 액션이 없다. 여기서 대신 heartbeat(내가 살아있다고 알림)+pending(띄울 알림 큐) 두 엔드포인트를
+  // 5초마다 폴링해서, 클릭하면 창을 포커스하는 진짜 Electron Notification으로 띄운다. 창이 닫혀 있어도
+  // (mac은 Dock에 남아 이 프로세스가 계속 살아있음) 계속 폴링 — 특정 창에 종속시키지 않는다.
+  let notifyPollStarted = false
+  function startNotifyPolling(apiBase) {
+    if (notifyPollStarted) return
+    notifyPollStarted = true
+    const timer = setInterval(async () => {
+      try {
+        await fetch(`${apiBase}api/notify/heartbeat`, { method: 'POST' })
+        const r = await fetch(`${apiBase}api/notify/pending`)
+        const body = await r.json()
+        if (!body || !body.ok || !Array.isArray(body.items)) return
+        for (const item of body.items) {
+          if (!Notification.isSupported()) continue
+          const n = new Notification({ title: item.title, body: item.body || '' })
+          n.on('click', () => {
+            if (!mainWindow) return
+            if (mainWindow.isMinimized()) mainWindow.restore()
+            mainWindow.show()
+            mainWindow.focus()
+          })
+          n.show()
+        }
+      } catch (_) {
+        // 백엔드가 잠깐 안 뜨는 중이거나 응답 실패 — 다음 폴링에서 다시 시도, 여기선 조용히 무시.
+      }
+    }, 5000)
+    app.on('before-quit', () => clearInterval(timer))
+  }
+
   // 창을 만들자마자(backgroundColor '#0b0d10'가 사실상 검정이라) 백엔드 헬스체크가 끝날 때까지
   // 아무 것도 안 그려주면, 정상 진행 중이어도 "꺼진 검은 화면"과 구분이 안 된다 — 최소한 로딩 중임을
   // 보여준다. 실패 시엔 아래 showStartupFailure()가 실제 원인을 사용자에게 보여준다.
@@ -344,6 +385,7 @@ p{font-size:13px;letter-spacing:.02em}
       await showStartupFailure(e)
       return
     }
+    startNotifyPolling(backendApiBaseFor(url))
     await loadWithRetry(mainWindow, url)
   }
 

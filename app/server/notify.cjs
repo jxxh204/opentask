@@ -9,8 +9,35 @@ const Ticket = require('./ticket.cjs')
 
 let prev = {} // sessionName → 직전 상태('work'|'wait'|'idle'|'auth')
 
+// "푸시알림 누르면 접속이 안됨" — osascript의 display notification은 클릭 액션 자체가 없다(배너를
+// 눌러도 그냥 사라질 뿐, 앱을 포커스하거나 특정 화면으로 보내는 기능이 없음). Electron의 Notification
+// API(클릭 핸들러 지원)로 대신 띄우고 싶은데, 이 파일은 Electron이 아니라 별도 Node 서버 프로세스라
+// 직접 호출할 수 없다 — 그래서 여기선 큐에 쌓아두고, Electron 메인 프로세스(electron/main.cjs)가
+// 살아있는 동안 주기적으로 폴링(POST heartbeat + GET pending)해서 대신 띄우게 한다. Electron이
+// 폴링을 멈추면(완전 종료 후에도 백엔드만 계속 사는 경우 등) heartbeat가 끊겨 예전처럼 osascript로
+// 폴백한다 — 클릭은 안 되지만 최소한 알림 자체는 today와 동일하게 유지.
+const pending = []
+let lastElectronHeartbeat = 0
+
+function heartbeat() {
+	lastElectronHeartbeat = Date.now()
+}
+function electronAlive() {
+	return Date.now() - lastElectronHeartbeat < 8000 // Electron 쪽 폴링 주기(5초)의 여유를 둔 판정
+}
+function enqueue(title, body) {
+	pending.push({ title, body })
+	if (pending.length > 20) pending.shift() // Electron이 한동안 안 뜨면 무한정 쌓이지 않게 캡
+}
+function drainPending() {
+	return pending.splice(0, pending.length)
+}
 function notifyMac(title, body) {
 	execFile('osascript', ['-e', `display notification ${JSON.stringify(body || '')} with title ${JSON.stringify(title)} sound name "Glass"`], { timeout: 8000 }, () => {})
+}
+function fire(title, body) {
+	if (electronAlive()) enqueue(title, body)
+	else notifyMac(title, body)
 }
 function stateOf(s) {
 	const st = s.status || {}
@@ -66,9 +93,9 @@ async function tick() {
 		const was = prev[s.name]
 		if (was === undefined || st === was) continue // 첫 관측/변화 없음 → 알림 안 함
 		const f = friendly(s.name, byTicket)
-		if (st === 'wait' && was === 'work') notifyMac(`💬 ${f.title} — 질문 대기`, f.sub ? f.sub + ' (입력 필요)' : '입력이 필요합니다')
-		else if (st === 'auth') notifyMac(`⚠️ ${f.title} — 인증 필요`, f.sub || 'AWS/권한 확인')
-		else if (st === 'idle' && was === 'work') notifyMac(`✅ ${f.title} — 완료`, f.sub || '작업이 끝났습니다')
+		if (st === 'wait' && was === 'work') fire(`💬 ${f.title} — 질문 대기`, f.sub ? f.sub + ' (입력 필요)' : '입력이 필요합니다')
+		else if (st === 'auth') fire(`⚠️ ${f.title} — 인증 필요`, f.sub || 'AWS/권한 확인')
+		else if (st === 'idle' && was === 'work') fire(`✅ ${f.title} — 완료`, f.sub || '작업이 끝났습니다')
 	}
 	prev = now
 }
@@ -83,7 +110,7 @@ function start() {
 // 지적됐던 부분 — 같은 알림 파이프에 태운다. tick()과 달리 호출한 쪽이 판단해 직접 부른다.
 function notifyEscalation(title, body) {
 	if (Settings.get('agentNotify') === false) return
-	notifyMac(`🚨 ${title}`, body || '')
+	fire(`🚨 ${title}`, body || '')
 }
 
-module.exports = { start, notifyEscalation }
+module.exports = { start, notifyEscalation, heartbeat, drainPending }
