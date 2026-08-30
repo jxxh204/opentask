@@ -46,16 +46,55 @@
 
 		<section style="padding-top: 0;">
 			<div class="container" style="max-width: 720px;">
-				<div class="callout warn" style="margin-bottom: 32px;">
-					<strong>Before the first official release.</strong> Once signing and notarization are
-					done and a downloadable build is up, releases will start accumulating here against real
-					version tags. What follows is a pre-release summary of what's already built.
+				<div class="callout" style="margin-bottom: 32px;">
+					<strong>Signed with Apple Developer ID, not yet notarized.</strong> If launching shows an
+					"unidentified developer" warning, right-click the app icon → Open, as described on the
+					<a href="/en/download.html">download page</a>. Once notarization is in place, it'll launch
+					without any warning.
 				</div>
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.3</h3>
+						<span class="chip chip-green">Latest</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li><strong>Fixed the root cause of the black-screen-on-launch bug</strong> — the backend health check was polling a route that returns HTML, so it always reported "not responding" even when the backend was healthy within seconds. It now polls the correct JSON health endpoint.</li>
+						<li>Shows a loading screen while starting up, and a real macOS error dialog (Retry/Quit) instead of a silent console log if startup ever fails</li>
+						<li>Goes straight to the main screen even with no repo connected (removed the forced onboarding gate)</li>
+						<li>Cleaned up the repo folder-picker UI</li>
+						<li>Now signed with Apple Developer ID (notarization planned for a future release)</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.2</h3>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Upgraded Electron 33 → 44 — fixed a renderer crash on recent macOS</li>
+						<li>Fixed several path bugs that only showed up in packaged builds (backend spawn, dependency unpacking)</li>
+						<li>Auto-selects an open port if the default is taken</li>
+						<li>Wired up electron-updater for auto-updates</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.1</h3>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Attempted a signed & notarized build</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
 						<h3 style="margin:0; font-size:19px;">0.1.0</h3>
-						<span class="chip chip-amber">Pre-release</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
 						<li>Task · subtask · worktree–based parallel agent orchestration (Task Manager) — the wave starts driving automatically the moment a subtask is created</li>
@@ -67,15 +106,8 @@
 						<li>Control — a whole-app agent that manages the calendar, cron jobs, and settings by conversation</li>
 						<li>PR Review — Apply a comment (injects into a live session) or Dispute it (public reply on GitHub)</li>
 						<li>macOS Electron desktop shell — the backend runs as a detached process so sessions survive quitting the app</li>
-						<li>Auto-update wiring via electron-updater + GitHub Releases (activates once signing is in place)</li>
 					</ul>
 				</article>
-
-				<div style="text-align:center; padding: 24px 0;">
-					<p style="color:var(--t3); font-size:13px; margin:0;">
-						The first tagged release will be added here with a date once it ships.
-					</p>
-				</div>
 			</div>
 		</section>
 	</main>

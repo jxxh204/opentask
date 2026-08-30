@@ -46,16 +46,54 @@
 
 		<section style="padding-top: 0;">
 			<div class="container" style="max-width: 720px;">
-				<div class="callout warn" style="margin-bottom: 32px;">
-					<strong>정식 첫 릴리스 전입니다.</strong> 서명 · 공증이 끝나고 다운로드 가능한 빌드가
-					올라오면, 그때부터 실제 버전 태그를 기준으로 이 페이지에 릴리스가 쌓입니다. 아래는
-					지금까지 소스에 구현된 기능을 정리한 사전 요약입니다.
+				<div class="callout" style="margin-bottom: 32px;">
+					<strong>Apple Developer ID로 서명은 됐지만 공증(notarize)은 아직입니다.</strong> 실행 시
+					"확인되지 않은 개발자" 경고가 뜨면 <a href="/download.html">다운로드 페이지</a> 안내대로
+					앱 아이콘을 우클릭 → 열기로 실행하세요. 공증이 끝나면 경고 없이 바로 실행됩니다.
 				</div>
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.3</h3>
+						<span class="chip chip-green">최신</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li><strong>실행하면 검은 화면만 뜨던 문제를 근본적으로 수정</strong> — 백엔드 기동 확인이 HTML을 반환하는 경로를 보고 있어 정상 기동해도 항상 "응답 없음"으로 오판하던 버그였습니다. 이제 올바른 헬스체크 경로를 확인합니다.</li>
+						<li>기동 중 로딩 화면 표시, 기동 실패 시 실제 macOS 에러 팝업(재시도/종료)으로 안내</li>
+						<li>레포 미연결 상태에서도 곧장 메인 화면으로 진입(강제 온보딩 화면 제거)</li>
+						<li>레포 폴더 선택 버튼 UI 정리</li>
+						<li>Apple Developer ID 서명 적용(공증은 다음 버전에서 예정)</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.2</h3>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Electron 33 → 44 업그레이드 — 최신 macOS와의 렌더러 충돌(크래시) 수정</li>
+						<li>패키징 빌드 실행 시 발생하던 여러 경로 문제(백엔드 spawn, 의존성 언팩) 수정</li>
+						<li>포트 충돌 시 자동으로 빈 포트 탐색</li>
+						<li>electron-updater 자동 업데이트 배선</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.1</h3>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Apple 서명 · 공증 적용 빌드 시도</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
 						<h3 style="margin:0; font-size:19px;">0.1.0</h3>
-						<span class="chip chip-amber">출시 준비 중</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-28</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
 						<li>태스크 · 서브태스크 · 워크트리 기반 병렬 에이전트 오케스트레이션(태스크 매니저) — 서브태스크 생성 즉시 자동으로 웨이브 지휘 시작</li>
@@ -67,15 +105,8 @@
 						<li>관제 — 캘린더 · 크론잡 · 설정을 대화로 조작하는 앱 전체 에이전트</li>
 						<li>PR 리뷰 — 코멘트에 리뷰 적용(살아있는 세션에 지시 주입) / 리뷰 항의(GitHub 공개 답글)</li>
 						<li>macOS Electron 데스크톱 앱 셸 — 백엔드를 detached 프로세스로 분리해 앱 종료 후에도 세션 유지</li>
-						<li>electron-updater + GitHub Releases 기반 자동 업데이트 배선(서명 완료 후 활성화)</li>
 					</ul>
 				</article>
-
-				<div style="text-align:center; padding: 24px 0;">
-					<p style="color:var(--t3); font-size:13px; margin:0;">
-						버전 태그가 붙은 첫 릴리스가 나오면 이 자리에 날짜와 함께 추가됩니다.
-					</p>
-				</div>
 			</div>
 		</section>
 	</main>

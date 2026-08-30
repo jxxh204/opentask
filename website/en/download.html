@@ -4,7 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>Download — OpenTask</title>
-	<meta name="description" content="Download the OpenTask macOS desktop app. Grab the signed & notarized v0.1.1 build now, or build it from source yourself." />
+	<meta name="description" content="Download the OpenTask macOS desktop app. Grab the Apple Developer ID-signed v0.1.3 build now, or build it from source yourself." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,7 +12,7 @@
 	<link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-	<div class="banner">✅ Signed and notarized by Apple Developer ID — runs right after download, no warnings</div>
+	<div class="banner">🔏 Signed with Apple Developer ID (not yet notarized) — if macOS warns "unidentified developer" on first launch, right-click the app → Open</div>
 
 	<header class="nav">
 		<div class="container nav-inner">
@@ -41,17 +41,18 @@
 			<div class="container">
 				<div class="section-head">
 					<h2>Download OpenTask</h2>
-					<p>A macOS desktop app. The v0.1.1 build is available right now.</p>
+					<p>A macOS desktop app. The v0.1.3 build is available right now.</p>
 				</div>
 
 				<div class="download-card">
 					<img src="/icon.png" alt="OpenTask icon" />
 					<h3>OpenTask.app</h3>
-					<div class="ver">v0.1.1 · signed & notarized</div>
-					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.1/OpenTask-0.1.1-arm64.dmg">Apple Silicon (arm64) · Download .dmg</a>
+					<div class="ver">v0.1.3 · Developer ID signed (not notarized)</div>
+					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64.dmg">Apple Silicon (arm64) · Download .dmg</a>
 					<div style="height:10px"></div>
-					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.1/OpenTask-0.1.1-arm64-mac.zip">Download .zip</a>
+					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64-mac.zip">Download .zip</a>
 					<div class="arch-note">Intel (x64) build coming soon. All releases are also available on <a href="https://github.com/jxxh204/opentask/releases" target="_blank" rel="noopener">GitHub Releases</a>.</div>
+					<div class="arch-note">Not yet notarized — if macOS blocks the first launch as "unidentified developer," right-click the app icon → Open.</div>
 				</div>
 			</div>
 		</section>
@@ -104,7 +105,7 @@ npm run electron:dev</code></div>
 				</div>
 				<table class="req-table">
 					<tr><th>Operating system</th><td>macOS (Apple Silicon / Intel, both planned)</td></tr>
-					<tr><th>Distribution format</th><td>.dmg / .zip — signed and notarized with Apple Developer ID</td></tr>
+					<tr><th>Distribution format</th><td>.dmg / .zip — signed with Apple Developer ID (not notarized yet)</td></tr>
 					<tr><th>Runtime</th><td>No separate install needed (Electron is bundled)</td></tr>
 					<tr><th>Optional integrations</th><td>GitHub account (for PR/issue actions), Sentry/AWS/Slack/Notion/Figma (optional)</td></tr>
 					<tr><th>Data</th><td>Stored on your local machine; not exposed to the network by default (127.0.0.1)</td></tr>
