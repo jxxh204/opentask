@@ -13,6 +13,7 @@ const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage } = requir
 const path = require('path')
 const fs = require('fs')
 const http = require('http')
+const net = require('net')
 const { execFileSync, spawn } = require('child_process')
 const { autoUpdater } = require('electron-updater')
 
@@ -113,11 +114,24 @@ if (!gotLock) {
     }
   }
 
+  // 그냥 "포트에 뭔가 응답한다"만 보고 healthy로 치면, 그 포트를 다른 프로세스(예: 다른 프로젝트의
+  // 개발 서버)가 먼저 차지하고 있을 때도 통과해버려 엉뚱한 응답을 그대로 렌더링하게 된다(검은 화면
+  // 사고로 실제 재현됨). /api/health의 JSON 바디에 ok:true가 있는지까지 확인해야 "우리 서버가 맞다"고
+  // 판단한다 — 완벽한 구분은 아니지만(형제 프로젝트도 같은 엔드포인트 모양일 수 있음) 최소한 전혀
+  // 무관한 서비스가 그 포트를 잡고 있는 경우는 걸러낸다.
   function pingHttp(url, timeoutMs = 1500) {
     return new Promise((resolve) => {
       const req = http.get(url, { timeout: timeoutMs }, (res) => {
-        res.resume() // 응답 바디를 소비해 소켓 정리
-        resolve(true)
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+            resolve(body && body.ok === true)
+          } catch {
+            resolve(false)
+          }
+        })
       })
       req.on('error', () => resolve(false))
       req.on('timeout', () => {
@@ -127,7 +141,15 @@ if (!gotLock) {
     })
   }
 
-  async function waitForHealthy(url, { attempts = 40, intervalMs = 300 } = {}) {
+  // node_modules 전체가 asar.unpacked로 풀리면서(§ asarUnpack) require() 콜드스타트가 파일시스템
+  // 스탯 콜 다발로 느려졌다 — 예전 12초(40×300ms) 예산으로는 백엔드가 실제로는 정상 기동됐는데도
+  // 타임아웃으로 먼저 포기해버려 검은 화면만 남는 사고가 있었다(§ backend.log엔 정상 시작 로그가
+  // 있는데 메인 프로세스는 이미 실패로 단정한 상태). 45초로 늘렸는데도 클린 상태 재현 테스트에서 또
+  // 타임아웃이 났다 — 다운로드 직후 첫 실행은 macOS Gatekeeper가 격리 속성(com.apple.quarantine)이
+  // 붙은 앱 번들 안 파일을 전부(asarUnpack이 node_modules 전체라 수만 개) 훑고 나서야 실행을 허용해서
+  // 콜드스타트가 더 오래 걸릴 수 있다. 120초로 더 늘리고, 그동안 사용자가 "멈췄나?" 오해하지 않도록
+  // createWindow()가 로딩 화면을 먼저 띄운다(§ LOADING_DATA_URL).
+  async function waitForHealthy(url, { attempts = 240, intervalMs = 500 } = {}) {
     for (let i = 0; i < attempts; i++) {
       if (await pingHttp(url)) return true
       await new Promise((r) => setTimeout(r, intervalMs))
@@ -135,20 +157,67 @@ if (!gotLock) {
     return false
   }
 
+  // 실제 연결을 시도해 그 포트에 뭔가 떠 있는지만 확인한다(HTTP 응답 내용은 안 봄 — 그냥 "선점됐나"
+  // 빠르게 판단하는 용도). ECONNREFUSED면 비어있는 포트.
+  function isPortTaken(port, host, timeoutMs = 300) {
+    return new Promise((resolve) => {
+      const socket = net.connect({ port, host, timeout: timeoutMs })
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('timeout', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.once('error', () => resolve(false))
+    })
+  }
+
   async function resolveDetachedBackendUrl() {
     setDataEnv()
-    const port = Number(process.env.OPENRM_PORT || 8770)
     const host = '127.0.0.1'
-    const url = `http://${host}:${port}/`
     const pidFile = path.join(app.getPath('userData'), BACKEND_PIDFILE_NAME)
 
+    // 기본값 8770 대신 18771 — 이 개발자 머신엔 이 레포와 무관한 다른 프로젝트(mrm)가 자기 서버를
+    // 기본 포트 8770/5180으로 띄운다(그쪽도 같은 계열 코드베이스라 API 응답 형태까지 비슷해서 내용으로
+    // 구분하기도 애매하다). 그 상태에서 이 앱을 켜면 "8770에 뭔가 응답한다"만 보고 자기 백엔드가 뜬
+    // 줄 착각해 mrm의 엉뚱한 응답을 그대로 로드해 검은 화면만 뜨는 사고가 실제로 있었다. dev 모드가
+    // 이미 이 충돌을 피하려고 OPENRM_PORT=18771을 쓰고 있어(§ skills/show-app/SKILL.md) 패키징 앱
+    // 기본값도 맞춘다. 그래도 다른 무언가가 18771까지 잡고 있을 수 있으니, 사용자가 OPENRM_PORT를
+    // 명시하지 않은 한(=우리가 자유롭게 고를 수 있는 상황) 비어있는 포트를 찾을 때까지 순차로 미리
+    // 시도한다(스폰→EADDRINUSE 크래시를 기다리는 대신 connect로 먼저 가볍게 확인).
+    const explicitPort = process.env.OPENRM_PORT ? Number(process.env.OPENRM_PORT) : null
+    const basePort = explicitPort || 18771
+    let port = basePort
+    if (!explicitPort) {
+      for (let i = 0; i < 10; i++) {
+        const candidate = basePort + i
+        if (!(await isPortTaken(candidate, host))) {
+          port = candidate
+          break
+        }
+        console.warn(`⚠️  포트 ${candidate}가 이미 사용 중 — 다음 포트 시도`)
+        port = null // 10개 다 막혀 있으면 아래에서 basePort로 폴백해 기존 에러 메시지를 그대로 낸다
+      }
+      if (port === null) port = basePort
+    }
+    const url = `http://${host}:${port}/`
+    // pingHttp는 JSON 바디의 ok:true를 확인하는데(§ pingHttp), "/"는 SPA index.html(순수 HTML)을
+    // 돌려주는 프론트엔드 라우트라 JSON.parse가 항상 실패해 "응답 없음"으로 오판했다 — 백엔드가 몇 초
+    // 만에 정상 기동돼도 헬스체크는 매번 타임아웃 전체를 다 채우고서야 실패로 끝났다(검은 화면/로딩
+    // 화면이 안 넘어가던 진짜 원인). 헬스체크는 반드시 JSON을 내려주는 /api/health로 해야 한다.
+    const healthUrl = `${url}api/health`
+
     // 이미 떠 있는 백엔드가 있으면(이전 실행에서 종료 없이 남아있던 것) 그대로 재사용 — PID 생존 +
-    // 실제로 그 포트가 응답하는지 이중 확인(PID 재사용 오탐 방지).
+    // 실제로 그 포트가 응답하는지 이중 확인(PID 재사용 오탐 방지). 포트를 자동으로 고르는 경로라
+    // pidFile에 저장된 포트를 기준으로 확인해야 한다.
     try {
       const saved = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
-      if (saved && saved.pid && pidIsAlive(saved.pid) && (await pingHttp(url))) {
-        console.log(`♻️  기존 백엔드 재사용 (pid ${saved.pid}) — ${url}`)
-        return url
+      const savedUrl = `http://${host}:${saved.port}/`
+      if (saved && saved.pid && pidIsAlive(saved.pid) && (await pingHttp(`${savedUrl}api/health`))) {
+        console.log(`♻️  기존 백엔드 재사용 (pid ${saved.pid}) — ${savedUrl}`)
+        return savedUrl
       }
     } catch (_) {
       // 파일 없음/파싱 실패 — 새로 띄운다
@@ -164,7 +233,12 @@ if (!gotLock) {
     const child = spawn(process.execPath, [serverEntry], {
       detached: true,
       stdio: ['ignore', logFd, logFd],
-      cwd: path.join(__dirname, '..'), // 이 Electron 프로세스의 실제 cwd는 예측 불가 — 앱 루트로 고정
+      // path.join(__dirname, '..')로 그냥 계산하면 패키징 시 app.asar "안" 경로가 된다 — app.asar는
+      // Electron이 패치한 fs 레벨에서만 폴더처럼 보이는 가상 아카이브고, 실제로는 파일 하나다. OS
+      // spawn()의 cwd로 그 경로를 넘기면 "디렉토리가 아님"으로 즉시 실패한다(spawn ENOTDIR) — 검은
+      // 화면의 진짜 원인이 이거였다(서명·공증과 무관하게 패키징 빌드 100%에서 재현됨). serverEntry는
+      // 이미 asar.unpacked로 치환된 실제 경로이므로, 거기서 cwd를 유도해 같은 실수를 반복하지 않는다.
+      cwd: path.join(serverEntry, '..', '..'),
       // ELECTRON_RUN_AS_NODE — 패키징된 앱엔 별도 node 바이너리가 없다(Electron 바이너리 자체를
       // Node 런타임으로 쓰는 표준 우회). 이 값이 있으면 Electron이 GUI 없이 순수 Node 스크립트처럼
       // server/index.cjs를 실행한다(그 파일의 require.main===module 자동 기동 그대로 탄다).
@@ -174,8 +248,8 @@ if (!gotLock) {
     fs.writeFileSync(pidFile, JSON.stringify({ pid: child.pid, port, startedAt: Date.now() }))
     child.unref() // 이 Electron 프로세스가 죽어도(quit) 저 자식은 살아남는다 — 오늘 요청의 핵심.
 
-    const healthy = await waitForHealthy(url)
-    if (!healthy) throw new Error(`백엔드가 응답하지 않습니다(로그: ${logPath})`)
+    const healthy = await waitForHealthy(healthUrl)
+    if (!healthy) throw new Error(`백엔드가 응답하지 않습니다(포트: ${port}, 로그: ${logPath})`)
     console.log(`🚀  백엔드 새로 기동 (pid ${child.pid}) — ${url}`)
     return url
   }
@@ -184,6 +258,39 @@ if (!gotLock) {
     const devUrl = process.env.ELECTRON_START_URL
     if (devUrl) return devUrl
     return await resolveDetachedBackendUrl()
+  }
+
+  // 창을 만들자마자(backgroundColor '#0b0d10'가 사실상 검정이라) 백엔드 헬스체크가 끝날 때까지
+  // 아무 것도 안 그려주면, 정상 진행 중이어도 "꺼진 검은 화면"과 구분이 안 된다 — 최소한 로딩 중임을
+  // 보여준다. 실패 시엔 아래 showStartupFailure()가 실제 원인을 사용자에게 보여준다.
+  const LOADING_DATA_URL =
+    'data:text/html;charset=utf-8,' +
+    encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+.spinner{width:28px;height:28px;border:3px solid #262b31;border-top-color:#5b8cff;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+p{font-size:13px;letter-spacing:.02em}
+</style></head><body><div class="spinner"></div><p>OpenTask 백엔드를 시작하는 중입니다…</p></body></html>`)
+
+  // 예전엔 createWindow() 실패를 console.error로만 남겼다 — 패키징된 앱엔 터미널이 없어 사용자
+  // 눈엔 "아무 설명 없는 검은 창"으로만 보였다(실제 버그 리포트 재현됨). 네이티브 dialog는 렌더러
+  // 상태와 무관하게 항상 뜨므로, 백엔드 기동이 끝내 실패했을 때 반드시 이 경로로 사용자에게 알린다.
+  async function showStartupFailure(err) {
+    const detail = (err && err.message) || String(err)
+    const choice = await dialog.showMessageBox(mainWindow || undefined, {
+      type: 'error',
+      title: 'OpenTask 백엔드를 시작하지 못했습니다',
+      message: '백엔드 서버가 응답하지 않습니다.',
+      detail: `${detail}\n\n"다시 시도"를 눌러 재시작해보세요. 계속 실패하면 위 로그 파일을 확인해주세요.`,
+      buttons: ['다시 시도', '종료'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (choice.response === 0) {
+      createWindow().catch((e) => console.error('❌ OpenRM 창 재시도 실패:', (e && e.stack) || e))
+    } else {
+      app.quit()
+    }
   }
 
   async function createWindow() {
@@ -227,7 +334,16 @@ if (!gotLock) {
       mainWindow = null
     })
 
-    const url = await resolveTargetUrl()
+    mainWindow.loadURL(LOADING_DATA_URL).catch(() => {})
+
+    let url
+    try {
+      url = await resolveTargetUrl()
+    } catch (e) {
+      console.error('❌ OpenRM 백엔드 기동 실패:', (e && e.stack) || e)
+      await showStartupFailure(e)
+      return
+    }
     await loadWithRetry(mainWindow, url)
   }
 
@@ -242,6 +358,47 @@ if (!gotLock) {
     })
     if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true }
     return { ok: true, path: result.filePaths[0] }
+  })
+
+  // ── 종료 동작 설정(백엔드 detached 프로세스와 별개 관심사라 SQLite 대신 파일 하나) ──────────
+  // "앱을 꺼도 백엔드가 안 죽어서 세션이 계속 일한다"는 게 기본 설계 의도(§ resolveDetachedBackendUrl)
+  // 지만, 정말 완전히 끄고 싶은 사용자도 있다 — 설정에서 토글로 선택하게 한다. 렌더러 state가 아니라
+  // 파일로 저장하는 이유: app.on('before-quit')는 메인 프로세스에서 동기적으로 판단해야 하는데, 그
+  // 시점에 렌더러에 IPC 왕복을 거는 건 창이 이미 닫히기 시작한 상태라 불안정하다.
+  const ELECTRON_SETTINGS_PATH = path.join(app.getPath('userData'), 'electron-settings.json')
+  function readElectronSettings() {
+    try {
+      return JSON.parse(fs.readFileSync(ELECTRON_SETTINGS_PATH, 'utf8'))
+    } catch (_) {
+      return { killBackendOnQuit: false }
+    }
+  }
+  function writeElectronSettings(next) {
+    fs.writeFileSync(ELECTRON_SETTINGS_PATH, JSON.stringify(next))
+  }
+
+  ipcMain.handle('openrm:get-quit-behavior', () => readElectronSettings())
+  ipcMain.handle('openrm:set-quit-behavior', (_event, { killBackendOnQuit }) => {
+    const next = { ...readElectronSettings(), killBackendOnQuit: !!killBackendOnQuit }
+    writeElectronSettings(next)
+    return next
+  })
+
+  // "완전 종료" 토글이 켜져 있으면, Cmd+Q 등 진짜 종료 시 detached 백엔드도 같이 내린다.
+  // window-all-closed가 아니라 before-quit인 이유: macOS는 창을 다 닫아도 앱 자체는 안 죽으므로
+  // (Dock에 남아 activate로 재사용) 창 닫힘과 "진짜 종료"는 다른 이벤트다.
+  app.on('before-quit', () => {
+    if (!readElectronSettings().killBackendOnQuit) return
+    try {
+      const pidFile = path.join(app.getPath('userData'), BACKEND_PIDFILE_NAME)
+      const saved = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
+      if (saved && saved.pid && pidIsAlive(saved.pid)) {
+        process.kill(saved.pid, 'SIGTERM')
+        console.log(`🛑  설정에 따라 백엔드도 함께 종료 (pid ${saved.pid})`)
+      }
+    } catch (_) {
+      // pidfile 없음/파싱 실패/이미 죽음 — 종료할 게 없으니 조용히 넘어간다.
+    }
   })
 
   // ── 앱 메뉴 ──────────────────────────────────────────────────────────────

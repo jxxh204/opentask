@@ -1,4 +1,5 @@
 import Modal from '../common/Modal'
+import { useT } from '../../utils/i18n'
 import styles from './QuickstartModal.module.css'
 
 // "퀵스타트 페이지는 처음 이 앱을 켰을 때 띄워주면 어때?" — 열림 상태는 useQuickstartStore가 관리하고
@@ -27,6 +28,7 @@ const STEPS = [
 ]
 
 export default function QuickstartModal({ open, onClose }: { open: boolean; onClose(): void }) {
+	const t = useT()
 	return (
 		<Modal open={open} onClose={onClose} width={480}>
 			<div className={styles.head}>
@@ -36,7 +38,7 @@ export default function QuickstartModal({ open, onClose }: { open: boolean; onCl
 				</span>
 			</div>
 			<div className={styles.body}>
-				<p className={styles.lede}>태스크 아래 서브태스크를 만들면, AI가 워크트리에서 웨이브로 작업을 지휘합니다.</p>
+				<p className={styles.lede}>{t('태스크 아래 서브태스크를 만들면, AI가 워크트리에서 웨이브로 작업을 지휘합니다.')}</p>
 				<ol className={styles.steps}>
 					{STEPS.map((s, i) => (
 						<li key={s.title} className={styles.step}>

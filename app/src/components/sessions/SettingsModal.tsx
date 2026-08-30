@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useUiStore, applyTheme } from '../../store/useUiStore'
 import type { Theme, Lang } from '../../store/useUiStore'
 import { useTabsStore, MODEL_POLICY_NODE_ID, TEAM_RULES_NODE_ID } from '../../store/useTabsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
 import { useQuickstartStore } from '../../store/useQuickstartStore'
+import { useT } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import styles from './SettingsModal.module.css'
 
@@ -18,6 +19,7 @@ const LANG_OPTS: { id: Lang; label: string }[] = [
 ]
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose(): void }) {
+	const t = useT()
 	const theme = useUiStore((s) => s.theme)
 	const setTheme = useUiStore((s) => s.setTheme)
 	const lang = useUiStore((s) => s.lang)
@@ -32,6 +34,20 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 	useEffect(() => {
 		if (open) loadHolidayCountries()
 	}, [open, loadHolidayCountries])
+
+	// Electron 셸에서만 의미 있는 설정 — 백엔드가 detached 프로세스로 앱 종료 후에도 계속
+	// 살아있는 게 기본 동작이라(§ electron/main.cjs resolveDetachedBackendUrl), 정말 완전히
+	// 끄고 싶은 사람을 위한 토글. 브라우저 dev 모드(window.openrm 없음)에서는 아예 숨긴다.
+	const isElectron = !!window.openrm?.isElectron
+	const [killBackendOnQuit, setKillBackendOnQuit] = useState(false)
+	useEffect(() => {
+		if (open && isElectron) window.openrm!.getQuitBehavior().then((s) => setKillBackendOnQuit(s.killBackendOnQuit))
+	}, [open, isElectron])
+	async function toggleKillBackendOnQuit() {
+		const next = !killBackendOnQuit
+		setKillBackendOnQuit(next)
+		await window.openrm!.setQuitBehavior(next)
+	}
 
 	function openModelPolicy() {
 		const s = useTabsStore.getState()
@@ -86,7 +102,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 				<div className={styles.row} style={{ marginTop: 16 }}>
 					<div>
 						<div className={styles.rowLabel}>내부 용어 언어</div>
-						<div className={styles.rowHint}>오케스트레이터·워크트리 같은 짧은 용어 라벨만 바뀝니다.</div>
+						<div className={styles.rowHint}>{t('오케스트레이터·워크트리 같은 짧은 용어 라벨만 바뀝니다.')}</div>
 					</div>
 					<div className={styles.toggle}>
 						{LANG_OPTS.map((o) => (
@@ -113,6 +129,24 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 						)}
 					</select>
 				</div>
+				{isElectron && (
+					<div className={styles.row} style={{ marginTop: 16 }}>
+						<div>
+							<div className={styles.rowLabel}>앱 종료 시 백엔드</div>
+							<div className={styles.rowHint}>
+								기본은 앱을 꺼도 백엔드가 계속 떠서 세션이 이어집니다. "완전 종료"를 켜면 앱을 끌 때 백엔드도 같이 내려갑니다(포트도 반납됨).
+							</div>
+						</div>
+						<div className={styles.toggle}>
+							<button type="button" className={`${styles.opt} ${!killBackendOnQuit ? styles.optActive : ''}`} onClick={() => killBackendOnQuit && toggleKillBackendOnQuit()}>
+								유지
+							</button>
+							<button type="button" className={`${styles.opt} ${killBackendOnQuit ? styles.optActive : ''}`} onClick={() => !killBackendOnQuit && toggleKillBackendOnQuit()}>
+								완전 종료
+							</button>
+						</div>
+					</div>
+				)}
 				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openTeamRules}>
 					<div>
 						<div className={styles.rowLabel}>팀 규칙 →</div>

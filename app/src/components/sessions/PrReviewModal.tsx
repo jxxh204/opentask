@@ -1,9 +1,11 @@
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useT } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import ReviewItemCard from './ReviewItemCard'
 import styles from './PrReviewModal.module.css'
 
 export default function PrReviewModal() {
+	const t = useT()
 	const reviewTaskId = useSessionsStore((s) => s.reviewTaskId)
 	const closeReview = useSessionsStore((s) => s.closeReview)
 	const folders = useSessionsStore((s) => s.folders)
@@ -13,7 +15,7 @@ export default function PrReviewModal() {
 	const startAiReview = useSessionsStore((s) => s.startAiReview)
 
 	const allTasks = [...inbox, ...folders.flatMap((f) => f.tasks)]
-	const task = allTasks.find((t) => t.id === reviewTaskId) ?? null
+	const task = allTasks.find((task) => task.id === reviewTaskId) ?? null
 
 	const primaryBranch = task?.branches.find((b) => b.links.some((l) => l.kind === 'pr'))
 	const prLink = primaryBranch?.links.find((l) => l.kind === 'pr')
@@ -54,7 +56,7 @@ export default function PrReviewModal() {
 				))}
 			</div>
 			<div className={styles.footer}>
-				<span className={styles.footerHint}>리뷰 적용 = 워크트리 Claude에게 수정 지시 · 리뷰 항의 = 리뷰어에게 회신</span>
+				<span className={styles.footerHint}>{t('리뷰 적용 = 워크트리 Claude에게 수정 지시 · 리뷰 항의 = 리뷰어에게 회신')}</span>
 				<button className={styles.footerCloseBtn} onClick={closeReview}>
 					닫기
 				</button>

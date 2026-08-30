@@ -6,5 +6,7 @@ interface Window {
 		isElectron: true
 		platform: string
 		pickFolder(opts?: { title?: string; defaultPath?: string }): Promise<{ ok: true; path: string } | { ok: false; canceled: true }>
+		getQuitBehavior(): Promise<{ killBackendOnQuit: boolean }>
+		setQuitBehavior(killBackendOnQuit: boolean): Promise<{ killBackendOnQuit: boolean }>
 	}
 }

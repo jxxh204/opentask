@@ -116,8 +116,26 @@ export default function BrowserPane({ taskId, cwd }: { taskId: string; cwd: stri
 				onOpenDevtools={() => tag()?.openDevTools()}
 				onDeviceChange={setDevice}
 			/>
-			<div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', display: 'flex', justifyContent: 'center', background: device === 'mobile' ? '#15181d' : 'var(--bg)' }}>
-				<webview ref={webviewRef} src={initialUrlRef.current} partition={PARTITION} allowpopups style={{ width: device === 'mobile' ? 390 : '100%', height: '100%', border: 'none' }} />
+			<div
+				style={{
+					flex: 1,
+					minHeight: 0,
+					position: 'relative',
+					overflow: 'hidden',
+					display: 'flex',
+					justifyContent: 'center',
+					padding: device === 'mobile' ? '24px 0' : 0,
+					boxSizing: 'border-box',
+					background: device === 'mobile' ? '#15181d' : 'var(--bg)',
+				}}
+			>
+				<webview
+					ref={webviewRef}
+					src={initialUrlRef.current}
+					partition={PARTITION}
+					allowpopups
+					style={{ width: device === 'mobile' ? 390 : '100%', height: '100%', border: 'none', borderRadius: device === 'mobile' ? 12 : 0 }}
+				/>
 			</div>
 		</div>
 	)

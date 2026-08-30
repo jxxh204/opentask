@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '../../utils/i18n'
 import ServerPane from './ServerPane'
 import styles from './BrowserToolbar.module.css'
 
@@ -69,6 +70,7 @@ export default function BrowserToolbar({
 	onOpenDevtools(): void
 	onDeviceChange(d: 'pc' | 'mobile'): void
 }) {
+	const t = useT()
 	const [draft, setDraft] = useState(url)
 	const [envOpen, setEnvOpen] = useState(false)
 	const [overflowOpen, setOverflowOpen] = useState(false)
@@ -140,7 +142,7 @@ export default function BrowserToolbar({
 						{cwd ? (
 							<ServerPane cwd={cwd} />
 						) : (
-							<div className={styles.envEmpty}>워크트리가 아직 없습니다 — 오케스트레이션을 먼저 시작하세요.</div>
+							<div className={styles.envEmpty}>{t('워크트리가 아직 없습니다 — 오케스트레이션을 먼저 시작하세요.')}</div>
 						)}
 					</div>
 				)}

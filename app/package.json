@@ -1,6 +1,6 @@
 {
   "name": "openrm-app",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "private": true,
   "description": "OpenTask · 병렬 AI 개발 관제탑 — 여러 워크트리·에이전트를 한 화면에서 감시·지시",
   "type": "module",
@@ -27,7 +27,7 @@
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/headless": "^6.0.0",
     "@xterm/xterm": "^6.0.0",
-    "better-sqlite3": "^11.3.0",
+    "better-sqlite3": "^13.0.3",
     "date-holidays": "^3.36.0",
     "electron-updater": "^6.8.9",
     "marked": "^18.0.11",
@@ -47,7 +47,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.1.0",
-    "electron": "^33",
+    "electron": "^44.0.0",
     "electron-builder": "^26",
     "typescript": "^5.5.4",
     "vite": "^5.4.6"
@@ -58,9 +58,9 @@
     "productName": "OpenTask",
     "icon": "build/icon.png",
     "asarUnpack": [
-      "node_modules/better-sqlite3/**/*",
-      "node_modules/node-pty/**/*",
-      "server/**/*"
+      "node_modules/**/*",
+      "server/**/*",
+      "dist/**/*"
     ],
     "mac": {
       "target": [
@@ -69,6 +69,7 @@
       ],
       "category": "public.app-category.developer-tools"
     },
+    "afterSign": "build/afterSign.cjs",
     "directories": {
       "output": "release"
     },
