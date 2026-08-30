@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>OpenTask</title>
+  <script>
+    // 다크모드 콜드스타트 플래시(FOUC) 방지 — persist(zustand, 키 'openrm.ui')에 저장된 테마를
+    // React 마운트(App의 applyTheme useEffect)보다 먼저 <html data-theme>에 반영한다. 안 그러면
+    // 첫 페인트엔 :root 라이트값이 깔렸다가 useEffect에서 dark로 튀는 깜빡임이 생긴다. 의미는
+    // useUiStore의 applyTheme와 정확히 같아야 한다: 'light'/'dark'만 속성으로 박고, 'system'이나
+    // 미저장은 속성을 지워 theme.css의 prefers-color-scheme 분기가 그대로 먹게 둔다.
+    ;(function () {
+      try {
+        var raw = localStorage.getItem('openrm.ui')
+        var theme = raw ? (JSON.parse(raw).state || {}).theme : null
+        if (theme === 'dark' || theme === 'light') document.documentElement.setAttribute('data-theme', theme)
+        else document.documentElement.removeAttribute('data-theme')
+      } catch (e) {
+        /* localStorage 접근 불가 등 — 속성 없이 두면 시스템 설정을 따른다 */
+      }
+    })()
+  </script>
 </head>
 <body>
   <div id="root"></div>
