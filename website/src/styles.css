@@ -452,6 +452,40 @@ section + section {
 	display: block;
 }
 
+/* ── architecture diagram ────────────────────────────────────────── */
+
+.diagram-frame {
+	max-width: 860px;
+	margin: 0 auto;
+	padding: 28px 20px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-card);
+	background: var(--card);
+}
+
+.diagram-frame svg {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.diagram-box-title {
+	font: 600 13.5px var(--font-sans);
+	fill: var(--ink);
+}
+
+.diagram-box-body {
+	font: 400 11px var(--font-sans);
+	fill: var(--t2);
+}
+
+.diagram-label {
+	font: 600 11px var(--font-sans);
+	fill: var(--t3);
+	letter-spacing: 0.02em;
+}
+
 /* ── feature grid ────────────────────────────────────────────────── */
 
 .grid {
