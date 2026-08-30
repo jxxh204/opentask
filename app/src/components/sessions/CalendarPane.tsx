@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
+import { useUiStore } from '../../store/useUiStore'
+import { useT, useTp } from '../../utils/i18n'
 import type { Task, BlockedPeriod } from '../../store/types'
 import { businessDayRange } from '../../utils/businessDays'
 import NewTaskModal from './NewTaskModal'
@@ -163,6 +165,10 @@ function computeBlockedLanes(windowDays: Date[], periods: BlockedPeriod[]): { en
 // "모든 메뉴는 탭에서 나온다" 규칙에 따라 SessionShell의 전역 가짜 노드(CALENDAR_NODE_ID) 탭으로 열림.
 
 const DOW_LABEL = ['일', '월', '화', '수', '목', '금', '토']
+// '월'은 DOW_LABEL(월요일)과 아래 모드 탭('주'/'월' = 주간/월간) 둘 다에서 쓰이는데 의미가 다르다
+// (요일 vs 기간 단위) — 전역 t() 사전에 bare 한 글자 키로 넣으면 두 의미가 충돌하므로, 이 두 enum은
+// 전역 사전을 안 거치고 파일 로컬 배열/맵으로 직접 번역한다.
+const DOW_LABEL_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function pad(n: number) {
 	return String(n).padStart(2, '0')
@@ -222,6 +228,11 @@ export default function CalendarPane() {
 	// 공휴일 국가" — 전역 환경설정이라 캘린더 툴바 안 붐비게 하는 것보다 설정이 맞는 자리).
 	const holidayByDate = useHolidayStore((s) => s.byDate)
 	const ensureHolidayYears = useHolidayStore((s) => s.ensureYears)
+	const t = useT()
+	const tp = useTp()
+	const lang = useUiStore((s) => s.lang)
+	const dowLabel = (i: number) => (lang === 'en' ? DOW_LABEL_EN[i] : DOW_LABEL[i])
+	const modeLabel = (m: Mode) => (lang === 'en' ? (m === 'week' ? 'Week' : 'Month') : m === 'week' ? '주' : '월')
 
 	const [mode, setMode] = useState<Mode>('week')
 	const [cursor, setCursor] = useState(() => new Date())
@@ -298,10 +309,12 @@ export default function CalendarPane() {
 		else openTaskOrFolderDetail(item.openId)
 	}
 	function periodLabel() {
-		if (mode === 'month') return `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
+		if (mode === 'month') return tp('{year}년 {month}월', { year: cursor.getFullYear(), month: cursor.getMonth() + 1 })
 		const s = startOfWeek(cursor)
 		const e = addDays(s, 6)
-		return s.getMonth() === e.getMonth() ? `${s.getFullYear()}년 ${s.getMonth() + 1}월 ${s.getDate()}–${e.getDate()}일` : `${s.getMonth() + 1}월 ${s.getDate()}일 – ${e.getMonth() + 1}월 ${e.getDate()}일`
+		return s.getMonth() === e.getMonth()
+			? tp('{year}년 {month}월 {d1}–{d2}일', { year: s.getFullYear(), month: s.getMonth() + 1, d1: s.getDate(), d2: e.getDate() })
+			: tp('{m1}월 {d1}일 – {m2}월 {d2}일', { m1: s.getMonth() + 1, d1: s.getDate(), m2: e.getMonth() + 1, d2: e.getDate() })
 	}
 
 	// "태스크하나를 색하나로 보여주는거야" — 배경은 그 항목이 속한 태스크의 커스텀 색(item.color,
@@ -370,12 +383,12 @@ export default function CalendarPane() {
 					ev.stopPropagation()
 					openTask(item)
 				}}
-				title={`${item.subtaskId ? `${item.parentName} — ${item.name}` : item.name} (영업일 ${item.duration_days}일)`}
+				title={tp('{label} (영업일 {days}일)', { label: item.subtaskId ? `${item.parentName} — ${item.name}` : item.name, days: item.duration_days ?? 0 })}
 			>
 				{done && <span className={styles.chipCheck}>✓</span>}
 				{e.continuesLeft ? '‹ ' : ''}
 				{item.name}
-				<span className={styles.chipDuration}>{item.duration_days}일</span>
+				<span className={styles.chipDuration}>{tp('{days}일', { days: item.duration_days ?? 0 })}</span>
 				{e.continuesRight ? ' ›' : ''}
 			</div>
 		)
@@ -402,7 +415,7 @@ export default function CalendarPane() {
 						ev.stopPropagation()
 						removeBlockedPeriod(p.id)
 					}}
-					title="삭제"
+					title={t('삭제')}
 				>
 					×
 				</span>
@@ -467,7 +480,7 @@ export default function CalendarPane() {
 				onClick={compact ? () => setNewTaskDate(keyToLocalMidnight(key)) : undefined}
 			>
 				<div className={styles.cellHead}>
-					{!compact && <span className={styles.cellDow}>{DOW_LABEL[d.getDay()]}</span>}
+					{!compact && <span className={styles.cellDow}>{dowLabel(d.getDay())}</span>}
 					<span className={`${styles.cellDate} ${today ? styles.cellDateToday : ''}`}>{d.getDate()}</span>
 					{holiday && <span className={styles.holidayLabel}>{holiday}</span>}
 				</div>
@@ -486,10 +499,10 @@ export default function CalendarPane() {
 						    올렸을 때만 보이는 규칙은 그대로 따른다. */}
 						{tasks.length > 0 ? (
 							<button type="button" className={styles.addRowCompact} onClick={() => setNewTaskDate(keyToLocalMidnight(key))}>
-								+ 작업 추가
+								+ {t('작업 추가')}
 							</button>
 						) : (
-							<button type="button" className={styles.addIconBtn} onClick={() => setNewTaskDate(keyToLocalMidnight(key))} title="일감 추가">
+							<button type="button" className={styles.addIconBtn} onClick={() => setNewTaskDate(keyToLocalMidnight(key))} title={t('일감 추가')}>
 								+
 							</button>
 						)}
@@ -500,7 +513,7 @@ export default function CalendarPane() {
 							{tasks.map((task) => renderChip(task))}
 						</div>
 						<button type="button" className={styles.addRow} onClick={() => setNewTaskDate(keyToLocalMidnight(key))}>
-							+ 작업 추가
+							+ {t('작업 추가')}
 						</button>
 					</>
 				)}
@@ -517,7 +530,7 @@ export default function CalendarPane() {
 	let lastLabeledMonth = -1
 	const monthRows = monthWeeks?.map((week, i) => {
 		const firstOfMonth = week.find((d) => d.getDate() === 1)
-		const label = firstOfMonth && firstOfMonth.getMonth() !== lastLabeledMonth ? `${firstOfMonth.getFullYear()}년 ${firstOfMonth.getMonth() + 1}월` : null
+		const label = firstOfMonth && firstOfMonth.getMonth() !== lastLabeledMonth ? tp('{year}년 {month}월', { year: firstOfMonth.getFullYear(), month: firstOfMonth.getMonth() + 1 }) : null
 		if (firstOfMonth) lastLabeledMonth = firstOfMonth.getMonth()
 		return { key: i, week, label }
 	})
@@ -557,7 +570,7 @@ export default function CalendarPane() {
 						‹
 					</button>
 					<button type="button" className={styles.todayBtn} onClick={() => setCursor(new Date())}>
-						오늘
+						{t('오늘')}
 					</button>
 					<button
 						type="button"
@@ -575,9 +588,9 @@ export default function CalendarPane() {
 				</div>
 				<div className={styles.periodLabel}>{periodLabel()}</div>
 				<div className={styles.spacer} />
-				<input className="fin m" style={{ width: 160, height: 30 }} placeholder="검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+				<input className="fin m" style={{ width: 160, height: 30 }} placeholder={t('검색')} value={query} onChange={(e) => setQuery(e.target.value)} />
 				<button type="button" className={`${styles.unscheduledBtn} ${unscheduledOpen ? styles.unscheduledBtnOpen : ''}`} onClick={() => setUnscheduledOpen((o) => !o)}>
-					날짜 없음 ({unscheduled.length})
+					{tp('날짜 없음 ({count})', { count: unscheduled.length })}
 				</button>
 				{/* "일정 막기 기능이 필요해. 중간에 QA기간같은게 있어서 다른걸 못할 수 있거든" */}
 				<button
@@ -588,12 +601,12 @@ export default function CalendarPane() {
 						setBlockModalOpen(true)
 					}}
 				>
-					+ 일정 막기
+					+ {t('일정 막기')}
 				</button>
 				<div className={styles.modeTabs}>
 					{(['week', 'month'] as const).map((m) => (
 						<button key={m} type="button" className={`${styles.modeTab} ${mode === m ? styles.modeTabActive : ''}`} onClick={() => setMode(m)}>
-							{m === 'week' ? '주' : '월'}
+							{modeLabel(m)}
 						</button>
 					))}
 				</div>
@@ -601,7 +614,7 @@ export default function CalendarPane() {
 
 			{unscheduledOpen && (
 				<div className={styles.unscheduledStrip}>
-					{unscheduled.length === 0 && <span className={styles.unscheduledEmpty}>예정일 없는 일감이 없습니다.</span>}
+					{unscheduled.length === 0 && <span className={styles.unscheduledEmpty}>{t('예정일 없는 일감이 없습니다.')}</span>}
 					{unscheduled.map((t) => renderChip(taskToCalItem(t)))}
 				</div>
 			)}
@@ -640,9 +653,9 @@ export default function CalendarPane() {
 			{mode === 'month' && (
 				<div className={styles.monthGrid}>
 					<div className={styles.monthDowRow}>
-						{DOW_LABEL.map((l) => (
+						{DOW_LABEL.map((l, i) => (
 							<div key={l} className={styles.monthDowCell}>
-								{l}
+								{dowLabel(i)}
 							</div>
 						))}
 					</div>

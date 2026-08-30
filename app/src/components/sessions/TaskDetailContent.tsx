@@ -6,6 +6,8 @@ import { removeTask, durationEstimateReportUrl, startSubtaskWork, advanceSubtask
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
 import { LINK_LABEL } from '../../utils/linkDetect'
+import { useT, useTp, translate, translateP, localeFor } from '../../utils/i18n'
+import { useUiStore } from '../../store/useUiStore'
 import BranchChain from './BranchChain'
 import TaskColorDot from './TaskColorDot'
 import MainTaskPicker from './MainTaskPicker'
@@ -26,11 +28,11 @@ function extractLinks(text: string): string[] {
 // 않고 따로 엄격하게 판정한다 — 애매하면 "노션 링크인데 스레드로 적혀있어" 같은 오분류가 생긴다.
 function labelForLink(url: string, index: number): string {
 	const s = url.toLowerCase()
-	if (s.includes('figma.com')) return LINK_LABEL.figma
-	if (s.includes('notion')) return LINK_LABEL.doc
-	if (s.includes('slack.com')) return LINK_LABEL.thread
-	if (s.includes('/pull/') || /#\d{3,}/.test(url)) return LINK_LABEL.pr
-	return `링크${index + 1}`
+	if (s.includes('figma.com')) return translate(LINK_LABEL.figma)
+	if (s.includes('notion')) return translate(LINK_LABEL.doc)
+	if (s.includes('slack.com')) return translate(LINK_LABEL.thread)
+	if (s.includes('/pull/') || /#\d{3,}/.test(url)) return translate(LINK_LABEL.pr)
+	return translateP('링크{n}', { n: index + 1 })
 }
 // "기간은 최소 0.1일부터" — 소수점 기간을 "1.0일" 대신 "1일"로, "0.3일"은 그대로 보여준다.
 function fmtDays(n: number) {
@@ -70,6 +72,9 @@ function dateInputValueToMs(v: string) {
 // 맥락에서 의미가 다르다: 드로어에서는 "드로어 닫기", 탭에서는 "이 상세 탭 닫기"(TaskDetailTab이
 // closeTab으로 연결). openWorkspace처럼 탭 전환만으로 충분한 동작은 onClose를 부르지 않는다.
 export default function TaskDetailContent({ taskId, onClose = () => {} }: { taskId: string | null; onClose?: () => void }) {
+	const t = useT()
+	const tp = useTp()
+	const lang = useUiStore((s) => s.lang)
 	const inbox = useSessionsStore((s) => s.inbox)
 	const folders = useSessionsStore((s) => s.folders)
 	const repos = useSessionsStore((s) => s.repos)
@@ -247,7 +252,7 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 		onClose()
 	}
 	async function remove() {
-		if (!found || !confirm(`"${found.name}"을(를) 삭제할까요?`)) return
+		if (!found || !confirm(tp('"{name}"을(를) 삭제할까요?', { name: found.name }))) return
 		setRemoving(true)
 		await removeTask(found.id)
 		await useSessionsStore.getState().loadBoard()
@@ -281,12 +286,12 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 					type="button"
 					className={`${styles.doneToggle} ${found.completed_at ? styles.doneToggleActive : ''}`}
 					onClick={() => setTaskDone(found.id, !found.completed_at)}
-					title="완료 처리 — 태스크 트리에서는 사라지고 캘린더에는 남습니다"
+					title={t('완료 처리 — 태스크 트리에서는 사라지고 캘린더에는 남습니다')}
 				>
 					<span className={styles.doneCheck} />
-					완료
+					{t('완료')}
 				</button>
-				<button type="button" className={styles.closeBtn} onClick={onClose} title="닫기">
+				<button type="button" className={styles.closeBtn} onClick={onClose} title={t('닫기')}>
 					×
 				</button>
 			</div>
@@ -295,18 +300,18 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 				{/* "일감 검토로... 제목 근처 라인으로 버튼 옮기고" — 태스크를 열자마자 가장 먼저 보이는
 				    자리로 옮겼다. 이제 기간 추정뿐 아니라 개발 계획·설명 보강까지 한 번에 나온다. */}
 				<div className={styles.reviewBlock}>
-					<button type="button" className={styles.reviewBtn} disabled={reviewBusy || !descDraft.trim()} onClick={runAiReview} title={!descDraft.trim() ? '설명을 먼저 적어주세요' : 'Claude Code로 구현+테스트까지 걸릴 영업일, 개발 계획, 보강된 설명을 검토합니다 — 코드를 직접 확인하느라 몇 분 걸릴 수 있어요. 드로어를 닫아도 백그라운드에서 계속 돌고, 사이드바에서 진행 상황을 볼 수 있어요.'}>
-						{reviewBusy ? '검토 중…' : '일감 검토'}
+					<button type="button" className={styles.reviewBtn} disabled={reviewBusy || !descDraft.trim()} onClick={runAiReview} title={!descDraft.trim() ? t('설명을 먼저 적어주세요') : t('Claude Code로 구현+테스트까지 걸릴 영업일, 개발 계획, 보강된 설명을 검토합니다 — 코드를 직접 확인하느라 몇 분 걸릴 수 있어요. 드로어를 닫아도 백그라운드에서 계속 돌고, 사이드바에서 진행 상황을 볼 수 있어요.')}>
+						{reviewBusy ? t('검토 중…') : t('일감 검토')}
 					</button>
 					{review?.error && (
 						<div className={styles.aiSuggestBox}>
-							<span className={styles.aiSuggestError}>{review.error}</span>
+							<span className={styles.aiSuggestError}>{t(review.error)}</span>
 						</div>
 					)}
 					{reviewBusy && review?.status && (
 						<div className={styles.aiSuggestBox}>
 							<div className={styles.aiProgressLabel}>
-								<span>{review.status.label ?? '준비 중…'}</span>
+								<span>{t(review.status.label ?? '준비 중…')}</span>
 								<span>{review.status.percent ?? 5}%</span>
 							</div>
 							<div className={styles.aiProgressTrack}>
@@ -318,7 +323,10 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								/>
 							</div>
 							<div className={styles.aiProgressTokens}>
-								토큰 {(review.status.tokens.input + review.status.tokens.output + review.status.tokens.cacheRead + review.status.tokens.cacheCreation).toLocaleString('ko-KR')} · {Math.round(review.status.elapsedMs / 1000)}초
+								{tp('토큰 {tokens} · {sec}초', {
+									tokens: (review.status.tokens.input + review.status.tokens.output + review.status.tokens.cacheRead + review.status.tokens.cacheCreation).toLocaleString(localeFor(lang)),
+									sec: Math.round(review.status.elapsedMs / 1000),
+								})}
 							</div>
 						</div>
 					)}
@@ -337,20 +345,21 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 											<>
 												<div className={styles.aiSuggestHead}>
 													<span className={styles.aiSuggestTotal}>
-														일감 검토 — 총 {fmtDays(r.days)}일{applied ? ' · 적용됨' : ''}
+														{tp('일감 검토 — 총 {days}일', { days: fmtDays(r.days) })}
+														{applied ? t(' · 적용됨') : ''}
 													</span>
 													<a className={styles.aiReportLink} href={durationEstimateReportUrl(found.id, review.jobId)} target="_blank" rel="noreferrer">
-														자세히 보기
+														{t('자세히 보기')}
 													</a>
 													{/* "적용 하나만 있으면 될 것 같아" — 기간/설명/계획 따로가 아니라 버튼 하나로 한 번에.
 													    "적용이 되면 수정 안 되는 UI로... 수정 버튼을 눌러야" — 적용 후엔 같은 자리가 수정(잠금 해제)으로 바뀐다. */}
 													{applied ? (
 														<button type="button" className={styles.aiSuggestApply} onClick={unlockReview}>
-															수정
+															{t('수정')}
 														</button>
 													) : (
-														<button type="button" className={styles.aiSuggestApply} onClick={applyAll} title="기간·설명·개발 계획을 한 번에 반영합니다">
-															적용
+														<button type="button" className={styles.aiSuggestApply} onClick={applyAll} title={t('기간·설명·개발 계획을 한 번에 반영합니다')}>
+															{t('적용')}
 														</button>
 													)}
 												</div>
@@ -358,17 +367,17 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 												    작업으로 잡아야해" — Claude 구현 시간과 사람 검증 시간을 나눠서 보여준다. */}
 												{hasSplit && (
 													<div className={styles.aiSuggestSplit}>
-														개발(Claude) {fmtDays(r.devDays)}일 · 테스트(직접 확인) {fmtDays(r.testDays)}일
+														{tp('개발(Claude) {devDays}일 · 테스트(직접 확인) {testDays}일', { devDays: fmtDays(r.devDays), testDays: fmtDays(r.testDays) })}
 													</div>
 												)}
 												{/* "만약 길게잡힌게 맞다면. 강조를 해줬으면해. 어떤 것들로 인해 길게 잡을 수 밖에 없었다"
 												    — 총합이 1일을 넘길 때만 judge가 채우는 핵심 이유 한 줄을 눈에 띄게 강조한다. */}
-												{r.whyLong && <div className={styles.aiWhyLong}>⏱ 왜 이만큼 걸리나요 — {r.whyLong}</div>}
+												{r.whyLong && <div className={styles.aiWhyLong}>{tp('⏱ 왜 이만큼 걸리나요 — {reason}', { reason: r.whyLong })}</div>}
 												<ul className={styles.aiBreakdownList}>
 													{r.breakdown.map((b, i) => (
 														<li key={i} className={styles.aiBreakdownRow}>
 															<span className={styles.aiBreakdownItem}>{b.item}</span>
-															<span className={styles.aiBreakdownDays}>{hasSplit ? `${fmtDays(b.devDays)}+${fmtDays(b.testDays)}` : fmtDays(b.days)}일</span>
+															<span className={styles.aiBreakdownDays}>{tp('{n}일', { n: hasSplit ? `${fmtDays(b.devDays)}+${fmtDays(b.testDays)}` : fmtDays(b.days) })}</span>
 															<span className={styles.aiBreakdownNote}>{b.note}</span>
 														</li>
 													))}
@@ -378,48 +387,48 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 									})()}
 									{review.status.result.betterDesc && (
 										<div className={styles.aiPlanRow}>
-											<span className={styles.aiPlanHint}>설명도 다듬었어요: "{review.status.result.betterDesc.slice(0, 50)}…"</span>
+											<span className={styles.aiPlanHint}>{tp('설명도 다듬었어요: "{text}…"', { text: review.status.result.betterDesc.slice(0, 50) })}</span>
 										</div>
 									)}
 									{review.status.result.plan.length > 0 && (
 										<div className={styles.aiPlanRow}>
-											<span className={styles.aiPlanHint}>개발 계획 {review.status.result.plan.length}단계도 함께 나왔어요(자세히 보기에서 확인)</span>
+											<span className={styles.aiPlanHint}>{tp('개발 계획 {n}단계도 함께 나왔어요(자세히 보기에서 확인)', { n: review.status.result.plan.length })}</span>
 										</div>
 									)}
 									{/* "태스크 등록은 적용 후에 나오도록" — 적용을 안 눌렀으면 아직 검토 결과가 실제
 									    필드에 반영 안 된 상태라 등록 버튼 자체를 숨긴다. */}
 									{applied && !folder && (
 										<div className={styles.aiRegisterRow}>
-											<span className={styles.aiPlanHint}>등록하면 캘린더에도 일정이 잡혀요</span>
+											<span className={styles.aiPlanHint}>{t('등록하면 캘린더에도 일정이 잡혀요')}</span>
 											<button type="button" className={styles.aiRegisterBtn} disabled={quickStartBusy} onClick={registerFromReview}>
-												{quickStartBusy ? '등록 중…' : '태스크 등록'}
+												{quickStartBusy ? t('등록 중…') : t('태스크 등록')}
 											</button>
 										</div>
 									)}
 									<div className={styles.aiProgressTokens}>
-										토큰 {(review.status.tokens.input + review.status.tokens.output + review.status.tokens.cacheRead + review.status.tokens.cacheCreation).toLocaleString('ko-KR')}
-										{review.status.costUsd != null ? ` · 약 $${review.status.costUsd.toFixed(3)}` : ''}
+										{tp('토큰 {tokens}', { tokens: (review.status.tokens.input + review.status.tokens.output + review.status.tokens.cacheRead + review.status.tokens.cacheCreation).toLocaleString(localeFor(lang)) })}
+										{review.status.costUsd != null ? tp(' · 약 ${cost}', { cost: review.status.costUsd.toFixed(3) }) : ''}
 									</div>
 								</>
 							) : review.status.result.tooVague ? (
 								<div className={styles.aiSuggestWarn}>
-									<span>설명이 너무 막연해서 검토를 중단했습니다 — {review.status.result.error}</span>
+									<span>{tp('설명이 너무 막연해서 검토를 중단했습니다 — {reason}', { reason: review.status.result.error })}</span>
 									<a className={styles.aiReportLink} href={durationEstimateReportUrl(found.id, review.jobId)} target="_blank" rel="noreferrer">
-										조사 내용 보기
+										{t('조사 내용 보기')}
 									</a>
 									<button type="button" className={styles.aiSuggestWarnFocus} onClick={() => setDescEditing(true)}>
-										설명 작성하러 가기
+										{t('설명 작성하러 가기')}
 									</button>
 								</div>
 							) : (
-								<span className={styles.aiSuggestError}>{review.status.result.error}</span>
+								<span className={styles.aiSuggestError}>{t(review.status.result.error)}</span>
 							)}
 						</div>
 					)}
 				</div>
 
 				<div className={styles.metaRow}>
-					<span className={styles.metaLabel}>마감일</span>
+					<span className={styles.metaLabel}>{t('마감일')}</span>
 					{hasScheduledSubtasks ? (
 						<span className={styles.metaLockedValue}>{found.due_date ? msToDateInputValue(found.due_date) : '—'}</span>
 					) : (
@@ -427,15 +436,15 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 					)}
 					{!hasScheduledSubtasks && found.due_date !== null && (
 						<button type="button" className={styles.metaClear} onClick={() => updateTaskDueDate(found.id, null)}>
-							지우기
+							{t('지우기')}
 						</button>
 					)}
-					{hasScheduledSubtasks && <span className={styles.metaHint}>서브태스크 일정으로 자동 계산됨</span>}
+					{hasScheduledSubtasks && <span className={styles.metaHint}>{t('서브태스크 일정으로 자동 계산됨')}</span>}
 				</div>
 
 				{found.due_date !== null && (
 					<div className={styles.metaRow}>
-						<span className={styles.metaLabel}>기간</span>
+						<span className={styles.metaLabel}>{t('기간')}</span>
 						{/* "적용이 되면 일반 UI로 수정이 안되는 UI로 변경" — 검토 적용 직후·서브태스크로 자동
 						    산정되는 동안엔 실수로 값을 바꾸지 못하게 입력창 대신 읽기 전용 표시로. */}
 						{applied || hasScheduledSubtasks ? (
@@ -454,15 +463,18 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								}}
 							/>
 						)}
-						<span className={styles.metaHint}>영업일</span>
+						<span className={styles.metaHint}>{t('영업일')}</span>
 						{found.duration_days !== null && found.duration_days > 1 && (
 							<span className={styles.metaHint}>
-								~ {new Date(addBusinessDays(found.due_date, found.duration_days)).getMonth() + 1}월 {new Date(addBusinessDays(found.due_date, found.duration_days)).getDate()}일 종료
+								{tp('~ {month}월 {day}일 종료', {
+									month: new Date(addBusinessDays(found.due_date, found.duration_days)).getMonth() + 1,
+									day: new Date(addBusinessDays(found.due_date, found.duration_days)).getDate(),
+								})}
 							</span>
 						)}
 						{!applied && !hasScheduledSubtasks && found.duration_days !== null && (
 							<button type="button" className={styles.metaClear} onClick={() => updateTaskDuration(found.id, null)}>
-								지우기
+								{t('지우기')}
 							</button>
 						)}
 					</div>
@@ -473,14 +485,14 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 				    캘린더에서 드래그로 옮긴 값도 여기 바로 반영된다(같은 store 상태를 보고 있어서). */}
 				<div className={styles.subtasksSection}>
 					<div className={styles.subtasksHead}>
-						<span className={styles.metaLabel}>서브태스크</span>
-						<button type="button" className={styles.subtaskAddBtn} onClick={() => createSubtaskAction(found.id, { name: '서브태스크' })}>
-							+ 추가
+						<span className={styles.metaLabel}>{t('서브태스크')}</span>
+						<button type="button" className={styles.subtaskAddBtn} onClick={() => createSubtaskAction(found.id, { name: t('서브태스크') })}>
+							{t('+ 추가')}
 						</button>
 						{/* "서브태스크를 골라서 넣을 수 있게 해줘" — attachTaskAsSubtask의 반대 방향 진입점.
 						    일감함에 독립적으로 떠 있는 태스크를 골라 이 태스크의 서브태스크로 편입한다. */}
 						<MainTaskPicker
-							label="기존 태스크에서 선택"
+							label={t('기존 태스크에서 선택')}
 							candidates={inbox.filter((t) => t.id !== found.id).map((t) => ({ id: t.id, name: t.name }))}
 							onPick={async (candidateId) => {
 								const r = await attachTaskAsSubtask(candidateId, found.id)
@@ -496,9 +508,9 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								className={styles.subtaskAddBtn}
 								disabled={subtaskWorkBusy || !subtaskWork.some((w) => w.alive)}
 								onClick={advanceDev}
-								title="지금 진행 중인 서브태스크를 끝내고 다음 서브태스크의 워크트리를 새로 만듭니다"
+								title={t('지금 진행 중인 서브태스크를 끝내고 다음 서브태스크의 워크트리를 새로 만듭니다')}
 							>
-								다음 단계로 →
+								{t('다음 단계로 →')}
 							</button>
 						) : (
 							<button
@@ -506,13 +518,13 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								className={styles.subtaskAddBtn}
 								disabled={subtaskWorkBusy}
 								onClick={startDev}
-								title="서브태스크가 없으면 AI 검토의 업무 단위로 자동 생성 후, 첫 서브태스크의 워크트리+클로드 세션을 시작합니다"
+								title={t('서브태스크가 없으면 AI 검토의 업무 단위로 자동 생성 후, 첫 서브태스크의 워크트리+클로드 세션을 시작합니다')}
 							>
-								개발 시작
+								{t('개발 시작')}
 							</button>
 						)}
 					</div>
-					{found.subtasks.length === 0 && <div className={styles.subtasksEmpty}>아직 없음 — "개발 시작"을 누르면 AI 검토 결과로 자동 생성되거나, "+ 추가"로 직접 QA/배포 등을 만들 수 있어요.</div>}
+					{found.subtasks.length === 0 && <div className={styles.subtasksEmpty}>{t('아직 없음 — "개발 시작"을 누르면 AI 검토 결과로 자동 생성되거나, "+ 추가"로 직접 QA/배포 등을 만들 수 있어요.')}</div>}
 					{found.subtasks.map((st) => {
 						const work = subtaskWork.find((w) => w.id === st.id)
 						return (
@@ -521,9 +533,9 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								{work?.started && (
 									<span
 										className={`${styles.subtaskWorkBadge} ${work.alive ? styles.subtaskWorkBadgeAlive : styles.subtaskWorkBadgeDone}`}
-										title={work.branch ? `브랜치: ${work.branch}` : undefined}
+										title={work.branch ? tp('브랜치: {branch}', { branch: work.branch }) : undefined}
 									>
-										{work.alive ? '진행 중' : '세션 종료'}
+										{work.alive ? t('진행 중') : t('세션 종료')}
 									</span>
 								)}
 								<input
@@ -547,8 +559,8 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 									min={1}
 									className="fin m"
 									style={{ width: 44, height: 26 }}
-									placeholder="일"
-									title="영업일"
+									placeholder={t('일')}
+									title={t('영업일')}
 									value={st.duration_days ?? ''}
 									onChange={(e) => updateSubtaskDuration(st.id, e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null)}
 								/>
@@ -559,18 +571,18 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 									type="button"
 									className={`${styles.subtaskDoneBtn} ${st.completed_at ? styles.subtaskDoneBtnActive : ''}`}
 									onClick={() => setSubtaskDone(st.id, !st.completed_at)}
-									title="완료 처리 — 사이드바 목록에서는 사라지고 캘린더에는 남습니다"
+									title={t('완료 처리 — 사이드바 목록에서는 사라지고 캘린더에는 남습니다')}
 								>
 									✓
 								</button>
-								<button type="button" className={styles.subtaskRemoveBtn} onClick={() => removeSubtaskAction(st.id)} title="삭제">
+								<button type="button" className={styles.subtaskRemoveBtn} onClick={() => removeSubtaskAction(st.id)} title={t('삭제')}>
 									×
 								</button>
 							</div>
 							<textarea
 								className={styles.subtaskDescInput}
 								defaultValue={st.desc}
-								placeholder="이 단계만의 설명(선택)"
+								placeholder={t('이 단계만의 설명(선택)')}
 								onBlur={(e) => {
 									if (e.target.value !== st.desc) updateSubtaskDesc(st.id, e.target.value)
 								}}
@@ -582,7 +594,7 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 
 				{repos.length > 0 && (
 					<div className={styles.metaRow}>
-						<span className={styles.metaLabel}>레포</span>
+						<span className={styles.metaLabel}>{t('레포')}</span>
 						<RepoSelect
 							repos={repos}
 							valueId={(folder ? folder.repo_id : found.repo_id) ?? null}
@@ -593,12 +605,12 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								else updateTaskRepo(found.id, repoId)
 							}}
 						/>
-						{!folder && found.repo_id && <span className={styles.metaHint}>(AI 자동배정)</span>}
+						{!folder && found.repo_id && <span className={styles.metaHint}>{t('(AI 자동배정)')}</span>}
 						{/* "드롭다운은 바뀌어 보이는데 실제 작업(워크트리/세션)은 옛 레포 그대로" — 이미 워크트리를
 						    만든 서브태스크는 그 레포에 이미 체크아웃돼 있어 레포를 바꿔도 저절로 옮겨가지 않는다
 						    (git worktree 특성상 불가능 — 새로 시작해야 옮겨감). 안 바뀐 게 버그처럼 보이지
 						    않게 그 자리에서 바로 알려준다. */}
-						{folder && subtaskWork.some((w) => w.started) && <span className={styles.metaHint}>이미 시작된 서브태스크는 그때 배정된 레포 그대로 진행돼요 — 다음 서브태스크부터 적용됩니다</span>}
+						{folder && subtaskWork.some((w) => w.started) && <span className={styles.metaHint}>{t('이미 시작된 서브태스크는 그때 배정된 레포 그대로 진행돼요 — 다음 서브태스크부터 적용됩니다')}</span>}
 					</div>
 				)}
 
@@ -608,7 +620,7 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 				    자기 서브태스크가 있으면 이 옵션 자체를 숨겨 그 사고를 원천 차단한다. */}
 				{!found.folder_id && found.subtasks.length === 0 && (
 					<div className={styles.metaRow}>
-						<span className={styles.metaLabel}>메인 태스크</span>
+						<span className={styles.metaLabel}>{t('메인 태스크')}</span>
 						<MainTaskPicker
 							candidates={folders
 								.flatMap((f) => f.tasks)
@@ -616,7 +628,7 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								.map((t) => ({ id: t.id, name: t.name }))}
 							onPick={async (mainTaskId) => {
 								const mainName = folders.flatMap((f) => f.tasks).find((t) => t.id === mainTaskId)?.name || ''
-								if (!confirm(`"${found.name}"을(를) "${mainName}"의 서브태스크로 편입할까요? 원래 태스크 기록은 삭제됩니다.`)) return
+								if (!confirm(tp('"{name}"을(를) "{mainName}"의 서브태스크로 편입할까요? 원래 태스크 기록은 삭제됩니다.', { name: found.name, mainName }))) return
 								const r = await attachTaskAsSubtask(found.id, mainTaskId)
 								if (r.ok) {
 									await useSessionsStore.getState().loadBoard()
@@ -636,13 +648,13 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 				)}
 
 				<div className={styles.descLabel}>
-					설명
+					{t('설명')}
 					{/* "적용이 되면... 수정 버튼을 눌러야 수정되도록" — 잠긴 동안은 위 검토 박스의 "수정"
 					    버튼으로만 풀린다(§ applied). */}
-					{applied && <span className={styles.descLockedHint}>검토 적용됨 — 위 "수정"으로 편집</span>}
+					{applied && <span className={styles.descLockedHint}>{t('검토 적용됨 — 위 "수정"으로 편집')}</span>}
 				</div>
 				{descEditing && !applied ? (
-					<textarea ref={descRef} className={styles.descInput} value={descDraft} onChange={(e) => setDescDraft(e.target.value)} onBlur={commitDesc} placeholder="이 일감에 대해 설명해 주세요" />
+					<textarea ref={descRef} className={styles.descInput} value={descDraft} onChange={(e) => setDescDraft(e.target.value)} onBlur={commitDesc} placeholder={t('이 일감에 대해 설명해 주세요')} />
 				) : (
 					// "설명이 더 길어졌잖아... link는 자동으로 ui를 나누어주고 글도 나누어줘서 한눈에
 					// 볼 수 있게" — AI가 다듬은 긴 설명을 그대로 textarea에 욱여넣지 않고, 링크는
@@ -668,14 +680,14 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 								))}
 							</>
 						) : (
-							<span className={styles.descPlaceholder}>이 일감에 대해 설명해 주세요</span>
+							<span className={styles.descPlaceholder}>{t('이 일감에 대해 설명해 주세요')}</span>
 						)}
 					</div>
 				)}
 
 				{found.branches.length > 0 && (
 					<div className={styles.branchSection}>
-						<div className={styles.descLabel}>브랜치</div>
+						<div className={styles.descLabel}>{t('브랜치')}</div>
 						<BranchChain branches={found.branches} kind={found.kind} groupBase={folder?.base ?? null} />
 					</div>
 				)}
@@ -683,16 +695,16 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 
 			<div className={styles.actions}>
 				<button type="button" className={styles.deleteBtn} disabled={removing} onClick={remove}>
-					삭제
+					{t('삭제')}
 				</button>
 				<div className={styles.actionsSpacer} />
 				{folder ? (
 					<button type="button" className={styles.primaryBtn} onClick={openWorkspace}>
-						작업 열기
+						{t('작업 열기')}
 					</button>
 				) : (
 					<button type="button" className={styles.primaryBtn} disabled={quickStartBusy} onClick={register}>
-						{quickStartBusy ? '등록 중…' : '태스크로 등록'}
+						{quickStartBusy ? t('등록 중…') : t('태스크로 등록')}
 					</button>
 				)}
 			</div>

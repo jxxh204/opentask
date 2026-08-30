@@ -1,5 +1,7 @@
 import type { Review } from '../../store/types'
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useUiStore } from '../../store/useUiStore'
+import { useT, localeFor } from '../../utils/i18n'
 import styles from './ReviewItemCard.module.css'
 
 const SEV_COLOR: Record<string, [string, string]> = {
@@ -14,6 +16,8 @@ const STATE_LABEL: Record<Review['state'], [string, string]> = {
 }
 
 export default function ReviewItemCard({ review }: { review: Review }) {
+	const t = useT()
+	const lang = useUiStore((s) => s.lang)
 	const disputingReviewId = useSessionsStore((s) => s.disputingReviewId)
 	const disputeText = useSessionsStore((s) => s.disputeText)
 	const setDisputeText = useSessionsStore((s) => s.setDisputeText)
@@ -41,15 +45,15 @@ export default function ReviewItemCard({ review }: { review: Review }) {
 				</span>
 				<span className={styles.who}>{review.who}</span>
 				{review.file && <span className={`m ${styles.file}`}>{review.file}</span>}
-				<span className={styles.at}>{review.at ? new Date(review.at).toLocaleString() : ''}</span>
+				<span className={styles.at}>{review.at ? new Date(review.at).toLocaleString(localeFor(lang)) : ''}</span>
 				<span className={styles.stateLabel} style={{ color: stFg }}>
-					{stLabel}
+					{t(stLabel)}
 				</span>
 			</div>
 			<p className={styles.body}>{review.body}</p>
 			{review.reply && (
 				<div className={styles.replyBox}>
-					<div className={styles.replyLabel}>내 항의</div>
+					<div className={styles.replyLabel}>{t('내 항의')}</div>
 					<div className={styles.replyText}>{review.reply}</div>
 				</div>
 			)}
@@ -57,35 +61,35 @@ export default function ReviewItemCard({ review }: { review: Review }) {
 				<>
 					{isDisputing ? (
 						<div className={styles.disputeArea}>
-							<textarea className={styles.disputeTextarea} value={disputeText} onChange={(e) => setDisputeText(e.target.value)} placeholder="왜 이 리뷰가 맞지 않는지 설명… (리뷰어에게 전달)" />
+							<textarea className={styles.disputeTextarea} value={disputeText} onChange={(e) => setDisputeText(e.target.value)} placeholder={t('왜 이 리뷰가 맞지 않는지 설명… (리뷰어에게 전달)')} />
 							<div className={styles.actions}>
 								<button className={styles.sendBtn} disabled={reviewBusy} onClick={() => disputeReview(review.id)}>
-									항의 보내기
+									{t('항의 보내기')}
 								</button>
 								<button className={styles.disputeBtn} onClick={cancelDispute}>
-									취소
+									{t('취소')}
 								</button>
 							</div>
 						</div>
 					) : isConfirmingApply ? (
 						<div className={styles.disputeArea}>
-							<p style={{ fontSize: 12, color: 'var(--t2)' }}>이 리뷰를 세션에 보내 코드에 반영시킬까요? 실제로 커밋·푸시까지 진행됩니다.</p>
+							<p style={{ fontSize: 12, color: 'var(--t2)' }}>{t('이 리뷰를 세션에 보내 코드에 반영시킬까요? 실제로 커밋·푸시까지 진행됩니다.')}</p>
 							<div className={styles.actions}>
 								<button className={styles.applyBtn} disabled={reviewBusy} onClick={() => applyReview(review.id)}>
-									{reviewBusy ? '적용 중…' : '적용'}
+									{reviewBusy ? t('적용 중…') : t('적용')}
 								</button>
 								<button className={styles.disputeBtn} onClick={cancelApply}>
-									취소
+									{t('취소')}
 								</button>
 							</div>
 						</div>
 					) : (
 						<div className={styles.actions}>
 							<button className={styles.applyBtn} disabled={reviewBusy} onClick={() => startApply(review.id)}>
-								리뷰 적용
+								{t('리뷰 적용')}
 							</button>
 							<button className={styles.disputeBtn} onClick={() => startDispute(review.id)}>
-								리뷰 항의
+								{t('리뷰 항의')}
 							</button>
 						</div>
 					)}

@@ -4,6 +4,7 @@ import type { SubtaskWorkStatus } from '../../api/sessions'
 import { getSubtaskWorkState } from '../../api/sessions'
 import { useTabsStore } from '../../store/useTabsStore'
 import { addBusinessDays } from '../../utils/businessDays'
+import { useT } from '../../utils/i18n'
 import styles from './TaskManagerBoard.module.css'
 
 // "태스크 매니저(오케스트레이터가 아닌)" — 지휘자 터미널·대화 로그(OrchestratorPane 본문)와는 다른,
@@ -17,9 +18,10 @@ import styles from './TaskManagerBoard.module.css'
 // 절제한다 — 색은 여전히 이 앱의 시맨틱 팔레트(violet/green/amber)만 쓰고, 손글씨 폰트나 낙서체는
 // 쓰지 않는다.
 function StatusPin({ st }: { st: SubtaskWorkStatus | undefined }) {
-	if (!st || !st.started) return <span className={`${styles.pin} ${styles.pinIdle}`} title="대기" />
-	if (st.alive) return <span className={`${styles.pin} ${styles.pinAlive}`} title="진행 중" />
-	return <span className={`${styles.pin} ${styles.pinDone}`} title="세션 종료" />
+	const t = useT()
+	if (!st || !st.started) return <span className={`${styles.pin} ${styles.pinIdle}`} title={t('대기')} />
+	if (st.alive) return <span className={`${styles.pin} ${styles.pinAlive}`} title={t('진행 중')} />
+	return <span className={`${styles.pin} ${styles.pinDone}`} title={t('세션 종료')} />
 }
 
 // TaskDetailModal의 "~ M월 D일 종료" 표기와 같은 규칙 — 기간이 잡혀있을 때만 보여준다.
@@ -51,6 +53,7 @@ function Connector() {
 }
 
 function TaskLane({ task }: { task: Task }) {
+	const t = useT()
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const openSubtaskTab = useTabsStore((s) => s.openSubtaskTab)
 	const [work, setWork] = useState<SubtaskWorkStatus[]>([])
@@ -73,7 +76,7 @@ function TaskLane({ task }: { task: Task }) {
 		<div className={styles.lane}>
 			<div className={styles.laneHead}>{task.name}</div>
 			{task.subtasks.length === 0 ? (
-				<div className={styles.empty}>아직 서브태스크 없음 — AI 검토가 끝나면 자동 생성되거나, 상세페이지에서 직접 추가할 수 있습니다.</div>
+				<div className={styles.empty}>{t('아직 서브태스크 없음 — AI 검토가 끝나면 자동 생성되거나, 상세페이지에서 직접 추가할 수 있습니다.')}</div>
 			) : (
 				<div className={styles.board}>
 					<div className={styles.chain}>
@@ -87,18 +90,18 @@ function TaskLane({ task }: { task: Task }) {
 										className={styles.note}
 										style={{ transform: `rotate(${tiltFor(i)}deg)` }}
 										onClick={() => activeNodeId && openSubtaskTab(activeNodeId, st.id, task.id, st.name)}
-										title="클릭하면 이 서브태스크의 세션 탭이 열립니다"
+										title={t('클릭하면 이 서브태스크의 세션 탭이 열립니다')}
 									>
 										<StatusPin st={w} />
 										<div className={styles.noteName}>{st.name}</div>
 										<div className={styles.noteWorktree} title={w?.worktreePath || undefined}>
-											{w?.worktreePath ? w.worktreePath.split('/').slice(-1)[0] : 'worktree 없음'}
+											{w?.worktreePath ? w.worktreePath.split('/').slice(-1)[0] : t('worktree 없음')}
 										</div>
 										{w?.branch && <div className={styles.noteBranch}>⎇ {w.branch}</div>}
 										{period && <div className={styles.notePeriod}>{period}</div>}
 										<div className={styles.popover}>
 											<div className={styles.popoverLabel}>{st.name}</div>
-											<div className={styles.popoverText}>{st.desc || '설명 없음'}</div>
+											<div className={styles.popoverText}>{st.desc || t('설명 없음')}</div>
 										</div>
 									</div>
 								</div>
@@ -125,9 +128,9 @@ function TaskLane({ task }: { task: Task }) {
 											<StatusPin st={w} />
 											{period && <span className={styles.timelinePeriod}>{period}</span>}
 										</div>
-										<p className={styles.timelineDesc}>{st.desc || '설명 없음'}</p>
+										<p className={styles.timelineDesc}>{st.desc || t('설명 없음')}</p>
 										<div className={styles.timelineMeta}>
-											<span>worktree: {w?.worktreePath || '아직 없음'}</span>
+											<span>worktree: {w?.worktreePath || t('아직 없음')}</span>
 											{w?.branch && <span>⎇ {w.branch}</span>}
 										</div>
 									</div>

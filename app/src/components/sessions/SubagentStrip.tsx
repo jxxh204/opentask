@@ -3,6 +3,7 @@ import { getWorktreeSubagents } from '../../api/subagents'
 import type { SubagentEntry } from '../../api/subagents'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import StatusDot from '../common/StatusDot'
+import { translate, useTp } from '../../utils/i18n'
 import styles from './SubagentStrip.module.css'
 
 const CLAUDE_ICON = (
@@ -11,10 +12,11 @@ const CLAUDE_ICON = (
 	</svg>
 )
 
+// 컴포넌트가 아닌 모듈 함수라 useT() 대신 non-hook translate를 직접 쓴다.
 function timeAgo(iso: string | null) {
 	if (!iso) return ''
 	const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-	if (min < 1) return '방금'
+	if (min < 1) return translate('방금')
 	if (min < 60) return `${min}m`
 	const hr = Math.floor(min / 60)
 	if (hr < 24) return `${hr}h`
@@ -32,6 +34,7 @@ const POLL_MS = 8000
 // 정적 클로드 배지를 실제 생사/작업 상태를 반영하는 점으로 바꾼다. sessionName 없이 쓰는 호출부는
 // (아직) 없지만 옵셔널로 둬 하위호환.
 export default function SubagentStrip({ cwd, sessionName, compact }: { cwd: string; sessionName?: string; compact?: boolean }) {
+	const tp = useTp()
 	const [items, setItems] = useState<SubagentEntry[]>([])
 	const [open, setOpen] = useState(false)
 	const termStatus = useSessionsStore((s) => (sessionName ? s.termStatus[sessionName] : undefined))
@@ -63,7 +66,7 @@ export default function SubagentStrip({ cwd, sessionName, compact }: { cwd: stri
 				{termStatus?.exists && (
 					<StatusDot color={termStatus.needsAuth ? 'red' : termStatus.waiting ? 'amber' : 'green'} pulse={!!termStatus.working} size={6} />
 				)}
-				<span className={styles.label}>서브에이전트 {items.length}건</span>
+				<span className={styles.label}>{tp('서브에이전트 {n}건', { n: items.length })}</span>
 				<span className={`m ${styles.time}`}>{timeAgo(items[0]?.at)}</span>
 			</div>
 			{open && (

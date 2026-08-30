@@ -5,14 +5,16 @@ import { getDecisions } from '../../api/sessions'
 import StatusDot from '../common/StatusDot'
 import type { DotColor } from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
+import { useT, translate, translateP } from '../../utils/i18n'
 import styles from './OrchestratorPane.module.css'
 
 const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류', blocked: '도움요청', stalled: '응답없음' }
 const DECISION_LABEL: Record<DecisionKind, string> = { repo_assign: '② 레포 분류', repo_verify_hold: '② 레포 재확인', kind_judge: '⑤ kind 판단', review_verdict: '⑧ 리뷰 판정' }
 
+// 컴포넌트가 아닌 모듈 함수라 useT() 대신 non-hook translate를 직접 쓴다.
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return '방금'
+	if (min < 1) return translate('방금')
 	if (min < 60) return `${min}m`
 	const hr = Math.floor(min / 60)
 	if (hr < 24) return `${hr}h`
@@ -29,6 +31,7 @@ function timeAgo(ts: number) {
 // "대화 로그"는 그와 별개로 지휘자가 스스로 기록한 지시/보고/계획 흐름을 구조화된 트리로 보여준다
 // (raw 터미널 스크롤엔 없는, 지휘자→서브태스크 다중 세션 간 오간 요약 — orch.feed).
 export default function OrchestratorPane({ folderId }: { folderId: string }) {
+	const t = useT()
 	const orch = useSessionsStore((s) => getOrchestration(s, folderId))
 	const busy = useSessionsStore((s) => !!s.orchBusy[folderId])
 	const refresh = useSessionsStore((s) => s.refreshOrchestration)
@@ -74,27 +77,27 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 	// 터미널에선 지휘자가 뻔히 살아서 "Considering…" 중인데 헤더만 "대기"라고 해서 어색해 보였다
 	// (사용자가 스크린샷으로 신고). 지휘자 생존 여부(orch.conductor)를 더해 3단계로 구분한다.
 	const isActive = orch.running || !!orch.conductor
-	const stateLabel = orch.running ? '조율 중' : orch.conductor ? '태스크 매니저 작업 중' : '대기'
+	const stateLabel = t(orch.running ? '조율 중' : orch.conductor ? '태스크 매니저 작업 중' : '대기')
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
 				<StatusDot color={isActive ? 'green' : 'muted'} pulse={isActive} />
 				<span className={styles.state}>{stateLabel}</span>
-				<span className={`m ${styles.meta}`}>{orch.sessions.length}개 세션 · 웨이브 {orch.currentWaveIndex + 1}</span>
+				<span className={`m ${styles.meta}`}>{translateP('{n}개 세션 · 웨이브 {wave}', { n: orch.sessions.length, wave: orch.currentWaveIndex + 1 })}</span>
 				<div style={{ flex: 1 }} />
 				{orch.running && (
 					<>
 						<button className={styles.btn} disabled={busy} onClick={() => advance(folderId)}>
-							▶ 진행
+							{t('▶ 진행')}
 						</button>
-						<button className={styles.btn} disabled={busy} onClick={() => stop(folderId)} title="웨이브 진행만 멈춥니다 — 태스크 매니저 세션은 그대로 유지됩니다">
-							웨이브 중지
+						<button className={styles.btn} disabled={busy} onClick={() => stop(folderId)} title={t('웨이브 진행만 멈춥니다 — 태스크 매니저 세션은 그대로 유지됩니다')}>
+							{t('웨이브 중지')}
 						</button>
 					</>
 				)}
 				{orch.conductor && (
-					<button className={styles.btn} disabled={busy} onClick={() => stopConductor(folderId)} title="태스크 매니저 세션 자체를 종료합니다 — 다시 시작하려면 탭을 새로 열어야 합니다">
-						태스크 매니저 중지
+					<button className={styles.btn} disabled={busy} onClick={() => stopConductor(folderId)} title={t('태스크 매니저 세션 자체를 종료합니다 — 다시 시작하려면 탭을 새로 열어야 합니다')}>
+						{t('태스크 매니저 중지')}
 					</button>
 				)}
 			</div>
@@ -104,7 +107,7 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 					<XTerm session={orch.conductor.session} cwd={orch.conductor.cwd} modelLabel={orch.conductor.modelLabel} />
 				</div>
 			) : (
-				<div className={styles.starting}>클로드 세션 시작 중…</div>
+				<div className={styles.starting}>{t('클로드 세션 시작 중…')}</div>
 			)}
 
 			<div className={styles.pad}>
@@ -125,9 +128,9 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 				    아니라 자기 카드로 담아 종류(kind)별 색이 레일 노드+칩 두 군데서 동시에 신호한다. */}
 				{orch.conductor && (
 					<>
-						<div className={styles.logLabel}>대화 로그</div>
+						<div className={styles.logLabel}>{t('대화 로그')}</div>
 						{orch.feed.length === 0 ? (
-							<div className={styles.logEmpty}>아직 대화 없음</div>
+							<div className={styles.logEmpty}>{t('아직 대화 없음')}</div>
 						) : (
 							<div className={styles.feedTimeline}>
 								<div className={styles.feedRail} />
@@ -139,7 +142,7 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 												<span className={styles.feedFrom}>{e.from}</span>
 												<span className={styles.feedArrow}>→</span>
 												<span className={styles.feedTo}>{e.to}</span>
-												<span className={`${styles.feedKind} ${styles[`kind_${e.kind}`]}`}>{KIND_LABEL[e.kind] || '메시지'}</span>
+												<span className={`${styles.feedKind} ${styles[`kind_${e.kind}`]}`}>{t(KIND_LABEL[e.kind] || '메시지')}</span>
 												<span className={styles.feedTime}>{timeAgo(e.ts)}</span>
 											</div>
 											<div className={styles.feedText}>{e.text}</div>
@@ -156,14 +159,14 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 				    로그를 하나의 조용한 스트림으로 묶어 대화 로그보다 한 단 낮은 시각적 무게로 둔다. */}
 				{(decisions.length > 0 || orch.log.length > 0) && (
 					<>
-						<div className={styles.logLabel}>시스템 로그</div>
+						<div className={styles.logLabel}>{t('시스템 로그')}</div>
 						<div className={styles.log}>
 							{decisions.map((d) => (
 								<div key={`d-${d.id}`} className={styles.logRow}>
 									<StatusDot color="violet" size={5} />
 									<span className={`m ${styles.logText}`}>
-										<span className={styles.logKind} title="AI 판정 근거 — 서버 재시작해도 안 지워짐">
-											{DECISION_LABEL[d.kind] || d.kind}
+										<span className={styles.logKind} title={t('AI 판정 근거 — 서버 재시작해도 안 지워짐')}>
+											{t(DECISION_LABEL[d.kind] || d.kind)}
 										</span>
 										{d.reason}
 									</span>

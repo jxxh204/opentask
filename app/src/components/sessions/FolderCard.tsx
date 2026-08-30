@@ -4,6 +4,7 @@ import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore
 import { useTabsStore } from '../../store/useTabsStore'
 import { LINK_LABEL } from '../../utils/linkDetect'
 import type { LinkKind } from '../../utils/linkDetect'
+import { useT, useTp, translate } from '../../utils/i18n'
 import TaskRow, { PR_LABEL, CHECK, HELP } from './TaskRow'
 import TaskColorDot from './TaskColorDot'
 import styles from './FolderCard.module.css'
@@ -63,7 +64,7 @@ const LINK_ICON: Record<LinkKind, React.ReactNode> = {
 
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return '방금'
+	if (min < 1) return translate('방금')
 	if (min < 60) return `${min}m`
 	const hr = Math.floor(min / 60)
 	if (hr < 24) return `${hr}h`
@@ -82,6 +83,8 @@ function timeAgo(ts: number) {
 // 변경과 동일 패턴, TabWorkspace 참고).
 
 export default function FolderCard({ folder }: { folder: Folder }) {
+	const t = useT()
+	const tp = useTp()
 	const open = useSessionsStore((s) => s.openFolders[folder.id] !== false)
 	const toggleFolder = useSessionsStore((s) => s.toggleFolder)
 	const renameFolder = useSessionsStore((s) => s.renameFolder)
@@ -303,7 +306,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 				)}
 				<span
 					className={`${styles.statusIcon} ${needsAuth ? styles.needsAuth : needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting}`}
-					title={needsAuth ? '태스크 매니저에 인증이 필요합니다' : needsInput ? '태스크 매니저가 입력을 기다리고 있습니다' : undefined}
+					title={needsAuth ? t('태스크 매니저에 인증이 필요합니다') : needsInput ? t('태스크 매니저가 입력을 기다리고 있습니다') : undefined}
 				>
 					{needsAuth ? LOCK : needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
@@ -327,7 +330,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					</>
 				)}
 				{!!folder.auto_merge && (
-					<span className={`m ${styles.autoMergeBadge}`} title="클린 판정이면 사람 확인 없이 자동으로 merge됩니다(우클릭으로 끌 수 있음)">
+					<span className={`m ${styles.autoMergeBadge}`} title={t('클린 판정이면 사람 확인 없이 자동으로 merge됩니다(우클릭으로 끌 수 있음)')}>
 						auto-merge
 					</span>
 				)}
@@ -352,7 +355,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 									<div key={k} className={styles.linkPanelGroup}>
 										<div className={styles.linkPanelSrc}>
 											{LINK_ICON[k]}
-											<span>{LINK_LABEL[k]}</span>
+											<span>{t(LINK_LABEL[k])}</span>
 										</div>
 										{linksByKind.get(k)!.map((url) => (
 											<a key={url} href={url} target="_blank" rel="noreferrer" className={styles.linkPanelItem} onClick={(e) => e.stopPropagation()}>
@@ -368,11 +371,11 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 				<span className={`m ${styles.time}`}>{timeAgo(folder.updated_at)}</span>
 				<span
 					className={`${styles.archiveBtn} ${confirmArchive ? styles.archiveConfirm : ''}`}
-					title={confirmArchive ? '다시 누르면 보관함으로 이동합니다' : '완료된 태스크를 보관함으로 이동'}
+					title={confirmArchive ? t('다시 누르면 보관함으로 이동합니다') : t('완료된 태스크를 보관함으로 이동')}
 					onClick={onArchiveClick}
 					style={{ opacity: archiveBusy ? 0.5 : undefined, visibility: confirmArchive ? 'visible' : undefined }}
 				>
-					{confirmArchive ? '확인' : ARCHIVE_ICON}
+					{confirmArchive ? t('확인') : ARCHIVE_ICON}
 				</span>
 				{menuOpen && (
 					<div className={styles.ctxMenu} onClick={(e) => e.stopPropagation()}>
@@ -383,7 +386,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 								setRenaming(true)
 							}}
 						>
-							이름 변경
+							{t('이름 변경')}
 						</div>
 						{/* "메인 태스크 오른쪽 버튼 누르면 나오는 메뉴에 서브 태스크 추가도" — 상세 모달을 열지
 						    않아도 사이드바에서 바로 하나 추가. onlyTask가 이 폴더가 실제로 감싸는 그 태스크. */}
@@ -392,30 +395,30 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 								className={styles.ctxMenuItem}
 								onClick={() => {
 									setMenuOpen(false)
-									createSubtask(onlyTask.id, { name: '서브태스크' })
+									createSubtask(onlyTask.id, { name: t('서브태스크') })
 								}}
 							>
-								+ 서브태스크 추가
+								+ {t('서브태스크 추가')}
 							</div>
 						)}
 						<div
 							className={styles.ctxMenuItem}
-							title="꺼짐(기본): AI 리뷰가 클린이어도 사람이 직접 merge를 눌러야 함. 켜짐: 클린 판정 시 실제 merge까지 자동(§12)."
+							title={t('꺼짐(기본): AI 리뷰가 클린이어도 사람이 직접 merge를 눌러야 함. 켜짐: 클린 판정 시 실제 merge까지 자동(§12).')}
 							onClick={() => {
 								setMenuOpen(false)
 								setFolderAutoMerge(folder.id, !folder.auto_merge)
 							}}
 						>
-							Auto-merge {folder.auto_merge ? '끄기' : '켜기'}
+							Auto-merge {folder.auto_merge ? t('끄기') : t('켜기')}
 						</div>
 						<div className={styles.ctxMenuSep} />
 						<div
 							className={`${styles.ctxMenuItem} ${styles.ctxMenuItemDanger}`}
-							title={confirmDelete ? '다시 누르면 되돌릴 수 없이 삭제됩니다(산하 태스크는 일감함으로 돌아감)' : '이 메인 태스크를 삭제합니다'}
+							title={confirmDelete ? t('다시 누르면 되돌릴 수 없이 삭제됩니다(산하 태스크는 일감함으로 돌아감)') : t('이 메인 태스크를 삭제합니다')}
 							style={{ opacity: deleteBusy ? 0.5 : undefined }}
 							onClick={onDeleteClick}
 						>
-							{confirmDelete ? '정말 삭제할까요? (다시 클릭)' : '삭제'}
+							{confirmDelete ? t('정말 삭제할까요? (다시 클릭)') : t('삭제')}
 						</div>
 					</div>
 				)}
@@ -481,15 +484,15 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 											}`}
 											title={
 												work?.blocked
-													? `도움 요청: ${work.blockedReason}`
+													? tp('도움 요청: {reason}', { reason: work.blockedReason ?? '' })
 													: subNeedsAuth
-														? '인증이 필요합니다'
+														? t('인증이 필요합니다')
 														: subNeedsInput
-															? '입력이 필요합니다'
+															? t('입력이 필요합니다')
 															: work?.stalled
-																? '한동안 응답이 없습니다 — 확인해보세요'
+																? t('한동안 응답이 없습니다 — 확인해보세요')
 																: work?.done
-																	? '완료'
+																	? t('완료')
 																	: undefined
 											}
 										>
@@ -573,7 +576,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 									))}
 								</div>
 							)}
-							{folder.tasks.length === 0 && <div className={styles.emptyDrop}>여기로 서브태스크를 드래그</div>}
+							{folder.tasks.length === 0 && <div className={styles.emptyDrop}>{t('여기로 서브태스크를 드래그')}</div>}
 						</>
 					)}
 				</div>

@@ -4,11 +4,13 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useTabsStore } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useT } from '../../utils/i18n'
 import '@xterm/xterm/css/xterm.css'
 
 // 진짜 임베드 터미널 — xterm.js ↔ (백엔드) node-pty가 tmux 세션에 attach. WebSocket 양방향.
 // VSCode 통합 터미널처럼 패널 자체가 곧 터미널이다 — 별도 "확대" 토글 없이 패널 크기 그대로 쓴다.
 export default function XTerm({ session, cwd, onClose, modelLabel }: { session: string; cwd?: string; onClose?: () => void; modelLabel?: string | null }) {
+	const t = useT()
 	const hostRef = useRef<HTMLDivElement>(null)
 	// "이런 경우 복구가 안돼" — WS가 끊기면 [연결 오류]/[연결 종료]만 찍고 그대로 죽어있었다(재시도 없음).
 	// 지수 백오프로 자동 재연결하고, 그래도 안 되면 사용자가 직접 누를 수 있게 버튼도 노출한다.
@@ -79,11 +81,11 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 			ws.onclose = () => {
 				if (disposed) return
 				setDisconnected(true)
-				term.write('\r\n\x1b[90m[연결 종료 — 자동 재연결 중…]\x1b[0m\r\n')
+				term.write(`\r\n\x1b[90m[${t('연결 종료 — 자동 재연결 중…')}]\x1b[0m\r\n`)
 				scheduleReconnect()
 			}
 			ws.onerror = () => {
-				term.write('\r\n\x1b[31m[연결 오류]\x1b[0m\r\n')
+				term.write(`\r\n\x1b[31m[${t('연결 오류')}]\x1b[0m\r\n`)
 			}
 		}
 
@@ -129,8 +131,8 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 				<span className="xterm-name">🖥️ {session}</span>
 				<span style={{ flex: 1 }} />
 				{disconnected && (
-					<button className="btn-dry" onClick={() => reconnectRef.current()} title="터미널에 다시 연결합니다">
-						⟳ 재연결
+					<button className="btn-dry" onClick={() => reconnectRef.current()} title={t('터미널에 다시 연결합니다')}>
+						⟳ {t('재연결')}
 					</button>
 				)}
 				{modelLabel && (
@@ -140,8 +142,8 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 					</span>
 				)}
 				{onClose && (
-					<button className="btn-dry" onClick={onClose} title="패널 닫기 (세션은 유지)">
-						✕ 닫기
+					<button className="btn-dry" onClick={onClose} title={t('패널 닫기 (세션은 유지)')}>
+						✕ {t('닫기')}
 					</button>
 				)}
 			</div>

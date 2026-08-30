@@ -1,9 +1,8 @@
-import { useUiStore } from '../store/useUiStore'
-
-// 설정 > "내부 용어 언어" 토글(§SettingsModal) — 전체 UI가 아니라 "오케스트레이터"·"워크트리" 같은
-// 내부 용어가 들어간 문장만 영어로 바꾼다. 문자열 전체를 키로 쓰는 조회 테이블 방식이라, 새로 옮길
-// 문장이 생기면 이 사전에 한 줄 추가하고 호출부에서 t('...')로 감싸면 된다.
-const DICT: Record<string, string> = {
+// 여러 파일에서 겹치는 공통 단어/문장 전용 사전. 다른 dicts/*.ts에 새 항목을 추가하기 전에
+// 먼저 이 파일에 이미 있는지 확인할 것 — 같은 한글 키를 다른 영어값으로 다른 파일에 또 정의하면
+// index.ts의 mergeDicts()가 dev 콘솔에 충돌 경고를 낸다.
+const dict: Record<string, string> = {
+	// 원래 utils/i18n.ts에 있던 항목 — 그대로 이전
 	'태스크를 열면 여기에 오케스트레이터 · 터미널 · 로컬 서버 · 브라우저 탭이 뜹니다':
 		'Opening a task shows the Orchestrator, Terminal, Local Server, and Browser tabs here',
 	워크트리: 'worktree',
@@ -19,9 +18,30 @@ const DICT: Record<string, string> = {
 	'태스크 아래 서브태스크를 만들면, AI가 워크트리에서 웨이브로 작업을 지휘합니다.':
 		'Create a subtask under a task and AI drives the work in waves inside its worktree.',
 	'오케스트레이터·워크트리 같은 짧은 용어 라벨만 바뀝니다.': 'Sentences that mention terms like Orchestrator/worktree switch to English.',
+
+	// 범용 동사/버튼 라벨 — 여러 파일에서 반복 등장하므로 여기 한 곳에서만 정의
+	취소: 'Cancel',
+	삭제: 'Delete',
+	닫기: 'Close',
+	확인: 'OK',
+	저장: 'Save',
+	편집: 'Edit',
+	완료: 'Done',
+
+	// LINK_LABEL(utils/linkDetect.ts) 값 — FolderCard/BranchChain/TaskDetailContent/useSessionsStore
+	// 등 여러 배치가 공유해서 쓰는 라벨이라 공통 사전에 둔다.
+	피그마: 'Figma',
+	스레드: 'Thread',
+	노션: 'Notion',
+
+	// useSessionsStore.ts non-hook translate 대상
+	'내용을 입력하세요.': 'Please enter some content.',
+	'{label} 링크 태스크': '{label} link task',
+	'브랜치 미지정': 'Branch unspecified',
+	'새 폴더': 'New folder',
+	'태스크 매니저 시작 실패': 'Failed to start task manager',
+	'전송 실패': 'Failed to send',
+	'AI 리뷰 실패': 'AI review failed',
 }
 
-export function useT() {
-	const lang = useUiStore((s) => s.lang)
-	return (ko: string) => (lang === 'en' ? (DICT[ko] ?? ko) : ko)
-}
+export default dict

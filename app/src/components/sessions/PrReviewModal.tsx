@@ -1,11 +1,12 @@
 import { useSessionsStore } from '../../store/useSessionsStore'
-import { useT } from '../../utils/i18n'
+import { useT, useTp } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import ReviewItemCard from './ReviewItemCard'
 import styles from './PrReviewModal.module.css'
 
 export default function PrReviewModal() {
 	const t = useT()
+	const tp = useTp()
 	const reviewTaskId = useSessionsStore((s) => s.reviewTaskId)
 	const closeReview = useSessionsStore((s) => s.closeReview)
 	const folders = useSessionsStore((s) => s.folders)
@@ -25,23 +26,21 @@ export default function PrReviewModal() {
 	return (
 		<Modal open={!!task} onClose={closeReview}>
 			<div className={styles.header}>
-				<span className={styles.title}>PR 리뷰</span>
+				<span className={styles.title}>{t('PR 리뷰')}</span>
 				{prLink && (
 					<a href={prLink.url} target="_blank" rel="noreferrer" className={`m ${styles.prLink}`}>
 						PR
 					</a>
 				)}
 				<span className={styles.taskName}>{task?.name}</span>
-				<span className={`m ${styles.counter}`}>
-					미처리 {openCount}/{reviews.length}
-				</span>
+				<span className={`m ${styles.counter}`}>{tp('미처리 {open}/{total}', { open: openCount, total: reviews.length })}</span>
 				{primaryBranch && (
 					<>
-						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => syncReviews(primaryBranch.id)} title="GitHub에 사람이 남긴 리뷰 코멘트를 다시 불러옵니다">
-							동기화
+						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => syncReviews(primaryBranch.id)} title={t('GitHub에 사람이 남긴 리뷰 코멘트를 다시 불러옵니다')}>
+							{t('동기화')}
 						</button>
-						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => startAiReview(primaryBranch.id)} title="AI가 diff를 읽고 이슈를 냅니다(§12 ⑧)">
-							AI 리뷰
+						<button className={styles.footerCloseBtn} disabled={reviewBusy} onClick={() => startAiReview(primaryBranch.id)} title={t('AI가 diff를 읽고 이슈를 냅니다(§12 ⑧)')}>
+							{t('AI 리뷰')}
 						</button>
 					</>
 				)}
@@ -50,7 +49,7 @@ export default function PrReviewModal() {
 				</button>
 			</div>
 			<div className={styles.body}>
-				{reviews.length === 0 && <div className={styles.emptyState}>리뷰 코멘트가 없습니다.</div>}
+				{reviews.length === 0 && <div className={styles.emptyState}>{t('리뷰 코멘트가 없습니다.')}</div>}
 				{reviews.map((r) => (
 					<ReviewItemCard key={r.id} review={r} />
 				))}
@@ -58,7 +57,7 @@ export default function PrReviewModal() {
 			<div className={styles.footer}>
 				<span className={styles.footerHint}>{t('리뷰 적용 = 워크트리 Claude에게 수정 지시 · 리뷰 항의 = 리뷰어에게 회신')}</span>
 				<button className={styles.footerCloseBtn} onClick={closeReview}>
-					닫기
+					{t('닫기')}
 				</button>
 			</div>
 		</Modal>

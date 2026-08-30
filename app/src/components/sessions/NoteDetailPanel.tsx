@@ -1,10 +1,12 @@
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useT } from '../../utils/i18n'
 import styles from './TaskDetailModal.module.css'
 
 // "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — SubtaskDetailPanel과
 // 같은 드로어 셰이프(TaskDetailModal.module.css)를 재사용하되, 부모 태스크가 없는 메모 전용이라
 // "메인 태스크로 이동"/세션 상태 같은 그쪽 UI는 없다. 이름/설명 편집 + 삭제만.
 export default function NoteDetailPanel({ noteId, onClose }: { noteId: string | null; onClose(): void }) {
+	const t = useT()
 	const open = !!noteId
 	const note = useSessionsStore((s) => s.notes.find((n) => n.id === noteId) ?? null)
 	const updateSubtaskName = useSessionsStore((s) => s.updateSubtaskName)
@@ -29,15 +31,15 @@ export default function NoteDetailPanel({ noteId, onClose }: { noteId: string | 
 								onChange={(e) => updateSubtaskName(note.id, e.target.value)}
 								onBlur={(e) => updateSubtaskName(note.id, e.target.value.trim() || note.name)}
 							/>
-							<button type="button" className={styles.closeBtn} onClick={onClose} title="닫기">
+							<button type="button" className={styles.closeBtn} onClick={onClose} title={t('닫기')}>
 								×
 							</button>
 						</div>
 						<div className={styles.body}>
-							<div className={styles.descLabel}>설명</div>
-							<textarea className={styles.descInput} value={note.desc} onChange={(e) => updateSubtaskDesc(note.id, e.target.value)} placeholder="메모 내용을 적어주세요" />
+							<div className={styles.descLabel}>{t('설명')}</div>
+							<textarea className={styles.descInput} value={note.desc} onChange={(e) => updateSubtaskDesc(note.id, e.target.value)} placeholder={t('메모 내용을 적어주세요')} />
 							<button type="button" className={styles.metaClear} style={{ marginTop: 16 }} onClick={remove}>
-								메모 삭제
+								{t('메모 삭제')}
 							</button>
 						</div>
 					</>

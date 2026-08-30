@@ -3,6 +3,7 @@ import type { Folder, Task, Repo, BlockedPeriod, Subtask } from './types'
 import * as SessionsApi from '../api/sessions'
 import type { OrchestrationState, GitStatusEntry, CockpitSummary, SubtaskWorkStatus, DevServerEntry } from '../api/sessions'
 import { detectLink, LINK_LABEL } from '../utils/linkDetect'
+import { translate, translateP } from '../utils/i18n'
 import { listTerm } from '../api/term'
 import type { TermStatus } from '../api/term'
 import { useReviewStore } from './useReviewStore'
@@ -321,22 +322,22 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	// 폼 자체의 진행 중 상태는 모달 로컬 state로 관리하므로 여기선 순수 함수형으로 결과만 돌려준다.
 	createTaskFromDraft: async (text, dueDate) => {
 		const v = text.trim()
-		if (!v) return { ok: false, error: '내용을 입력하세요.' }
+		if (!v) return { ok: false, error: translate('내용을 입력하세요.') }
 		const kind = detectLink(v)
-		const name = kind ? `${LINK_LABEL[kind]} 링크 태스크` : v
+		const name = kind ? translateP('{label} 링크 태스크', { label: translate(LINK_LABEL[kind]) }) : v
 		// 링크는 addBranchLink로 따로 저장돼 BranchChain/FolderCard에 LINK_LABEL 칩으로 이미 표시된다 —
 		// desc에 "붙여넣은 링크: <url>"을 원문 그대로 또 넣으면 같은 정보가 중복 노출된다.
 		try {
 			const task = await SessionsApi.createTask({ folderId: null, name, desc: '', dueDate: dueDate ?? null })
 			if (kind) {
-				const branch = await SessionsApi.createBranch({ taskId: task.id, name: '브랜치 미지정' })
+				const branch = await SessionsApi.createBranch({ taskId: task.id, name: translate('브랜치 미지정') })
 				await SessionsApi.addBranchLink(branch.id, kind, v)
 				// "○○ 링크 태스크" placeholder를 실제 링크 내용 기반 제목으로 — await 안 함(몇 초~170초
 				// 걸릴 수 있어 일감 추가 자체를 막으면 안 됨), enrichingTitle로 사이드바에 진행 상태만 표시.
 				get().enrichTaskTitleInBackground(task.id, v)
 			}
 			await get().loadBoard()
-			if (!task.repo_id) get().pollTaskRepoClassification(task.id)
+			// 레포 자동배정 비활성화로 서버가 더는 repo_id를 채워주지 않으므로 분류 폴링도 트리거하지 않음.
 			// "메인태스크를 만들었으면 바로 메인태스크 칸으로 가야해" — NewTaskModal에 메인/서브
 			// 모드가 생긴 뒤로 이 함수는 오직 "메인 태스크" 모드 제출만 거친다(서브태스크는
 			// createSubtask로 별도 경로). 사람이 이미 "메인 태스크"를 명시적으로 골랐으므로 순수
@@ -477,7 +478,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 
 	createFolder: async (name) => {
 		try {
-			const folder = await SessionsApi.createFolder({ name: name || '새 폴더' })
+			const folder = await SessionsApi.createFolder({ name: name || translate('새 폴더') })
 			set((s) => ({ openFolders: { ...s.openFolders, [folder.id]: true } }))
 			await get().loadBoard()
 		} catch (e) {
@@ -940,7 +941,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		set((s) => ({ orchBusy: { ...s.orchBusy, [folderId]: true } }))
 		try {
 			const r = await SessionsApi.startConductor(folderId)
-			if (!r.ok) throw new Error(r.error || '태스크 매니저 시작 실패')
+			if (!r.ok) throw new Error(translate(r.error || '태스크 매니저 시작 실패'))
 			await get().refreshOrchestration(folderId)
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
@@ -963,7 +964,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	tellConductor: async (folderId, text) => {
 		try {
 			const r = await SessionsApi.tellConductor(folderId, text)
-			if (!r.ok) throw new Error(r.error || '전송 실패')
+			if (!r.ok) throw new Error(translate(r.error || '전송 실패'))
 			await get().refreshOrchestration(folderId)
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
@@ -1095,7 +1096,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		set({ reviewBusy: true })
 		try {
 			const r = await SessionsApi.startAiReview(branchId)
-			if (!r.ok) throw new Error(r.error || 'AI 리뷰 실패')
+			if (!r.ok) throw new Error(translate(r.error || 'AI 리뷰 실패'))
 			await get().loadBoard()
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })

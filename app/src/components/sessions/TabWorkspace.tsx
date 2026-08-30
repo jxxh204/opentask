@@ -40,6 +40,7 @@ const ADDABLE_FOLDER_TABS: TabKind[] = ['detail', 'orchestrator', 'diagram', 'te
 // VSCode의 "새 터미널"처럼 탭을 열면 버튼 없이 곧바로 세션이 뜬다 — 탭 인스턴스당 한 번만
 // 시작하도록 startedRef로 막는다(StrictMode 이중 마운트·재렌더 대비).
 function ClaudeSessionPane({ tabId, cwd }: { tabId: string; cwd: string }) {
+	const t = useT()
 	const sessionName = useTabsStore((s) => s.claudeSessionByTab[tabId])
 	const modelLabel = useTabsStore((s) => s.claudeModelByTab[tabId])
 	const setClaudeSession = useTabsStore((s) => s.setClaudeSession)
@@ -52,7 +53,7 @@ function ClaudeSessionPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 		createTerm({ cwd, command: 'claude', label: `${tabId.slice(0, 8)}-claude` })
 			.then((r) => {
 				if (r.ok) setClaudeSession(tabId, r.name, r.modelLabel)
-				else setError(r.error || '세션 생성 실패')
+				else setError(t(r.error || '세션 생성 실패'))
 			})
 			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
 	}, [tabId, cwd, sessionName, setClaudeSession])
@@ -61,13 +62,13 @@ function ClaudeSessionPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 	if (error)
 		return (
 			<div className={styles.stub}>
-				<div className={styles.stubTitle}>세션을 시작하지 못했습니다</div>
+				<div className={styles.stubTitle}>{t('세션을 시작하지 못했습니다')}</div>
 				<div className={styles.stubError}>{error}</div>
 			</div>
 		)
 	return (
 		<div className={styles.stub}>
-			<div className={styles.stubTitle}>클로드 세션 시작 중…</div>
+			<div className={styles.stubTitle}>{t('클로드 세션 시작 중…')}</div>
 		</div>
 	)
 }
@@ -76,6 +77,7 @@ function ClaudeSessionPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 // OpenTask 태스크가 아니라 claudeSessionByTab/claudeModelByTab 저장소를 그대로 재사용 — 이름은
 // "클로드"지만 실제로는 tabId → tmux 세션명 매핑일 뿐이라 일반 터미널에도 그대로 쓸 수 있다.
 function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
+	const t = useT()
 	const sessionName = useTabsStore((s) => s.claudeSessionByTab[tabId])
 	const setClaudeSession = useTabsStore((s) => s.setClaudeSession)
 	const [error, setError] = useState<string | null>(null)
@@ -87,7 +89,7 @@ function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 		createTerm({ cwd, label: cwd.split('/').pop() })
 			.then((r) => {
 				if (r.ok) setClaudeSession(tabId, r.name, null)
-				else setError(r.error || '세션 생성 실패')
+				else setError(t(r.error || '세션 생성 실패'))
 			})
 			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
 	}, [tabId, cwd, sessionName, setClaudeSession])
@@ -96,13 +98,13 @@ function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 	if (error)
 		return (
 			<div className={styles.stub}>
-				<div className={styles.stubTitle}>세션을 시작하지 못했습니다</div>
+				<div className={styles.stubTitle}>{t('세션을 시작하지 못했습니다')}</div>
 				<div className={styles.stubError}>{error}</div>
 			</div>
 		)
 	return (
 		<div className={styles.stub}>
-			<div className={styles.stubTitle}>터미널 시작 중…</div>
+			<div className={styles.stubTitle}>{t('터미널 시작 중…')}</div>
 		</div>
 	)
 }
@@ -113,6 +115,7 @@ function AdHocTerminalPane({ tabId, cwd }: { tabId: string; cwd: string }) {
 // 전) 워크트리 없이 즉석 세션을 하나 띄우되 이 서브태스크 맥락(이름·설명)을 시드로 알려준다 — 여기서
 // 워크트리를 새로 만들지는 않는다(그건 "개발 시작" 버튼의 몫 — 메인태스크는 오케스트레이션만).
 function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { tabId: string; subtaskId: string; parentTaskId: string; fallbackCwd: string | null }) {
+	const t = useT()
 	const sessionName = useTabsStore((s) => s.claudeSessionByTab[tabId])
 	const modelLabel = useTabsStore((s) => s.claudeModelByTab[tabId])
 	const setClaudeSession = useTabsStore((s) => s.setClaudeSession)
@@ -152,7 +155,7 @@ function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { t
 	useEffect(() => {
 		if (!checked || liveSession || sessionName || startedRef.current) return
 		if (!fallbackCwd) {
-			setError('워크트리가 아직 없고, 대체할 레포 경로도 찾지 못했습니다.')
+			setError(t('워크트리가 아직 없고, 대체할 레포 경로도 찾지 못했습니다.'))
 			return
 		}
 		startedRef.current = true
@@ -160,7 +163,7 @@ function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { t
 		createTerm({ cwd: fallbackCwd, command: 'claude', label: subtask?.name || 'subtask', seed })
 			.then((r) => {
 				if (r.ok) setClaudeSession(tabId, r.name, r.modelLabel)
-				else setError(r.error || '세션 생성 실패')
+				else setError(t(r.error || '세션 생성 실패'))
 			})
 			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
 	}, [checked, liveSession, sessionName, fallbackCwd, subtask, tabId, setClaudeSession])
@@ -170,13 +173,13 @@ function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { t
 	if (error)
 		return (
 			<div className={styles.stub}>
-				<div className={styles.stubTitle}>세션을 시작하지 못했습니다</div>
+				<div className={styles.stubTitle}>{t('세션을 시작하지 못했습니다')}</div>
 				<div className={styles.stubError}>{error}</div>
 			</div>
 		)
 	return (
 		<div className={styles.stub}>
-			<div className={styles.stubTitle}>서브태스크 세션 확인 중…</div>
+			<div className={styles.stubTitle}>{t('서브태스크 세션 확인 중…')}</div>
 		</div>
 	)
 }
@@ -194,6 +197,7 @@ const KIND_OPT: { id: Task['kind']; label: string }[] = [
 // 보여주고 직접 결정하게 하되, 매번 처음부터 다 채우면 번거로우니 AI/제품 기본값을 미리 채워두고
 // "기본 접힘 고급 설정" 패턴으로 감싼다 — 평소엔 한 줄 요약만 보고 바로 등록, 세밀하게 통제하고 싶으면 펼침.
 function InboxPreview({ task }: { task: Task }) {
+	const t = useT()
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 	const quickStartBusy = useSessionsStore((s) => s.quickStartBusy === task.id)
 	const repos = useSessionsStore((s) => s.repos)
@@ -211,7 +215,7 @@ function InboxPreview({ task }: { task: Task }) {
 	const [repoId, setRepoId] = useState<string | null>(task.repo_id ?? (repos[0]?.id ?? null))
 	const [startPrompt, setStartPrompt] = useState(task.start_prompt || task.name)
 
-	const repoName = multiRepo ? repos.find((r) => r.id === repoId)?.name || '(선택 안 함)' : repos[0]?.name || rootPath?.split('/').pop() || '단일 레포'
+	const repoName = multiRepo ? repos.find((r) => r.id === repoId)?.name || t('(선택 안 함)') : repos[0]?.name || rootPath?.split('/').pop() || t('단일 레포')
 
 	function commit() {
 		quickStartTask(task.id, { base, autoMerge, retryLimit, kind, repoId: multiRepo ? repoId : undefined, startPrompt })
@@ -220,17 +224,17 @@ function InboxPreview({ task }: { task: Task }) {
 	return (
 		<div className={styles.stub}>
 			<div className={styles.stubTitle}>{task.name}</div>
-			<div className={styles.stubSub}>{task.desc || '설명 없음'}</div>
+			<div className={styles.stubSub}>{task.desc || t('설명 없음')}</div>
 			<div className={styles.confirmSummary} onClick={() => setOpen((o) => !o)}>
-				{repoName} · {base || '자동감지'} · 자동머지 {autoMerge ? 'on' : 'off'} · N={retryLimit} {open ? '▾' : '▸ 자세히'}
+				{repoName} · {base || t('자동감지')} · {t('자동머지')} {autoMerge ? 'on' : 'off'} · N={retryLimit} {open ? '▾' : t('▸ 자세히')}
 			</div>
 			{open && (
 				<div className={styles.confirmForm} onClick={(e) => e.stopPropagation()}>
 					{multiRepo && (
 						<div className={styles.confirmRow}>
-							<span className={styles.confirmLabel}>레포</span>
+							<span className={styles.confirmLabel}>{t('레포')}</span>
 							<select className="fin m" style={{ width: 160, height: 26, fontSize: 10.5 }} value={repoId ?? ''} onChange={(e) => setRepoId(e.target.value || null)}>
-								<option value="">(선택 안 함)</option>
+								<option value="">{t('(선택 안 함)')}</option>
 								{repos.map((r) => (
 									<option key={r.id} value={r.id}>
 										{r.name}
@@ -240,34 +244,34 @@ function InboxPreview({ task }: { task: Task }) {
 						</div>
 					)}
 					<div className={styles.confirmRow}>
-						<span className={styles.confirmLabel}>base 브랜치</span>
+						<span className={styles.confirmLabel}>{t('base 브랜치')}</span>
 						<input
 							className="fin m"
 							style={{ width: 160, height: 26, fontSize: 10.5 }}
 							value={base}
 							onChange={(e) => setBase(e.target.value)}
-							placeholder="자동감지"
+							placeholder={t('자동감지')}
 						/>
 					</div>
 					<div className={styles.confirmRow}>
-						<span className={styles.confirmLabel}>자동 머지 정책</span>
+						<span className={styles.confirmLabel}>{t('자동 머지 정책')}</span>
 						<label className="m" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5 }}>
 							<input type="checkbox" checked={autoMerge} onChange={(e) => setAutoMerge(e.target.checked)} />
 							Auto-merge
 						</label>
 					</div>
 					<div className={styles.confirmRow}>
-						<span className={styles.confirmLabel}>첫 subTask kind</span>
+						<span className={styles.confirmLabel}>{t('첫 subTask kind')}</span>
 						<select className="fin m" style={{ width: 160, height: 26, fontSize: 10.5 }} value={kind} onChange={(e) => setKind(e.target.value as Task['kind'])}>
 							{KIND_OPT.map((k) => (
 								<option key={k.id} value={k.id}>
-									{k.label}
+									{t(k.label)}
 								</option>
 							))}
 						</select>
 					</div>
 					<div className={styles.confirmRow}>
-						<span className={styles.confirmLabel}>재시도 횟수(N)</span>
+						<span className={styles.confirmLabel}>{t('재시도 횟수(N)')}</span>
 						<input
 							className="fin m"
 							type="number"
@@ -286,7 +290,7 @@ function InboxPreview({ task }: { task: Task }) {
 				</div>
 			)}
 			<button className={styles.stubBtn} disabled={quickStartBusy} onClick={commit}>
-				{quickStartBusy ? '등록 중…' : '태스크로 등록'}
+				{quickStartBusy ? t('등록 중…') : t('태스크로 등록')}
 			</button>
 		</div>
 	)
@@ -308,7 +312,10 @@ function NoSessionStub({ folderKind }: { folderKind: boolean }) {
 // (=실제 Task, 클릭하면 기본 "터미널" 탭). activeNodeId 하나로 다루되, 어느 쪽인지에 따라 탭 구성과
 // 콘텐츠가 달라진다.
 export default function TabWorkspace() {
-	const t = useT()
+	// 이 컴포넌트는 탭 인스턴스 변수명으로 `t`를 이미 광범위하게 쓰고 있어(tabs.map((t) => ...) 등)
+	// useT()의 번역 함수는 `tr`로 별도 이름을 준다 — `t`로 하면 안쪽 콜백/함수에서 탭 인스턴스에
+	// 가려져(shadowing) 번역 함수를 못 부르게 된다.
+	const tr = useT()
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const tabsByNode = useTabsStore((s) => s.tabsByNode)
 	const activeTabByNode = useTabsStore((s) => s.activeTabByNode)
@@ -478,8 +485,8 @@ export default function TabWorkspace() {
 		return (
 			<div className={styles.empty}>
 				<div className={styles.emptyIcon}>⌘</div>
-				<div className={styles.emptyTitle}>왼쪽에서 태스크를 펼쳐보세요</div>
-				<div className={styles.emptySub}>{t('태스크를 열면 여기에 오케스트레이터 · 터미널 · 로컬 서버 · 브라우저 탭이 뜹니다')}</div>
+				<div className={styles.emptyTitle}>{tr('왼쪽에서 태스크를 펼쳐보세요')}</div>
+				<div className={styles.emptySub}>{tr('태스크를 열면 여기에 오케스트레이터 · 터미널 · 로컬 서버 · 브라우저 탭이 뜹니다')}</div>
 			</div>
 		)
 	}
@@ -509,7 +516,7 @@ export default function TabWorkspace() {
 				<div className={styles.tabbar}>
 					{tabs.map((t) => (
 						<div key={t.id} className={`${styles.tab} ${t.id === activeTabId ? styles.tabActive : ''}`} onClick={() => setActiveTab(activeNodeId, t.id)}>
-							<span>{t.label || TAB_LABEL[t.kind]}</span>
+							<span>{t.label || tr(TAB_LABEL[t.kind])}</span>
 							<span
 								className={styles.tabClose}
 								onClick={(e) => {
@@ -662,7 +669,7 @@ export default function TabWorkspace() {
 						) : (
 							<>
 								{TAB_ICON[t.kind] && <span className={styles.tabIcon}>{TAB_ICON[t.kind]}</span>}
-								<span>{t.label || TAB_LABEL[t.kind]}</span>
+								<span>{t.label || tr(TAB_LABEL[t.kind])}</span>
 							</>
 						)}
 						<span
@@ -676,15 +683,15 @@ export default function TabWorkspace() {
 						</span>
 						{menuForTab === t.id && (
 							<div className={styles.tabMenu} onClick={(e) => e.stopPropagation()}>
-								<div className={styles.tabMenuItem} onClick={() => startRename(t.id, t.label || TAB_LABEL[t.kind])}>
-									이름 변경
+								<div className={styles.tabMenuItem} onClick={() => startRename(t.id, t.label || tr(TAB_LABEL[t.kind]))}>
+									{tr('이름 변경')}
 								</div>
 							</div>
 						)}
 					</div>
 				))}
 				<div className={styles.cmdkAnchor}>
-					<button className={styles.cmdkBtn} onClick={() => setCmdkOpenGroup((g) => (g === group ? null : group))} title="탭 추가">
+					<button className={styles.cmdkBtn} onClick={() => setCmdkOpenGroup((g) => (g === group ? null : group))} title={tr('탭 추가')}>
 						+
 					</button>
 					{cmdkOpenGroup === group && (
@@ -701,7 +708,7 @@ export default function TabWorkspace() {
 								>
 									<span className={styles.cmdkItemLabel}>
 										{TAB_ICON[t] && <span className={styles.tabIcon}>{TAB_ICON[t]}</span>}
-										<span>{TAB_LABEL[t]}</span>
+										<span>{tr(TAB_LABEL[t])}</span>
 									</span>
 									{i < 9 && <kbd className={styles.cmdkBadge}>{i + 1}</kbd>}
 								</div>
@@ -714,7 +721,7 @@ export default function TabWorkspace() {
 											ref={newWtInputRef}
 											className={styles.tabRenameInput}
 											value={newWtDraft}
-											placeholder="이 워크트리에서 뭘 시킬지"
+											placeholder={tr('이 워크트리에서 뭘 시킬지')}
 											onClick={(e) => e.stopPropagation()}
 											onChange={(e) => setNewWtDraft(e.target.value)}
 											onBlur={() => commitNewWorktree(found!.folderId)}
@@ -734,7 +741,7 @@ export default function TabWorkspace() {
 												setNewWtOpen(true)
 											}}
 										>
-											<span>{t('새 워크트리')}</span>
+											<span>{tr('새 워크트리')}</span>
 										</div>
 									)}
 								</>
@@ -769,7 +776,7 @@ export default function TabWorkspace() {
 							setDragTab(null)
 						}}
 					>
-						<span className={styles.splitDropHint}>여기로 놓으면 오른쪽으로 분할</span>
+						<span className={styles.splitDropHint}>{tr('여기로 놓으면 오른쪽으로 분할')}</span>
 					</div>
 				)}
 			</div>
@@ -782,8 +789,8 @@ export default function TabWorkspace() {
 				{renderTabBar('left')}
 				<div className={styles.empty}>
 					<div className={styles.emptyIcon}>⌘</div>
-					<div className={styles.emptyTitle}>열린 탭이 없습니다</div>
-					<div className={styles.emptySub}>+ 를 눌러 탭을 추가하세요</div>
+					<div className={styles.emptyTitle}>{tr('열린 탭이 없습니다')}</div>
+					<div className={styles.emptySub}>{tr('+ 를 눌러 탭을 추가하세요')}</div>
 				</div>
 			</div>
 		)

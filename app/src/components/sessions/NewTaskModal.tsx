@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { createTask as apiCreateTask } from '../../api/sessions'
+import { useT, useTp } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import MainTaskPicker from './MainTaskPicker'
 import styles from './NewTaskModal.module.css'
@@ -25,6 +26,8 @@ function dateInputValueToMs(v: string) {
 // 평가돼 매번 새 타임스탬프가 되고, 그러면 아래 useEffect의 deps가 매 렌더 바뀐 걸로 오인해 모달이
 // 열려있는 동안에도 계속 리셋된다. "오늘" 계산은 open이 바뀌는 순간(useEffect 안)에서만 한다.
 export default function NewTaskModal({ open, onClose, defaultDueDate = null }: { open: boolean; onClose(): void; defaultDueDate?: number | null }) {
+	const t = useT()
+	const tp = useTp()
 	const createTaskFromDraft = useSessionsStore((s) => s.createTaskFromDraft)
 	const createSubtask = useSessionsStore((s) => s.createSubtask)
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
@@ -54,7 +57,7 @@ export default function NewTaskModal({ open, onClose, defaultDueDate = null }: {
 	async function submit() {
 		if (!text.trim() || busy) return
 		if (mode === 'sub' && !subParentId) {
-			setError('메인 태스크를 먼저 골라주세요.')
+			setError(t('메인 태스크를 먼저 골라주세요.'))
 			return
 		}
 		setBusy(true)
@@ -68,7 +71,7 @@ export default function NewTaskModal({ open, onClose, defaultDueDate = null }: {
 		const r = await createTaskFromDraft(text, dueDate)
 		setBusy(false)
 		if (r.ok) onClose()
-		else setError(r.error || '추가 실패')
+		else setError(t(r.error || '추가 실패'))
 	}
 
 	const mainTaskCandidates = folders.flatMap((f) => f.tasks).map((t) => ({ id: t.id, name: t.name }))
@@ -77,19 +80,19 @@ export default function NewTaskModal({ open, onClose, defaultDueDate = null }: {
 	return (
 		<Modal open={open} onClose={onClose} width={420}>
 			<div className={styles.pad}>
-				<div className={styles.title}>일감 생성</div>
+				<div className={styles.title}>{t('일감 생성')}</div>
 				<div className={styles.modeRow}>
 					<button type="button" className={`${styles.modeTab} ${mode === 'main' ? styles.modeTabActive : ''}`} onClick={() => setMode('main')}>
-						메인 태스크
+						{t('메인 태스크')}
 					</button>
 					<button type="button" className={`${styles.modeTab} ${mode === 'sub' ? styles.modeTabActive : ''}`} onClick={() => setMode('sub')}>
-						서브태스크
+						{t('서브태스크')}
 					</button>
 				</div>
 				{mode === 'sub' && (
 					<div className={styles.subParentRow}>
 						<MainTaskPicker
-							label={subParentName ? `메인 태스크: ${subParentName}` : '메인 태스크 고르기…'}
+							label={subParentName ? tp('메인 태스크: {name}', { name: subParentName }) : t('메인 태스크 고르기…')}
 							candidates={mainTaskCandidates}
 							onPick={setSubParentId}
 							onCreateNew={async (name) => {
@@ -115,10 +118,10 @@ export default function NewTaskModal({ open, onClose, defaultDueDate = null }: {
 							submit()
 						}
 					}}
-					placeholder={mode === 'sub' ? '서브태스크 이름' : '제목을 쓰거나 Figma·스레드·Notion·PR 링크를 붙여넣으세요'}
+					placeholder={mode === 'sub' ? t('서브태스크 이름') : t('제목을 쓰거나 Figma·스레드·Notion·PR 링크를 붙여넣으세요')}
 				/>
 				<div className={styles.dateRow}>
-					<span className={styles.dateLabel}>예정일</span>
+					<span className={styles.dateLabel}>{t('예정일')}</span>
 					<input
 						type="date"
 						className="fin m"
@@ -128,16 +131,16 @@ export default function NewTaskModal({ open, onClose, defaultDueDate = null }: {
 					/>
 					{dueDate !== null && (
 						<button type="button" className={styles.dateClear} onClick={() => setDueDate(null)}>
-							지우기
+							{t('지우기')}
 						</button>
 					)}
 				</div>
 				{error && <div className={styles.error}>{error}</div>}
 				<button className={styles.submit} disabled={busy || !text.trim()} onClick={submit}>
 					{busy ? <span className={styles.spinner} /> : null}
-					{busy ? '추가 중…' : mode === 'sub' ? '서브태스크로 추가' : '일감으로 추가'}
+					{busy ? t('추가 중…') : mode === 'sub' ? t('서브태스크로 추가') : t('일감으로 추가')}
 				</button>
-				<div className={styles.hint}>{mode === 'sub' ? '고른 메인 태스크 밑에 서브태스크로 바로 들어갑니다.' : '새 일감은 미분류에 담깁니다 — 필요할 때 태스크로 드래그해 옮기세요.'}</div>
+				<div className={styles.hint}>{mode === 'sub' ? t('고른 메인 태스크 밑에 서브태스크로 바로 들어갑니다.') : t('새 일감은 미분류에 담깁니다 — 필요할 때 태스크로 드래그해 옮기세요.')}</div>
 			</div>
 		</Modal>
 	)

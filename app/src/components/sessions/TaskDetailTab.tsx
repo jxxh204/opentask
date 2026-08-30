@@ -1,5 +1,6 @@
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
+import { useT } from '../../utils/i18n'
 import TaskDetailContent from './TaskDetailContent'
 import styles from './TaskDetailModal.module.css'
 
@@ -8,6 +9,7 @@ import styles from './TaskDetailModal.module.css'
 // 기간/서브태스크/레포/설명)를 오버레이 없이 탭 본문에 그대로 채운 것. 폴더 하나엔 보통 태스크가
 // 하나뿐이다(FolderCard.tsx의 onlyTask 관례와 동일) — 그 첫 태스크를 "이 메인 태스크"로 삼는다.
 export default function TaskDetailTab({ nodeId, tabId, folderId }: { nodeId: string; tabId: string; folderId: string }) {
+	const t = useT()
 	const closeTab = useTabsStore((s) => s.closeTab)
 	const taskId = useSessionsStore((s) => s.folders.find((f) => f.id === folderId)?.tasks[0]?.id ?? null)
 
@@ -15,7 +17,7 @@ export default function TaskDetailTab({ nodeId, tabId, folderId }: { nodeId: str
 		return (
 			<div className={styles.tabWrap}>
 				<div className={styles.tabWrapInner}>
-					<div className={styles.body}>아직 이 메인 태스크 밑에 태스크가 없습니다.</div>
+					<div className={styles.body}>{t('아직 이 메인 태스크 밑에 태스크가 없습니다.')}</div>
 				</div>
 			</div>
 		)

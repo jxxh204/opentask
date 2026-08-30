@@ -270,7 +270,7 @@ html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-app
 .spinner{width:28px;height:28px;border:3px solid #262b31;border-top-color:#5b8cff;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 p{font-size:13px;letter-spacing:.02em}
-</style></head><body><div class="spinner"></div><p>OpenTask 백엔드를 시작하는 중입니다…</p></body></html>`)
+</style></head><body><div class="spinner"></div><p>OpenTask 백엔드를 시작하는 중입니다… / Starting OpenTask backend…</p></body></html>`)
 
   // 예전엔 createWindow() 실패를 console.error로만 남겼다 — 패키징된 앱엔 터미널이 없어 사용자
   // 눈엔 "아무 설명 없는 검은 창"으로만 보였다(실제 버그 리포트 재현됨). 네이티브 dialog는 렌더러
@@ -279,10 +279,10 @@ p{font-size:13px;letter-spacing:.02em}
     const detail = (err && err.message) || String(err)
     const choice = await dialog.showMessageBox(mainWindow || undefined, {
       type: 'error',
-      title: 'OpenTask 백엔드를 시작하지 못했습니다',
-      message: '백엔드 서버가 응답하지 않습니다.',
-      detail: `${detail}\n\n"다시 시도"를 눌러 재시작해보세요. 계속 실패하면 위 로그 파일을 확인해주세요.`,
-      buttons: ['다시 시도', '종료'],
+      title: 'OpenTask 백엔드를 시작하지 못했습니다 / Failed to start OpenTask backend',
+      message: '백엔드 서버가 응답하지 않습니다. / The backend server is not responding.',
+      detail: `${detail}\n\n"다시 시도"를 눌러 재시작해보세요. 계속 실패하면 위 로그 파일을 확인해주세요.\nClick "Retry" to restart. If it keeps failing, check the log file above.`,
+      buttons: ['다시 시도 / Retry', '종료 / Quit'],
       defaultId: 0,
       cancelId: 1,
     })

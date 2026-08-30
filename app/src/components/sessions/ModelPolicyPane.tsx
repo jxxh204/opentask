@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getOperatorSettings, updateOperatorSettings } from '../../api/setup'
+import { useT } from '../../utils/i18n'
 import styles from './ModelPolicyPane.module.css'
 
 // 예전엔 SettingsModal 안의 접이식 서브섹션이었다 — 16개 작업 종류 × 드롭다운이라 늘어날수록
@@ -32,6 +33,7 @@ const MODEL_OPTS = [
 ]
 
 export default function ModelPolicyPane() {
+	const t = useT()
 	const [modelPolicy, setModelPolicy] = useState<Record<string, string> | null>(null)
 
 	useEffect(() => {
@@ -51,14 +53,14 @@ export default function ModelPolicyPane() {
 
 	return (
 		<div className={styles.wrap}>
-			<div className={styles.title}>모델 배정</div>
-			<div className={styles.hint}>작업 종류별로 어떤 모델을 쓸지 확인하고 바꿉니다. 코드 재시작 없이 바로 적용됩니다.</div>
+			<div className={styles.title}>{t('모델 배정')}</div>
+			<div className={styles.hint}>{t('작업 종류별로 어떤 모델을 쓸지 확인하고 바꿉니다. 코드 재시작 없이 바로 적용됩니다.')}</div>
 			<div className={styles.list}>
-				{!modelPolicy && <div className={styles.hint}>불러오는 중…</div>}
+				{!modelPolicy && <div className={styles.hint}>{t('불러오는 중…')}</div>}
 				{modelPolicy &&
 					MODEL_ACTIONS.map((a) => (
 						<div key={a.id} className={styles.row}>
-							<span className={styles.rowLabel}>{a.label}</span>
+							<span className={styles.rowLabel}>{t(a.label)}</span>
 							<select className="fin m" style={{ width: 150, height: 28, fontSize: 11 }} value={modelPolicy[a.id] || ''} onChange={(e) => setActionModel(a.id, e.target.value)}>
 								{MODEL_OPTS.map((m) => (
 									<option key={m.id} value={m.id}>

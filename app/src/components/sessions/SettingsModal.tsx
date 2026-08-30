@@ -72,7 +72,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 	return (
 		<Modal open={open} onClose={onClose} width={380}>
 			<div className={styles.head}>
-				<span>설정</span>
+				<span>{t('설정')}</span>
 				<span className={styles.close} onClick={onClose}>
 					×
 				</span>
@@ -80,8 +80,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 			<div className={styles.body}>
 				<div className={styles.row}>
 					<div>
-						<div className={styles.rowLabel}>테마</div>
-						<div className={styles.rowHint}>라이트/다크 화면을 선택합니다. 시스템은 OS 설정을 따라갑니다.</div>
+						<div className={styles.rowLabel}>{t('테마')}</div>
+						<div className={styles.rowHint}>{t('라이트/다크 화면을 선택합니다. 시스템은 OS 설정을 따라갑니다.')}</div>
 					</div>
 					<div className={styles.toggle}>
 						{THEME_OPTS.map((o) => (
@@ -94,14 +94,14 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 									applyTheme(o.id)
 								}}
 							>
-								{o.label}
+								{t(o.label)}
 							</button>
 						))}
 					</div>
 				</div>
 				<div className={styles.row} style={{ marginTop: 16 }}>
 					<div>
-						<div className={styles.rowLabel}>내부 용어 언어</div>
+						<div className={styles.rowLabel}>{t('내부 용어 언어')}</div>
 						<div className={styles.rowHint}>{t('오케스트레이터·워크트리 같은 짧은 용어 라벨만 바뀝니다.')}</div>
 					</div>
 					<div className={styles.toggle}>
@@ -114,8 +114,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 				</div>
 				<div className={styles.row} style={{ marginTop: 16 }}>
 					<div>
-						<div className={styles.rowLabel}>캘린더 공휴일 국가</div>
-						<div className={styles.rowHint}>캘린더에 표시할 공휴일 기준 국가입니다. 기본값은 이 컴퓨터의 언어 설정으로 추정됩니다.</div>
+						<div className={styles.rowLabel}>{t('캘린더 공휴일 국가')}</div>
+						<div className={styles.rowHint}>{t('캘린더에 표시할 공휴일 기준 국가입니다. 기본값은 이 컴퓨터의 언어 설정으로 추정됩니다.')}</div>
 					</div>
 					<select className="fin m" style={{ width: 150, height: 28, fontSize: 11 }} value={holidayCountry} onChange={(e) => setHolidayCountry(e.target.value)}>
 						{holidayCountries.length ? (
@@ -132,37 +132,37 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 				{isElectron && (
 					<div className={styles.row} style={{ marginTop: 16 }}>
 						<div>
-							<div className={styles.rowLabel}>앱 종료 시 백엔드</div>
+							<div className={styles.rowLabel}>{t('앱 종료 시 백엔드')}</div>
 							<div className={styles.rowHint}>
-								기본은 앱을 꺼도 백엔드가 계속 떠서 세션이 이어집니다. "완전 종료"를 켜면 앱을 끌 때 백엔드도 같이 내려갑니다(포트도 반납됨).
+								{t('기본은 앱을 꺼도 백엔드가 계속 떠서 세션이 이어집니다. "완전 종료"를 켜면 앱을 끌 때 백엔드도 같이 내려갑니다(포트도 반납됨).')}
 							</div>
 						</div>
 						<div className={styles.toggle}>
 							<button type="button" className={`${styles.opt} ${!killBackendOnQuit ? styles.optActive : ''}`} onClick={() => killBackendOnQuit && toggleKillBackendOnQuit()}>
-								유지
+								{t('유지')}
 							</button>
 							<button type="button" className={`${styles.opt} ${killBackendOnQuit ? styles.optActive : ''}`} onClick={() => !killBackendOnQuit && toggleKillBackendOnQuit()}>
-								완전 종료
+								{t('완전 종료')}
 							</button>
 						</div>
 					</div>
 				)}
 				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openTeamRules}>
 					<div>
-						<div className={styles.rowLabel}>팀 규칙 →</div>
-						<div className={styles.rowHint}>레포별 브랜치·문서 규칙을 탭에서 확인하고 바꿉니다.</div>
+						<div className={styles.rowLabel}>{t('팀 규칙 →')}</div>
+						<div className={styles.rowHint}>{t('레포별 브랜치·문서 규칙을 탭에서 확인하고 바꿉니다.')}</div>
 					</div>
 				</div>
 				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openModelPolicy}>
 					<div>
-						<div className={styles.rowLabel}>모델 배정 →</div>
-						<div className={styles.rowHint}>작업 종류별로 어떤 모델을 쓸지 탭에서 확인하고 바꿉니다.</div>
+						<div className={styles.rowLabel}>{t('모델 배정 →')}</div>
+						<div className={styles.rowHint}>{t('작업 종류별로 어떤 모델을 쓸지 탭에서 확인하고 바꿉니다.')}</div>
 					</div>
 				</div>
 				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openQuickstart}>
 					<div>
-						<div className={styles.rowLabel}>퀵스타트 다시 보기 →</div>
-						<div className={styles.rowHint}>처음 앱을 켰을 때 봤던 사용법 안내를 다시 엽니다.</div>
+						<div className={styles.rowLabel}>{t('퀵스타트 다시 보기 →')}</div>
+						<div className={styles.rowHint}>{t('처음 앱을 켰을 때 봤던 사용법 안내를 다시 엽니다.')}</div>
 					</div>
 				</div>
 			</div>

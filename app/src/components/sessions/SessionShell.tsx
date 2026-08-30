@@ -3,8 +3,10 @@ import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSession
 import { useReviewStore } from '../../store/useReviewStore'
 import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useUiStore } from '../../store/useUiStore'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
+import { useT, useTp, translate, localeFor } from '../../utils/i18n'
 import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
@@ -92,20 +94,22 @@ function RepoIcon({ repo }: { repo: Repo }) {
 // 잘려 보였다(overflow-x:visible을 줘도 재발 — 사용자가 스크린샷으로 두 번 신고). 조상 클리핑과
 // 무관한 Modal(position:fixed 오버레이)로 바꿔 근본적으로 해결.
 function RepoColorDot({ repo, open, onToggle, onClose }: { repo: Repo; open: boolean; onToggle(): void; onClose(): void }) {
+	const t = useT()
+	const tp = useTp()
 	const current = getRepoColor(repo)
 	return (
 		<>
 			<span
 				className={styles.repoColorDot}
 				style={{ background: current }}
-				title="레포 색상"
+				title={t('레포 색상')}
 				onClick={(e) => {
 					e.stopPropagation()
 					onToggle()
 				}}
 			/>
 			<Modal open={open} onClose={onClose} width={220}>
-				<div className={styles.repoColorModalTitle}>{repo.name} 색상</div>
+				<div className={styles.repoColorModalTitle}>{tp('{name} 색상', { name: repo.name })}</div>
 				<div className={styles.repoColorGrid}>
 					{REPO_COLOR_PALETTE.map((c) => (
 						<span
@@ -131,7 +135,7 @@ const SEARCH_ICON = (
 )
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return '방금'
+	if (min < 1) return translate('방금')
 	if (min < 60) return `${min}m`
 	const hr = Math.floor(min / 60)
 	if (hr < 24) return `${hr}h`
@@ -142,6 +146,9 @@ function timeAgo(ts: number) {
 // FolderCard/TaskRow는 프로토타입의 압축 트리 노드 스타일로 다시 그렸고, ReviewItemCard/
 // PrReviewModal/RepoTable은 store에서 id로 조회하는 좁은 props라 그대로 재사용했다.
 export default function SessionShell() {
+	const t = useT()
+	const tp = useTp()
+	const lang = useUiStore((s) => s.lang)
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const folders = useSessionsStore((s) => s.folders)
 	const inbox = useSessionsStore((s) => s.inbox)
@@ -305,7 +312,7 @@ export default function SessionShell() {
 	// 버튼 라벨은 실제 선택 상태를 정직하게 반영한다 — 체크된 레포가 몇 개냐에 따라 이름/개수/전체를 구분.
 	const checkedRepos = repoFilters ? repos.filter((r) => repoFilters.has(r.id)) : repos
 	const activeRepo = checkedRepos.length === 1 ? checkedRepos[0] : undefined
-	const activeRepoLabel = !repoFilters ? '전체 레포' : checkedRepos.length === 0 ? '레포 없음' : checkedRepos.length === 1 ? checkedRepos[0].name : `${checkedRepos.length}개 레포`
+	const activeRepoLabel = !repoFilters ? t('전체 레포') : checkedRepos.length === 0 ? t('레포 없음') : checkedRepos.length === 1 ? checkedRepos[0].name : tp('{n}개 레포', { n: checkedRepos.length })
 
 	const q = sidebarQuery.trim().toLowerCase()
 	const displayInbox = q ? visibleInbox.filter((t) => t.name.toLowerCase().includes(q)) : visibleInbox
@@ -317,7 +324,7 @@ export default function SessionShell() {
 	{
 		const byDate = new Map<string, typeof archive>()
 		for (const f of archive) {
-			const label = f.archived_at ? new Date(f.archived_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '날짜 없음'
+			const label = f.archived_at ? new Date(f.archived_at).toLocaleDateString(localeFor(lang), { year: 'numeric', month: 'long', day: 'numeric' }) : t('날짜 없음')
 			if (!byDate.has(label)) byDate.set(label, [])
 			byDate.get(label)!.push(f)
 		}
@@ -347,7 +354,7 @@ export default function SessionShell() {
 							}}
 						>
 							<span className={styles.navLinkIcon}>{AUTOMATIONS_ICON}</span>
-							크론잡
+							{t('크론잡')}
 						</button>
 						<button
 							className={styles.navLink}
@@ -359,7 +366,7 @@ export default function SessionShell() {
 							}}
 						>
 							<span className={styles.navLinkIcon}>{CALENDAR_ICON}</span>
-							캘린더
+							{t('캘린더')}
 						</button>
 						<button
 							className={styles.navLink}
@@ -371,7 +378,7 @@ export default function SessionShell() {
 							}}
 						>
 							<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
-							<span style={{ flex: 1, textAlign: 'left' }}>비서</span>
+							<span style={{ flex: 1, textAlign: 'left' }}>{t('비서')}</span>
 							{controlTermStatus?.exists && (
 								<StatusDot
 									color={controlTermStatus.needsAuth ? 'red' : controlTermStatus.waiting ? 'amber' : 'green'}
@@ -383,7 +390,7 @@ export default function SessionShell() {
 					</div>
 					<label className={styles.sidebarSearch}>
 						<span className={styles.sidebarSearchIcon}>{SEARCH_ICON}</span>
-						<input className={styles.sidebarSearchInput} type="text" value={sidebarQuery} onChange={(e) => setSidebarQuery(e.target.value)} placeholder="검색" />
+						<input className={styles.sidebarSearchInput} type="text" value={sidebarQuery} onChange={(e) => setSidebarQuery(e.target.value)} placeholder={t('검색')} />
 					</label>
 					<div className={styles.head}>
 						<span className={`${styles.repoPicker} ${repoPickerOpen ? styles.open : ''}`}>
@@ -415,7 +422,7 @@ export default function SessionShell() {
 											}}
 										>
 											<span className={styles.repoCheckbox} data-checked={!repoFilters} />
-											전체 레포
+											{t('전체 레포')}
 										</div>
 									)}
 									{repos.map((r) => {
@@ -444,7 +451,7 @@ export default function SessionShell() {
 											setReposModalOpen(true)
 										}}
 									>
-										레포 관리
+										{t('레포 관리')}
 									</div>
 								</div>
 							)}
@@ -457,7 +464,7 @@ export default function SessionShell() {
 								setRepoPickerOpen(false)
 								setAddRepoOpen(true)
 							}}
-							title="새 레포 추가"
+							title={t('새 레포 추가')}
 						>
 							{FOLDER_ADD_ICON}
 						</button>
@@ -468,7 +475,7 @@ export default function SessionShell() {
 								e.stopPropagation()
 								setNewTaskModalOpen(true)
 							}}
-							title="메인 태스크 추가"
+							title={t('메인 태스크 추가')}
 						>
 							{PLUS_ICON}
 						</button>
@@ -483,8 +490,8 @@ export default function SessionShell() {
 
 					{!archiveView && displayInbox.length > 0 && (
 						<div className={`scroll-y ${styles.inboxList}`}>
-							{displayInbox.map((t) => (
-								<div key={t.id} className={`${styles.inboxRow} ${activeNodeId === t.id ? styles.inboxRowSelected : ''}`} onClick={() => useTabsStore.getState().setActiveNode(t.id, 'terminal')}>
+							{displayInbox.map((task) => (
+								<div key={task.id} className={`${styles.inboxRow} ${activeNodeId === task.id ? styles.inboxRowSelected : ''}`} onClick={() => useTabsStore.getState().setActiveNode(task.id, 'terminal')}>
 									<span className={styles.inboxIcon}>
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
 											<path d="M4 12h4l2 3h4l2-3h4" />
@@ -492,33 +499,33 @@ export default function SessionShell() {
 										</svg>
 									</span>
 									<div className={styles.inboxBody}>
-										<div className={styles.inboxTitle}>{t.name}</div>
+										<div className={styles.inboxTitle}>{task.name}</div>
 										<div className={styles.inboxMeta}>
-											{enrichingTitle[t.id] ? (
+											{enrichingTitle[task.id] ? (
 												// 링크로 만든 일감의 제목이 당분간 "○○ 링크 태스크" placeholder라 헷갈릴 수
 												// 있다 — 링크 내용을 읽어 실제 제목으로 바꾸는 중임을 명시(최대 170초).
 												<span className={styles.inboxClassifying}>
 													<span className={styles.inboxSubmitSpinner} />
-													제목 생성 중…
+													{t('제목 생성 중…')}
 												</span>
-											) : classifying[t.id] ? (
+											) : classifying[task.id] ? (
 												// repoClassify.cjs가 백그라운드에서 도는 동안(멀티레포일 때만, 최대 ~16초) 조용히
 												// 아무 표시가 없었다 — "레포 분류 중"이라고 명시해서 멈춘 것처럼 안 보이게 한다.
 												<span className={styles.inboxClassifying}>
 													<span className={styles.inboxSubmitSpinner} />
-													레포 분류 중…
+													{t('레포 분류 중…')}
 												</span>
 											) : (
-												<span className={`m ${styles.inboxTime}`}>{timeAgo(t.created_at)}</span>
+												<span className={`m ${styles.inboxTime}`}>{timeAgo(task.created_at)}</span>
 											)}
 											<span
 												className={styles.inboxAction}
 												onClick={(e) => {
 													e.stopPropagation()
-													useSessionsStore.getState().quickStartTask(t.id)
+													useSessionsStore.getState().quickStartTask(task.id)
 												}}
 											>
-												시작
+												{t('시작')}
 											</span>
 										</div>
 									</div>
@@ -534,13 +541,13 @@ export default function SessionShell() {
 							{displayFolders.map((f) => (
 								<FolderCard key={f.id} folder={f} />
 							))}
-							{displayFolders.length === 0 && <div className={styles.treeEmpty}>{q ? '검색 결과 없음' : '진행 중인 작업 없음'}</div>}
+							{displayFolders.length === 0 && <div className={styles.treeEmpty}>{q ? t('검색 결과 없음') : t('진행 중인 작업 없음')}</div>}
 						</div>
 					)}
 
 					{archiveView && (
 						<div className={`scroll-y ${styles.treeScroll}`}>
-							{archive.length === 0 && <div className={styles.treeEmpty}>보관된 작업 없음</div>}
+							{archive.length === 0 && <div className={styles.treeEmpty}>{t('보관된 작업 없음')}</div>}
 							{archiveGroups.map(([date, items]) => (
 								<div key={date}>
 									<div className={`m ${styles.archiveDateLabel}`}>{date}</div>
@@ -551,7 +558,7 @@ export default function SessionShell() {
 												{f.base && <div className={`m ${styles.wtLineSmall}`}>⎇ {f.base}</div>}
 											</div>
 											<span className={styles.archiveRestoreBtn} onClick={() => restoreFolder(f.id)} style={{ opacity: archiveBusy === f.id ? 0.5 : undefined }}>
-												복원
+												{t('복원')}
 											</span>
 										</div>
 									))}
@@ -564,7 +571,7 @@ export default function SessionShell() {
 						<span className={styles.livedot} />
 						<span>
 							{cockpitSummary?.mainBranch ? `${cockpitSummary.mainBranch} · ` : ''}
-							{totalTasks} 작업
+							{tp('{n} 작업', { n: totalTasks })}
 						</span>
 					</div>
 					{/* "다른 걸 하고 있어도 백그라운드에서 돌아서 다 되면 확인할 수 있게, 사이드바에서 진행상황을
@@ -580,7 +587,7 @@ export default function SessionShell() {
 						if (pendingReviewJobs.length === 0) return null
 						return (
 							<div className={styles.reviewSection}>
-								<div className={styles.reviewSectionTitle}>AI 검토</div>
+								<div className={styles.reviewSectionTitle}>{t('AI 검토')}</div>
 								{pendingReviewJobs.map((j) => {
 									const result = j.status?.result
 									const done = !!j.status?.done
@@ -594,7 +601,7 @@ export default function SessionShell() {
 												{/* "24퍼에서 안움직여" — j.error가 뜨면 done은 영영 true가 안 되니(폴링이 실패 직후 멈춤)
 										    !done 분기가 먼저 걸려 마지막으로 받은 퍼센트에서 그대로 얼어붙어 보였다.
 										    failed(=error 포함) 여부를 !done보다 먼저 확인해야 한다. */}
-												{failed ? '실패' : !done ? `${j.status?.percent ?? 5}%` : vague ? '설명 필요' : result && result.ok ? `${result.days}일` : ''}
+												{failed ? t('실패') : !done ? `${j.status?.percent ?? 5}%` : vague ? t('설명 필요') : result && result.ok ? tp('{days}일', { days: result.days }) : ''}
 											</span>
 											<span
 												className={styles.reviewDismiss}
@@ -602,7 +609,7 @@ export default function SessionShell() {
 													e.stopPropagation()
 													clearReview(j.taskId)
 												}}
-												title="닫기"
+												title={t('닫기')}
 											>
 												×
 											</span>
@@ -614,12 +621,12 @@ export default function SessionShell() {
 					})()}
 					<div className={`${styles.archiveRow} ${archiveView ? styles.archiveRowActive : ''}`} onClick={() => setArchiveView((v) => !v)}>
 						<span className={styles.archiveIcon}>{ARCHIVE_ICON}</span>
-						<span style={{ flex: 1 }}>보관함</span>
+						<span style={{ flex: 1 }}>{t('보관함')}</span>
 						<span className={`m ${styles.archiveCount}`}>{archive.length}</span>
 					</div>
 					<div className={styles.archiveRow} onClick={() => setSettingsOpen(true)}>
 						<span className={styles.archiveIcon}>{GEAR_ICON}</span>
-						<span style={{ flex: 1 }}>설정</span>
+						<span style={{ flex: 1 }}>{t('설정')}</span>
 					</div>
 				</aside>
 
@@ -631,18 +638,18 @@ export default function SessionShell() {
 			<div className={`m ${styles.statusbar}`}>
 				<span className={styles.sbItem}>
 					<span className={styles.sbDot} />
-					<span>연결됨</span>
+					<span>{t('연결됨')}</span>
 				</span>
 				<span className={styles.sbSep} />
 				<span
 					className={`${styles.sbItem} ${devServers.length ? styles.sbItemLink : ''}`}
 					onClick={devServers.length ? openDevServer : undefined}
-					title={devServers.length ? `localhost:${devServers[0].port} — 지금 태스크의 "브라우저" 탭에서 엽니다` : undefined}
+					title={devServers.length ? tp('localhost:{port} — 지금 태스크의 "브라우저" 탭에서 엽니다', { port: devServers[0].port }) : undefined}
 				>
 					<b>{cockpitSummary?.devCount ?? 0}</b>&nbsp;dev
 				</span>
 				<span className={styles.sbItem}>
-					<b>{cockpitSummary?.streamsActive ?? 0}</b>/{cockpitSummary?.streamsTotal ?? 0} 스트림
+					<b>{cockpitSummary?.streamsActive ?? 0}</b>/{cockpitSummary?.streamsTotal ?? 0} {t('스트림')}
 				</span>
 				<span className={styles.sbItem}>
 					✎ <b>{cockpitSummary?.dirty ?? 0}</b> dirty
@@ -656,7 +663,7 @@ export default function SessionShell() {
 					// "로컬서버 포트 열려있는거 버튼으로 만들어서 클릭하면 브라우저로 열리게" — target="_blank"는
 					// electron/main.cjs의 setWindowOpenHandler가 가로채 shell.openExternal로 넘긴다(§ PR 링크와
 					// 같은 경로) — 앱 안 webview가 아니라 실제 시스템 기본 브라우저가 뜬다.
-					<a href={`http://${apiAddress}`} target="_blank" rel="noreferrer" className={styles.apiAddress} title="클릭하면 브라우저에서 엽니다">
+					<a href={`http://${apiAddress}`} target="_blank" rel="noreferrer" className={styles.apiAddress} title={t('클릭하면 브라우저에서 엽니다')}>
 						{apiAddress}
 					</a>
 				)}

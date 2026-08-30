@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../../utils/i18n'
 import styles from './TaskDetailModal.module.css'
 
 // "메인 태스크를 고르는 기능도 필요해" — RepoSelect와 같은 드롭다운 패턴을 재사용한다. TaskDetailModal
 // (독립 태스크 → 기존 메인 태스크로 편입, 기존 태스크 → 서브태스크로 선택)뿐 아니라 NewTaskModal(생성
 // 시점에 메인/서브 결정)에서도 써서 별도 파일로 뺐다 — 스타일은 TaskDetailModal.module.css를 그대로 쓴다.
 export default function MainTaskPicker({
-	label = '메인 태스크로 편입…',
+	label,
 	candidates,
 	onPick,
 	onCreateNew,
@@ -15,6 +16,8 @@ export default function MainTaskPicker({
 	onPick(id: string): void
 	onCreateNew?: (name: string) => Promise<string | null>
 }) {
+	const t = useT()
+	const resolvedLabel = label ?? t('메인 태스크로 편입…')
 	const [open, setOpen] = useState(false)
 	// "메인태스크 만들기 동작안한다" — Electron 렌더러는 window.prompt()를 지원 안 해서(confirm()과
 	// 달리 조용히 null만 돌려줌) 인라인 입력으로 바꿨다.
@@ -41,7 +44,7 @@ export default function MainTaskPicker({
 	return (
 		<span className={styles.repoSelect} onClick={(e) => e.stopPropagation()}>
 			<button type="button" className={styles.repoSelectBtn} onClick={() => setOpen((o) => !o)}>
-				<span className={styles.repoSelectLabel}>{label}</span>
+				<span className={styles.repoSelectLabel}>{resolvedLabel}</span>
 				<span className={`${styles.repoSelectChev} ${open ? styles.repoSelectChevOpen : ''}`}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 						<path d="M6 9l6 6 6-6" />
@@ -50,7 +53,7 @@ export default function MainTaskPicker({
 			</button>
 			{open && (
 				<div className={styles.repoSelectPanel}>
-					{candidates.length === 0 && <div className={styles.repoSelectOpt}>고를 수 있는 태스크가 아직 없습니다</div>}
+					{candidates.length === 0 && <div className={styles.repoSelectOpt}>{t('고를 수 있는 태스크가 아직 없습니다')}</div>}
 					{candidates.map((c) => (
 						<div
 							key={c.id}
@@ -72,7 +75,7 @@ export default function MainTaskPicker({
 									autoFocus
 									className={styles.repoSelectNewInput}
 									value={draft}
-									placeholder="새 메인 태스크 이름"
+									placeholder={t('새 메인 태스크 이름')}
 									onChange={(e) => setDraft(e.target.value)}
 									onKeyDown={(e) => {
 										if (e.key === 'Enter') submitCreate()
@@ -80,7 +83,7 @@ export default function MainTaskPicker({
 									}}
 								/>
 								<button type="button" className={styles.repoSelectNewSubmit} disabled={!draft.trim()} onClick={submitCreate}>
-									추가
+									{t('추가')}
 								</button>
 							</div>
 						) : (
@@ -91,7 +94,7 @@ export default function MainTaskPicker({
 									setCreating(true)
 								}}
 							>
-								+ 새 메인 태스크 만들기
+								+ {t('새 메인 태스크 만들기')}
 							</div>
 						))}
 				</div>

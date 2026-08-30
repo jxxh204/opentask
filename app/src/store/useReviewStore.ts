@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { startDurationEstimate, getDurationEstimateStatus, type DurationEstimateStatus } from '../api/sessions'
+import { translate } from '../utils/i18n'
 import type { Task } from './types'
 
 // "다른 걸 하고 있어도 백그라운드에서 돌아서 다 되면 확인할 수 있게" — 예전엔 TaskDetailModal 안에
@@ -69,7 +70,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
 						status: {
 							ok: true,
 							percent: 100,
-							label: '완료',
+							label: translate('완료'),
 							done: true,
 							tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
 							costUsd: null,

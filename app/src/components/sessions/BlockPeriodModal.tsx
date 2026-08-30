@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useT } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import styles from './BlockPeriodModal.module.css'
 
@@ -19,6 +20,7 @@ function dateInputValueToMs(v: string) {
 // "+ 일정 막기"로 열린다. NewTaskModal과 같은 구조(제목/기간 입력 + 제출)지만 태스크가 아니라
 // 캘린더 자체의 차단 기간을 만든다(§ server/store/blockedPeriods.cjs).
 export default function BlockPeriodModal({ open, onClose, defaultStartDate = null }: { open: boolean; onClose(): void; defaultStartDate?: number | null }) {
+	const t = useT()
 	const createBlockedPeriod = useSessionsStore((s) => s.createBlockedPeriod)
 	const [name, setName] = useState('')
 	const [startDate, setStartDate] = useState<number>(Date.now())
@@ -44,16 +46,16 @@ export default function BlockPeriodModal({ open, onClose, defaultStartDate = nul
 		const r = await createBlockedPeriod({ name: name.trim(), startDate, endDate })
 		setBusy(false)
 		if (r.ok) onClose()
-		else setError(r.error || '추가 실패')
+		else setError(t(r.error || '추가 실패'))
 	}
 
 	return (
 		<Modal open={open} onClose={onClose} width={380}>
 			<div className={styles.pad}>
-				<div className={styles.title}>일정 막기</div>
+				<div className={styles.title}>{t('일정 막기')}</div>
 				{/* "일정막기의 이유를 타이틀로 하고" — 이름이 아니라 "왜 막는지"를 받는다는 걸 라벨로 명시. */}
 				<div className={styles.nameRow}>
-					<span className={styles.dateLabel}>이유</span>
+					<span className={styles.dateLabel}>{t('이유')}</span>
 					<input
 						className={styles.input}
 						autoFocus
@@ -66,11 +68,11 @@ export default function BlockPeriodModal({ open, onClose, defaultStartDate = nul
 								submit()
 							}
 						}}
-						placeholder="예: QA 기간"
+						placeholder={t('예: QA 기간')}
 					/>
 				</div>
 				<div className={styles.dateRow}>
-					<span className={styles.dateLabel}>시작</span>
+					<span className={styles.dateLabel}>{t('시작')}</span>
 					<input
 						type="date"
 						className="fin m"
@@ -84,7 +86,7 @@ export default function BlockPeriodModal({ open, onClose, defaultStartDate = nul
 					/>
 				</div>
 				<div className={styles.dateRow}>
-					<span className={styles.dateLabel}>종료</span>
+					<span className={styles.dateLabel}>{t('종료')}</span>
 					<input
 						type="date"
 						className="fin m"
@@ -97,9 +99,9 @@ export default function BlockPeriodModal({ open, onClose, defaultStartDate = nul
 				{error && <div className={styles.error}>{error}</div>}
 				<button className={styles.submit} disabled={busy || !name.trim()} onClick={submit}>
 					{busy ? <span className={styles.spinner} /> : null}
-					{busy ? '추가 중…' : '막기'}
+					{busy ? t('추가 중…') : t('막기')}
 				</button>
-				<div className={styles.hint}>이 기간의 모든 날짜가 캘린더에 줄무늬로 표시됩니다 — 실제로 일정 등록을 막지는 않아요.</div>
+				<div className={styles.hint}>{t('이 기간의 모든 날짜가 캘린더에 줄무늬로 표시됩니다 — 실제로 일정 등록을 막지는 않아요.')}</div>
 			</div>
 		</Modal>
 	)

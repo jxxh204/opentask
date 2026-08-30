@@ -98,13 +98,13 @@ export default function BrowserToolbar({
 
 	return (
 		<div className={styles.toolbar} ref={rootRef}>
-			<span className={`${styles.iconBtn} ${canGoBack ? '' : styles.disabled}`} onClick={() => canGoBack && onBack()} title="뒤로">
+			<span className={`${styles.iconBtn} ${canGoBack ? '' : styles.disabled}`} onClick={() => canGoBack && onBack()} title={t('뒤로')}>
 				{NAV_BACK}
 			</span>
-			<span className={`${styles.iconBtn} ${canGoForward ? '' : styles.disabled}`} onClick={() => canGoForward && onForward()} title="앞으로">
+			<span className={`${styles.iconBtn} ${canGoForward ? '' : styles.disabled}`} onClick={() => canGoForward && onForward()} title={t('앞으로')}>
 				{NAV_FWD}
 			</span>
-			<span className={`${styles.iconBtn} ${loading ? styles.spinning : ''}`} onClick={onReload} title="새로고침">
+			<span className={`${styles.iconBtn} ${loading ? styles.spinning : ''}`} onClick={onReload} title={t('새로고침')}>
 				{NAV_REFRESH}
 			</span>
 			<span className={styles.addressBar}>
@@ -122,13 +122,13 @@ export default function BrowserToolbar({
 					{error}
 				</span>
 			)}
-			<span className={styles.iconBtn} onClick={onOpenDevtools} title="개발자 도구 열기">
+			<span className={styles.iconBtn} onClick={onOpenDevtools} title={t('개발자 도구 열기')}>
 				{DEVTOOLS}
 			</span>
 			<span className={styles.envAnchor}>
 				<span
 					className={`${styles.iconBtn} ${styles.envLabelBtn} ${envOpen ? styles.active : ''}`}
-					title="환경변수 설정"
+					title={t('환경변수 설정')}
 					onClick={(e) => {
 						e.stopPropagation()
 						setEnvOpen((o) => !o)
@@ -150,7 +150,7 @@ export default function BrowserToolbar({
 			<span className={styles.overflowAnchor}>
 				<span
 					className={styles.iconBtn}
-					title="더보기"
+					title={t('더보기')}
 					onClick={(e) => {
 						e.stopPropagation()
 						setOverflowOpen((o) => !o)
@@ -162,13 +162,13 @@ export default function BrowserToolbar({
 				{overflowOpen && (
 					<div className={styles.overflowMenu}>
 						<div className={styles.overflowRow}>
-							<span>디바이스</span>
+							<span>{t('디바이스')}</span>
 							<span className={styles.deviceToggle}>
 								<span className={`${styles.deviceOpt} ${device === 'pc' ? styles.deviceOptActive : ''}`} onClick={() => onDeviceChange('pc')}>
 									PC
 								</span>
 								<span className={`${styles.deviceOpt} ${device === 'mobile' ? styles.deviceOptActive : ''}`} onClick={() => onDeviceChange('mobile')}>
-									모바일
+									{t('모바일')}
 								</span>
 							</span>
 						</div>

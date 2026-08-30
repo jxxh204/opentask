@@ -32,7 +32,7 @@ export default function QuickstartModal({ open, onClose }: { open: boolean; onCl
 	return (
 		<Modal open={open} onClose={onClose} width={480}>
 			<div className={styles.head}>
-				<span>OpenTask 퀵스타트</span>
+				<span>{t('OpenTask 퀵스타트')}</span>
 				<span className={styles.close} onClick={onClose}>
 					×
 				</span>
@@ -44,18 +44,18 @@ export default function QuickstartModal({ open, onClose }: { open: boolean; onCl
 						<li key={s.title} className={styles.step}>
 							<span className={styles.marker}>{i + 1}</span>
 							<div>
-								<div className={styles.stepTitle}>{s.title}</div>
-								<div className={styles.stepBody}>{s.body}</div>
+								<div className={styles.stepTitle}>{t(s.title)}</div>
+								<div className={styles.stepBody}>{t(s.body)}</div>
 							</div>
 						</li>
 					))}
 				</ol>
 				<div className={styles.footer}>
 					<a className={styles.docsLink} href="https://opentask-website.vercel.app/docs.html" target="_blank" rel="noopener noreferrer">
-						더 자세한 사용법 →
+						{t('더 자세한 사용법 →')}
 					</a>
 					<button type="button" className={styles.startBtn} onClick={onClose}>
-						시작하기
+						{t('시작하기')}
 					</button>
 				</div>
 			</div>

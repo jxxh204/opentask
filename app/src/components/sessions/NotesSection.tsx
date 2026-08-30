@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import type { Subtask } from '../../store/types'
+import { useT } from '../../utils/i18n'
 import taskRowStyles from './TaskRow.module.css'
 import styles from './SessionShell.module.css'
 
@@ -15,6 +16,7 @@ const PLUS_ICON = (
 // TaskRow의 subChain* 드래그 로직·클래스를 그대로 재사용하되(rail/dot 없이 칩만) taskId 자리에
 // null을 넘겨 "메모 목록끼리만" 재정렬되게 한다(§ useSessionsStore.reorderSubtasks).
 export default function NotesSection({ notes }: { notes: Subtask[] }) {
+	const t = useT()
 	const createNote = useSessionsStore((s) => s.createNote)
 	const openNoteDetail = useSessionsStore((s) => s.openNoteDetail)
 	const dragSubtaskId = useSessionsStore((s) => s.dragSubtaskId)
@@ -37,7 +39,7 @@ export default function NotesSection({ notes }: { notes: Subtask[] }) {
 	return (
 		<div className={styles.notesSection}>
 			<div className={styles.notesHeader}>
-				<span>메모</span>
+				<span>{t('메모')}</span>
 				{notes.length > 0 && <span className={styles.notesCount}>{notes.length}</span>}
 				<button
 					type="button"
@@ -46,7 +48,7 @@ export default function NotesSection({ notes }: { notes: Subtask[] }) {
 						e.stopPropagation()
 						setAdding(true)
 					}}
-					title="메모 추가"
+					title={t('메모 추가')}
 				>
 					{PLUS_ICON}
 				</button>
@@ -56,7 +58,7 @@ export default function NotesSection({ notes }: { notes: Subtask[] }) {
 					autoFocus
 					className={styles.notesAddInput}
 					value={draft}
-					placeholder="메모 제목"
+					placeholder={t('메모 제목')}
 					onChange={(e) => setDraft(e.target.value)}
 					onBlur={commitAdd}
 					onKeyDown={(e) => {

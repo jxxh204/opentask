@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getRepoColor } from '../../utils/repoColor'
+import { useT } from '../../utils/i18n'
 import type { Repo } from '../../store/types'
 import styles from './TaskDetailModal.module.css'
 
@@ -10,6 +11,7 @@ import styles from './TaskDetailModal.module.css'
 // 색점을 붙인다. allowNone=false면 "(선택 안 함)" 옵션 자체를 없앤다(팀 규칙처럼 항상 레포 하나를
 // 골라야 하는 화면용 — 태스크 레포 배정처럼 미배정이 유효한 화면은 기본값 그대로 둔다).
 export default function RepoSelect({ repos, valueId, onChange, allowNone = true }: { repos: Repo[]; valueId: string | null; onChange(id: string | null): void; allowNone?: boolean }) {
+	const t = useT()
 	const [open, setOpen] = useState(false)
 	const selected = repos.find((r) => r.id === valueId) ?? null
 
@@ -29,7 +31,7 @@ export default function RepoSelect({ repos, valueId, onChange, allowNone = true 
 						background: selected ? getRepoColor(selected) : 'var(--line2)',
 					}}
 				/>
-				<span className={styles.repoSelectLabel}>{selected ? selected.name : '(선택 안 함)'}</span>
+				<span className={styles.repoSelectLabel}>{selected ? selected.name : t('(선택 안 함)')}</span>
 				<span className={`${styles.repoSelectChev} ${open ? styles.repoSelectChevOpen : ''}`}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 						<path d="M6 9l6 6 6-6" />
@@ -46,7 +48,7 @@ export default function RepoSelect({ repos, valueId, onChange, allowNone = true 
 								setOpen(false)
 							}}
 						>
-							(선택 안 함)
+							{t('(선택 안 함)')}
 						</div>
 					)}
 					{repos.map((r) => (

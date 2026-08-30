@@ -4,6 +4,7 @@ import { useTabsStore, CONTROL_NODE_ID } from '../../store/useTabsStore'
 import { askControl } from '../../api/control'
 import type { Repo, Folder } from '../../store/types'
 import RepoSelect from './RepoSelect'
+import { useT, useTp } from '../../utils/i18n'
 import styles from './TeamRulesPane.module.css'
 
 // "브랜치 이름은 영문에 프리픽스가 있고, 브랜치를 만들기 전에 노션 문서를 써야 해... 이건 내가
@@ -94,6 +95,8 @@ function sourceOf(repo: Repo | null, folder: Folder | undefined): Draft {
 // folderId — 있을 때만(=폴더 탭의 "+"로 열렸을 때) "이 태스크만의 규칙" 칸을 보여준다. 전역 탭엔
 // "지금 이 태스크"라는 맥락 자체가 없어서 이 칸은 애초에 뜨지 않는다.
 export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepoId?: string | null; folderId?: string } = {}) {
+	const t = useT()
+	const tp = useTp()
 	const repos = useSessionsStore((s) => s.repos)
 	const reposLoaded = useSessionsStore((s) => s.reposLoaded)
 	const updateRepo = useSessionsStore((s) => s.updateRepo)
@@ -224,12 +227,16 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.titleRow}>
-				<div className={styles.title}>팀 규칙</div>
+				<div className={styles.title}>{t('팀 규칙')}</div>
 				<button type="button" className={styles.saveBtn} disabled={!dirty || saving} onClick={handleSave}>
-					{saving ? '저장 중…' : '저장'}
+					{saving ? t('저장 중…') : t('저장')}
 				</button>
 			</div>
-			<div className={styles.hint}>브랜치 네이밍, 사전 문서 작성 같은 팀마다 다른 개발 관행을 자연어로 적어둔다. 레포별로 따로 저장되고, 네 칸을 전부 비워두면 지금과 완전히 동일하게 동작한다.</div>
+			<div className={styles.hint}>
+				{t(
+					'브랜치 네이밍, 사전 문서 작성 같은 팀마다 다른 개발 관행을 자연어로 적어둔다. 레포별로 따로 저장되고, 네 칸을 전부 비워두면 지금과 완전히 동일하게 동작한다.',
+				)}
+			</div>
 
 			{/* "이건 태스크의 유니크한 규칙이야" — 아래 레포 공통 규칙과 달리 지금 이 메인 태스크
 			    하나에만 적용된다(같은 레포의 다른 태스크는 영향 없음). 폴더 맥락 없이(설정 모달 경유)
@@ -238,29 +245,29 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 				<div className={`${styles.slot} ${styles.taskSlot}`}>
 					<div className={styles.slotHead}>
 						<span className={styles.slotIcon}>🎯</span>
-						<span className={styles.slotTitle}>이 태스크만의 규칙 — "{folder.name}"</span>
-						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title="비서에게 물어보면서 채우기">
-							{asking === 'task' ? '비서 여는 중…' : '✦ 비서에게 물어보기'}
+						<span className={styles.slotTitle}>{tp('이 태스크만의 규칙 — "{name}"', { name: folder.name })}</span>
+						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title={t('비서에게 물어보면서 채우기')}>
+							{asking === 'task' ? t('비서 여는 중…') : t('✦ 비서에게 물어보기')}
 						</button>
 					</div>
-					<p className={styles.slotHint}>같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.</p>
+					<p className={styles.slotHint}>{t('같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.')}</p>
 					<textarea
 						className={styles.slotInput}
 						value={draft.rule_task}
-						placeholder="예: 이 작업은 A/B 테스트 플래그로 감싸서 배포한다."
+						placeholder={t('예: 이 작업은 A/B 테스트 플래그로 감싸서 배포한다.')}
 						onChange={(e) => setDraft((d) => ({ ...d, rule_task: e.target.value }))}
 					/>
 				</div>
 			)}
 
-			{!reposLoaded && <div className={styles.hint}>불러오는 중…</div>}
-			{reposLoaded && repos.length === 0 && <div className={styles.hint}>연결된 레포가 없습니다 — 사이드바에서 레포를 먼저 추가하세요.</div>}
+			{!reposLoaded && <div className={styles.hint}>{t('불러오는 중…')}</div>}
+			{reposLoaded && repos.length === 0 && <div className={styles.hint}>{t('연결된 레포가 없습니다 — 사이드바에서 레포를 먼저 추가하세요.')}</div>}
 
 			{repo && (
 				<>
 					<div className={styles.repoSelectRow}>
 						<RepoSelect repos={repos} valueId={repo.id} onChange={handleRepoChange} allowNone={false} />
-						{repoDirty && <span className={styles.repoSelectPending}>저장 필요</span>}
+						{repoDirty && <span className={styles.repoSelectPending}>{t('저장 필요')}</span>}
 					</div>
 
 					<div className={styles.slots}>
@@ -268,17 +275,17 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 							<div key={slot.key} className={styles.slot}>
 								<div className={styles.slotHead}>
 									<span className={styles.slotIcon}>{slot.icon}</span>
-									<span className={styles.slotTitle}>{slot.title}</span>
-									<span className={styles.slotWhere}>{slot.where}</span>
-									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title="비서에게 물어보면서 채우기">
-										{asking === slot.key ? '비서 여는 중…' : '✦ 비서에게 물어보기'}
+									<span className={styles.slotTitle}>{t(slot.title)}</span>
+									<span className={styles.slotWhere}>{t(slot.where)}</span>
+									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title={t('비서에게 물어보면서 채우기')}>
+										{asking === slot.key ? t('비서 여는 중…') : t('✦ 비서에게 물어보기')}
 									</button>
 								</div>
-								<p className={styles.slotHint}>{slot.hint}</p>
+								<p className={styles.slotHint}>{t(slot.hint)}</p>
 								<textarea
 									className={styles.slotInput}
 									value={draft[slot.key]}
-									placeholder={slot.placeholder}
+									placeholder={t(slot.placeholder)}
 									onChange={(e) => setDraft((d) => ({ ...d, [slot.key]: e.target.value }))}
 								/>
 							</div>

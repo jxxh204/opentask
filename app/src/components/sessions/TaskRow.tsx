@@ -4,6 +4,7 @@ import type { OrchestrationSession } from '../../api/sessions'
 import { removeTask } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
+import { useT, useTp, translate } from '../../utils/i18n'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
 import TaskColorDot from './TaskColorDot'
@@ -43,7 +44,7 @@ export const HELP = (
 
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return '방금'
+	if (min < 1) return translate('방금')
 	if (min < 60) return `${min}m`
 	const hr = Math.floor(min / 60)
 	if (hr < 24) return `${hr}h`
@@ -69,6 +70,8 @@ export default function TaskRow({
 	lastActivityAt?: number | null
 	dragBeforeTaskId: (e: React.DragEvent) => void
 }) {
+	const t = useT()
+	const tp = useTp()
 	const open = useSessionsStore((s) => !!s.openTasks[task.id])
 	const toggleTask = useSessionsStore((s) => s.toggleTask)
 	const setDragTask = useSessionsStore((s) => s.setDragTask)
@@ -194,7 +197,7 @@ export default function TaskRow({
 					className={`${styles.statusDot} ${
 						isDone ? styles.done : needsAuth ? styles.needsAuth : needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting
 					}`}
-					title={needsAuth ? '인증이 필요합니다' : needsInput ? '입력이 필요합니다' : undefined}
+					title={needsAuth ? t('인증이 필요합니다') : needsInput ? t('입력이 필요합니다') : undefined}
 				>
 					{isDone ? CHECK : needsAuth ? LOCK : needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
@@ -238,23 +241,23 @@ export default function TaskRow({
 									openReview(task.id)
 								}}
 							>
-								{openReviewCount > 0 ? `이슈 ${openReviewCount}` : '리뷰 완료'}
+								{openReviewCount > 0 ? tp('이슈 {n}', { n: openReviewCount }) : t('리뷰 완료')}
 							</span>
 						)}
 						{nb === 0 && (
 							<span
 								className={styles.quickStart}
-								title={task.folder_id ? '이 서브태스크가 속한 태스크 전체를 오케스트레이션합니다' : '태스크를 만들어 워크트리+세션을 바로 시작합니다'}
+								title={task.folder_id ? t('이 서브태스크가 속한 태스크 전체를 오케스트레이션합니다') : t('태스크를 만들어 워크트리+세션을 바로 시작합니다')}
 								onClick={(e) => {
 									e.stopPropagation()
 									if (!quickStartBusy) quickStartTask(task.id)
 								}}
 								style={{ opacity: quickStartBusy ? 0.5 : 1 }}
 							>
-								{quickStartBusy ? '…' : '시작'}
+								{quickStartBusy ? '…' : t('시작')}
 							</span>
 						)}
-						<span className={`m ${styles.subTime}`} title={lastActivityAt ? '태스크 매니저와 마지막으로 주고받은 대화 시각' : undefined}>
+						<span className={`m ${styles.subTime}`} title={lastActivityAt ? t('태스크 매니저와 마지막으로 주고받은 대화 시각') : undefined}>
 							{lastActivityAt && lastActivityAt > task.updated_at ? timeAgo(lastActivityAt) : timeAgo(task.updated_at)}
 						</span>
 					</div>
@@ -288,7 +291,7 @@ export default function TaskRow({
 								setRenaming(true)
 							}}
 						>
-							이름 변경
+							{t('이름 변경')}
 						</div>
 						{/* "일감 완료 체크가 있으면 좋겠어. 그걸하면 그냥 완료로 보이는거야" — 레코드는 안
 						    지우고 completed_at만 찍는다. 이 트리에서는 사라지지만(SessionShell.tsx
@@ -300,7 +303,7 @@ export default function TaskRow({
 								setTaskDone(task.id, true)
 							}}
 						>
-							완료 처리
+							{t('완료 처리')}
 						</div>
 						{/* 워크트리 목록에서 "연결"한 태스크를 다시 풀어놓는 자리 — 태스크·브랜치 레코드만
 						    지우고 실제 git worktree·브랜치는 그대로 둔다(server/store/tasks.cjs remove). */}
@@ -308,12 +311,12 @@ export default function TaskRow({
 							className={styles.ctxMenuItem}
 							onClick={() => {
 								setMenuOpen(false)
-								if (confirm(`"${task.name}" 연결을 해제할까요? 워크트리·브랜치는 그대로 남습니다.`)) {
+								if (confirm(tp('"{name}" 연결을 해제할까요? 워크트리·브랜치는 그대로 남습니다.', { name: task.name }))) {
 									removeTask(task.id).then(() => useSessionsStore.getState().loadBoard())
 								}
 							}}
 						>
-							연결 해제 (워크트리 유지)
+							{t('연결 해제 (워크트리 유지)')}
 						</div>
 					</div>
 				)}
@@ -384,15 +387,15 @@ export default function TaskRow({
 											}`}
 											title={
 												work?.blocked
-													? `도움 요청: ${work.blockedReason}`
+													? tp('도움 요청: {reason}', { reason: work.blockedReason ?? '' })
 													: subNeedsAuth
-														? '인증이 필요합니다'
+														? t('인증이 필요합니다')
 														: subNeedsInput
-															? '입력이 필요합니다'
+															? t('입력이 필요합니다')
 															: work?.stalled
-																? '한동안 응답이 없습니다 — 확인해보세요'
+																? t('한동안 응답이 없습니다 — 확인해보세요')
 																: work?.done
-																	? '완료'
+																	? t('완료')
 																	: undefined
 											}
 										>

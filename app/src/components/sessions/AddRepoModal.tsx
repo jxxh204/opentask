@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useT } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import FolderBrowserModal from '../common/FolderBrowserModal'
 import styles from './AddRepoModal.module.css'
@@ -35,6 +36,7 @@ function basename(p: string) {
 // 주기 때문에 브라우저 dev 모드보다 더 편하다. 브라우저 dev 모드(window.openrm 없음)에서는
 // 네이티브 다이얼로그를 쓸 수 없으므로 기존 FolderBrowserModal로 폴백한다.
 export default function AddRepoModal({ open, onClose, onManage }: { open: boolean; onClose(): void; onManage(): void }) {
+	const t = useT()
 	const createRepo = useSessionsStore((s) => s.createRepo)
 	const cloneRepo = useSessionsStore((s) => s.cloneRepo)
 	const initRepo = useSessionsStore((s) => s.initRepo)
@@ -78,7 +80,7 @@ export default function AddRepoModal({ open, onClose, onManage }: { open: boolea
 			setBrowsingFor(target)
 			return
 		}
-		const r = await window.openrm.pickFolder({ title: '폴더 선택' })
+		const r = await window.openrm.pickFolder({ title: t('폴더 선택') })
 		if (!r.ok) return
 		if (target === 'browse') submitBrowse(r.path)
 		else if (target === 'clone') setCloneParent(r.path)
@@ -91,7 +93,7 @@ export default function AddRepoModal({ open, onClose, onManage }: { open: boolea
 		const r = await cloneRepo({ url: cloneUrl.trim(), parentPath: cloneParent.trim() })
 		setBusy(false)
 		if (r.ok) close()
-		else setError(r.error || 'clone 실패')
+		else setError(t(r.error || 'clone 실패'))
 	}
 	async function submitInit() {
 		if (!initName.trim() || !initParent.trim() || busy) return
@@ -100,45 +102,45 @@ export default function AddRepoModal({ open, onClose, onManage }: { open: boolea
 		const r = await initRepo({ parentPath: initParent.trim(), name: initName.trim() })
 		setBusy(false)
 		if (r.ok) close()
-		else setError(r.error || '생성 실패')
+		else setError(t(r.error || '생성 실패'))
 	}
 
 	return (
 		<>
 			<Modal open={open && !browsingFor} onClose={close} width={480}>
 				<div className={styles.pad}>
-					<div className={styles.title}>레포 추가</div>
+					<div className={styles.title}>{t('레포 추가')}</div>
 
 					{mode === 'main' && (
 						<>
 							<button className={styles.primaryOpt} onClick={() => pickFolder('browse')}>
 								<span className={styles.optIcon}>{FOLDER_ICON}</span>
 								<span className={styles.optBody}>
-									<span className={styles.optTitle}>폴더 찾아보기</span>
-									<span className={styles.optSub}>로컬 프로젝트, git 레포, 또는 여러 레포가 있는 폴더</span>
+									<span className={styles.optTitle}>{t('폴더 찾아보기')}</span>
+									<span className={styles.optSub}>{t('로컬 프로젝트, git 레포, 또는 여러 레포가 있는 폴더')}</span>
 								</span>
 							</button>
 
-							<div className={styles.sectionLabel}>다른 방법</div>
+							<div className={styles.sectionLabel}>{t('다른 방법')}</div>
 							<div className={styles.otherOpts}>
 								<button className={styles.otherOpt} onClick={() => setMode('clone')}>
 									<span className={styles.otherIcon}>{GLOBE_ICON}</span>
 									<span className={styles.optBody}>
-										<span className={styles.optTitle}>URL에서 클론</span>
-										<span className={styles.optSub}>원격 git 레포를 클론</span>
+										<span className={styles.optTitle}>{t('URL에서 클론')}</span>
+										<span className={styles.optSub}>{t('원격 git 레포를 클론')}</span>
 									</span>
 								</button>
 								<button className={styles.otherOpt} onClick={() => setMode('init')}>
 									<span className={styles.otherIcon}>{PLUS_ICON}</span>
 									<span className={styles.optBody}>
-										<span className={styles.optTitle}>새 프로젝트 만들기</span>
-										<span className={styles.optSub}>빈 폴더에서 시작(git init)</span>
+										<span className={styles.optTitle}>{t('새 프로젝트 만들기')}</span>
+										<span className={styles.optSub}>{t('빈 폴더에서 시작(git init)')}</span>
 									</span>
 								</button>
 							</div>
 
 							<div className={styles.manageLink} onClick={() => { close(); onManage() }}>
-								등록된 레포 관리
+								{t('등록된 레포 관리')}
 							</div>
 						</>
 					)}
@@ -147,20 +149,20 @@ export default function AddRepoModal({ open, onClose, onManage }: { open: boolea
 						<div className={styles.form}>
 							<label className={styles.label}>Git URL</label>
 							<input className={`fin m ${styles.input}`} value={cloneUrl} onChange={(e) => setCloneUrl(e.target.value)} placeholder="https://github.com/org/repo.git" autoFocus />
-							<label className={styles.label}>대상 폴더</label>
+							<label className={styles.label}>{t('대상 폴더')}</label>
 							<div className={styles.pathRow}>
-								<span className={`m ${styles.pathText}`}>{cloneParent || '(선택 안 됨)'}</span>
+								<span className={`m ${styles.pathText}`}>{cloneParent || t('(선택 안 됨)')}</span>
 								<button className={styles.pickBtn} onClick={() => pickFolder('clone')}>
-									찾아보기
+									{t('찾아보기')}
 								</button>
 							</div>
 							{error && <div className={styles.error}>{error}</div>}
 							<div className={styles.formActions}>
 								<button className={styles.ghostBtn} onClick={() => { setMode('main'); setError(null) }}>
-									뒤로
+									{t('뒤로')}
 								</button>
 								<button className={styles.primaryBtn} disabled={busy || !cloneUrl.trim() || !cloneParent.trim()} onClick={submitClone}>
-									{busy ? '클론 중…' : '클론'}
+									{busy ? t('클론 중…') : t('클론')}
 								</button>
 							</div>
 						</div>
@@ -168,22 +170,22 @@ export default function AddRepoModal({ open, onClose, onManage }: { open: boolea
 
 					{mode === 'init' && (
 						<div className={styles.form}>
-							<label className={styles.label}>프로젝트 이름</label>
+							<label className={styles.label}>{t('프로젝트 이름')}</label>
 							<input className={`fin m ${styles.input}`} value={initName} onChange={(e) => setInitName(e.target.value)} placeholder="my-new-project" autoFocus />
-							<label className={styles.label}>위치</label>
+							<label className={styles.label}>{t('위치')}</label>
 							<div className={styles.pathRow}>
-								<span className={`m ${styles.pathText}`}>{initParent || '(선택 안 됨)'}</span>
+								<span className={`m ${styles.pathText}`}>{initParent || t('(선택 안 됨)')}</span>
 								<button className={styles.pickBtn} onClick={() => pickFolder('init')}>
-									찾아보기
+									{t('찾아보기')}
 								</button>
 							</div>
 							{error && <div className={styles.error}>{error}</div>}
 							<div className={styles.formActions}>
 								<button className={styles.ghostBtn} onClick={() => { setMode('main'); setError(null) }}>
-									뒤로
+									{t('뒤로')}
 								</button>
 								<button className={styles.primaryBtn} disabled={busy || !initName.trim() || !initParent.trim()} onClick={submitInit}>
-									{busy ? '생성 중…' : '만들기'}
+									{busy ? t('생성 중…') : t('만들기')}
 								</button>
 							</div>
 						</div>

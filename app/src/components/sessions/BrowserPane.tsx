@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { WebviewTag } from 'electron'
 import { useSetupStore } from '../../store/useSetupStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useTp } from '../../utils/i18n'
 import BrowserToolbar from './BrowserToolbar'
 
 // 로그인 세션이 없는 사이트를 새 Chromium으로 열 때마다 다시 로그인해야 했던 문제(§Playwright 시절)를
@@ -29,6 +30,7 @@ function normalizeUrl(input: string) {
 // 쓴다(HTMLWebViewElement에 electron 타입을 직접 병합하면 addEventListener 오버로드가 HTMLElement 것과
 // 충돌해 타입체크가 깨진다 — 캐스팅이 더 단순하고 안전).
 export default function BrowserPane({ taskId, cwd }: { taskId: string; cwd: string | null }) {
+	const tp = useTp()
 	const configuredDevUrl = useSetupStore((s) => s.connectors['dev']?.fields.devServerUrl)
 	const webviewRef = useRef<HTMLWebViewElement>(null)
 	const tag = () => webviewRef.current as unknown as WebviewTag | null
@@ -72,7 +74,7 @@ export default function BrowserPane({ taskId, cwd }: { taskId: string; cwd: stri
 			// -3(ERR_ABORTED)은 리다이렉트·다운로드 시작 등으로 흔히 발생 — 진짜 에러가 아니라 무시.
 			if (e.errorCode === -3) return
 			setLoading(false)
-			setError(`로드 실패: ${e.errorDescription || e.errorCode}`)
+			setError(tp('로드 실패: {detail}', { detail: e.errorDescription || e.errorCode }))
 		}
 		wv.addEventListener('did-start-loading', onStart)
 		wv.addEventListener('did-stop-loading', onStop)
