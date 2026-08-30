@@ -18,12 +18,12 @@ const STEPS = [
 		body: '별도 시작 버튼이 없습니다 — 서브태스크가 생기면 곧바로 순차 웨이브로 지휘를 시작하고, 라이브 터미널과 계획·지시·보고 로그를 함께 보여줍니다.',
 	},
 	{
-		title: 'PR 리뷰에 직접 적용·항의',
-		body: '리뷰 코멘트에 "적용"을 누르면 실제로 커밋·푸시까지 진행되고, "항의"를 누르면 GitHub에 공개 답글이 게시됩니다.',
+		title: '비서에게 말해보세요',
+		body: '사이드바 "비서"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.',
 	},
 	{
-		title: '캘린더 · 크론잡 · 비서',
-		body: '캘린더로 일정을 잡고, 크론잡으로 반복 업무를 자동화하세요. "비서"는 태스크 하나가 아니라 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.',
+		title: '캘린더 · 크론잡',
+		body: '캘린더로 일정을 잡고 드래그로 재조정하세요. 크론잡으로 반복 업무를 예약하면 정해진 시각에 실제로 새 태스크가 만들어집니다.',
 	},
 ]
 
@@ -51,7 +51,7 @@ export default function QuickstartModal({ open, onClose }: { open: boolean; onCl
 					))}
 				</ol>
 				<div className={styles.footer}>
-					<a className={styles.docsLink} href="https://opentask-website.vercel.app/docs.html" target="_blank" rel="noopener noreferrer">
+					<a className={styles.docsLink} href="https://opentask.jaehwankim.dev/docs" target="_blank" rel="noopener noreferrer">
 						{t('더 자세한 사용법 →')}
 					</a>
 					<button type="button" className={styles.startBtn} onClick={onClose}>
