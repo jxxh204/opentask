@@ -641,23 +641,35 @@ export default function SessionShell() {
 					<span>{t('연결됨')}</span>
 				</span>
 				<span className={styles.sbSep} />
-				<span
-					className={`${styles.sbItem} ${devServers.length ? styles.sbItemLink : ''}`}
-					onClick={devServers.length ? openDevServer : undefined}
-					title={devServers.length ? tp('localhost:{port} — 지금 태스크의 "브라우저" 탭에서 엽니다', { port: devServers[0].port }) : undefined}
-				>
-					<b>{cockpitSummary?.devCount ?? 0}</b>&nbsp;dev
-				</span>
-				<span className={styles.sbItem}>
-					<b>{cockpitSummary?.streamsActive ?? 0}</b>/{cockpitSummary?.streamsTotal ?? 0} {t('스트림')}
-				</span>
-				<span className={styles.sbItem}>
-					✎ <b>{cockpitSummary?.dirty ?? 0}</b> dirty
-				</span>
-				<span className={styles.sbSep} />
-				<span className={`${styles.sbPill}`}>
-					PR {cockpitSummary?.prOpen ?? 0} open · {cockpitSummary?.prDraft ?? 0} draft
-				</span>
+				{cockpitSummary === null ? (
+					// 이번 세션에서 /api/cockpit이 아직 한 번도 안 왔다 — dev/스트림/dirty/PR을 전부 0으로
+					// 보여주면 "이미 확인 끝났고 진짜 0개"처럼 보여 오독된다(§ "새로고침하고 화면 동기화되는데
+					// 오래걸려" 리포트). 워크트리가 많을수록(§ cockpit.cjs streams()) 첫 응답이 늦을 수 있다.
+					<span className={styles.sbItem} title={t('레포·워크트리 상태(PR·dirty 등)를 처음 불러오는 중입니다.')}>
+						<span className={styles.sbSyncDot} />
+						<span>{t('동기화 중…')}</span>
+					</span>
+				) : (
+					<>
+						<span
+							className={`${styles.sbItem} ${devServers.length ? styles.sbItemLink : ''}`}
+							onClick={devServers.length ? openDevServer : undefined}
+							title={devServers.length ? tp('localhost:{port} — 지금 태스크의 "브라우저" 탭에서 엽니다', { port: devServers[0].port }) : undefined}
+						>
+							<b>{cockpitSummary?.devCount ?? 0}</b>&nbsp;dev
+						</span>
+						<span className={styles.sbItem}>
+							<b>{cockpitSummary?.streamsActive ?? 0}</b>/{cockpitSummary?.streamsTotal ?? 0} {t('스트림')}
+						</span>
+						<span className={styles.sbItem}>
+							✎ <b>{cockpitSummary?.dirty ?? 0}</b> dirty
+						</span>
+						<span className={styles.sbSep} />
+						<span className={`${styles.sbPill}`}>
+							PR {cockpitSummary?.prOpen ?? 0} open · {cockpitSummary?.prDraft ?? 0} draft
+						</span>
+					</>
+				)}
 				<span className={styles.sbSpacer} />
 				{apiAddress && (
 					// "로컬서버 포트 열려있는거 버튼으로 만들어서 클릭하면 브라우저로 열리게" — target="_blank"는

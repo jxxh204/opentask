@@ -1,6 +1,10 @@
 // Batch 1 (Shell & Board): SessionShell, FolderCard, TaskRow, TaskManagerBoard, MainTaskPicker,
 // TaskColorDot, NotesSection, NoteDetailPanel, RepoRow, BranchChain
 const dict: Record<string, string> = {
+	// SessionShell.tsx — 상태바 "동기화 중" 표시(§ cockpitSummary === null)
+	'동기화 중…': 'Syncing…',
+	'레포·워크트리 상태(PR·dirty 등)를 처음 불러오는 중입니다.': 'Loading repo/worktree status (PRs, dirty state, etc.) for the first time.',
+
 	// BranchChain.tsx
 	'스택 PR': 'Stacked PR',
 	'병렬 분기': 'Parallel branch',

@@ -56,6 +56,16 @@
 	background: var(--green);
 	box-shadow: 0 0 0 3px var(--gtint);
 }
+/* "새로고침하고 화면 동기화되는데 오래걸려. 로딩처리할 수 있을까?" — cockpit(/api/cockpit)이 이번
+   세션에서 한 번도 안 온 동안(streamsActive/dirty/PR 전부 0으로 보여 "이미 다 됐다"처럼 오독됨)
+   대신 보여주는 자리. */
+.sbSyncDot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--amber);
+	animation: pulseDot 1.2s ease-in-out infinite;
+}
 .sbSep {
 	width: 1px;
 	height: 12px;
