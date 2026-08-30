@@ -4,7 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>OpenTask — Parallel AI Dev Control Tower</title>
-	<meta name="description" content="Write down a task and OpenTask runs the worktree, branch, and AI session underneath it — automatically. Calendar, PR review, and cron jobs, all in one screen, no tab switching." />
+	<meta name="description" content="Write down a task and OpenTask runs the worktree, branch, and AI session underneath it — automatically. Calendar and cron jobs, all in one screen, no tab switching." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -42,8 +42,8 @@
 				<p class="lede">
 					Worktree, branch, terminal session — all of it is a detail underneath the task. Write
 					down what needs doing and OpenTask opens an isolated git worktree, then drives AI agents
-					through it in sequential waves. Schedule work on the calendar, automate recurring chores
-					with cron jobs, and apply or dispute PR review comments directly — all without switching tabs.
+					through it in sequential waves. Schedule work on the calendar and automate recurring
+					chores with cron jobs — all without switching tabs.
 				</p>
 				<div class="hero-actions">
 					<a class="btn btn-primary btn-lg" href="/download.html">Download for macOS</a>
@@ -56,15 +56,14 @@
 		<section id="positioning">
 			<div class="container">
 				<div class="statement">
-					<blockquote>“Click Apply on a review, and the instruction is delivered straight into that subtask's live terminal session.”</blockquote>
+					<blockquote>“Drag a task on the calendar and its real due date changes — a cron job fires and a new task is genuinely created, not just logged.”</blockquote>
 					<p>
 						OpenTask isn't a dashboard or a task tracker that only shows you state. It's a control
-						panel wired directly into real tmux sessions, git worktrees, and the GitHub API.
-						Click <strong style="color:var(--ink)">Apply</strong> on a PR review and it actually
-						commits and pushes; click <strong style="color:var(--ink)">Dispute</strong> and a
-						public reply is posted to GitHub. Drag an item on the calendar and the subtask's real
-						due date changes; a cron job fires at its scheduled time and genuinely creates a new
-						task — a plain dashboard can't fake this kind of live connection.
+						panel wired directly into real tmux sessions, git worktrees, and a scheduler. Drag an
+						item on the calendar and the subtask's real due date changes; a cron job fires at its
+						scheduled time and genuinely creates a new task; the moment a subtask exists, a live
+						agent session is already running inside its own worktree — a plain dashboard can't
+						fake this kind of live connection.
 					</p>
 				</div>
 			</div>
@@ -74,7 +73,7 @@
 			<div class="container">
 				<div class="section-head">
 					<h2>A workflow that never leaves one screen</h2>
-					<p>From creating a task to running agents, reviewing PRs, and managing schedules — without switching tabs.</p>
+					<p>From creating a task to running agents and managing schedules — without switching tabs.</p>
 				</div>
 				<div class="grid">
 					<div class="card">
@@ -88,10 +87,6 @@
 					<div class="card">
 						<h3>Calendar</h3>
 						<p>Lay subtasks out on a week or month view and drag to reschedule. Mark off periods — like a QA freeze — where work shouldn't happen, as blocked periods.</p>
-					</div>
-					<div class="card">
-						<h3>PR Review</h3>
-						<p>Click <strong>Apply</strong> on a comment and it actually commits and pushes; click <strong>Dispute</strong> and a public reply goes straight to GitHub.</p>
 					</div>
 					<div class="card">
 						<h3>Cron Jobs</h3>
@@ -118,9 +113,8 @@
 					<div class="flow-step"><div class="n">1</div><div class="label">Task</div></div>
 					<div class="flow-step"><div class="n">2</div><div class="label">Subtask</div></div>
 					<div class="flow-step"><div class="n">3</div><div class="label">Agent wave</div></div>
-					<div class="flow-step"><div class="n">4</div><div class="label">PR review</div></div>
-					<div class="flow-step"><div class="n">5</div><div class="label">Calendar sync</div></div>
-					<div class="flow-step"><div class="n">6</div><div class="label">Cron automation</div></div>
+					<div class="flow-step"><div class="n">4</div><div class="label">Calendar sync</div></div>
+					<div class="flow-step"><div class="n">5</div><div class="label">Cron automation</div></div>
 				</div>
 			</div>
 		</section>
@@ -152,7 +146,7 @@
 					<div class="principle">
 						<div class="body">
 							<h4>Irreversible real actions are clearly set apart</h4>
-							<p>Actions you can't undo — posting to GitHub, injecting into a live session — are visually separated from mere log information.</p>
+							<p>Actions with real consequences — a cron job creating a genuine task, an agent's live session receiving your instructions — are visually separated from mere log information.</p>
 						</div>
 					</div>
 					<div class="principle">

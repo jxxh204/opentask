@@ -49,7 +49,6 @@
 			<a href="#use-diagram">Diagram Board</a>
 			<a href="#use-panes">Terminal · Server · Browser</a>
 			<a href="#use-calendar">Calendar</a>
-			<a href="#use-pr-review">PR Review</a>
 			<a href="#use-cronjobs">Cron Jobs</a>
 			<a href="#use-model-policy">Model Policy</a>
 			<a href="#use-team-rules">Team Rules</a>
@@ -77,14 +76,14 @@
 				<p>
 					OpenTask is a parallel dev control tower: add a subtask under a task and it gets its own
 					isolated git worktree plus an AI coding agent (Claude Code, etc.). The goal is to keep the
-					loop — create a task → subtask (worktree) → agent wave → PR review → calendar sync —
-					alive in one place, without bouncing between GitHub and terminal tabs.
+					loop — create a task → subtask (worktree) → agent wave → calendar sync — alive in one
+					place, without bouncing between terminal tabs.
 				</p>
 				<img class="docs-shot" src="/screenshots/overview.png" alt="OpenTask sidebar and main screen — task tree, notes, entry points for cron jobs, calendar, and the assistant" loading="lazy" />
 				<p>
 					It started as a tool for a single operator, and broadened as it went open source: several
-					people now use it together to watch and direct agents, PRs, and monitoring signals across
-					many worktrees at once, as a small dev team.
+					people now use it together to watch and direct agents across many worktrees at once, as a
+					small dev team.
 				</p>
 				<div class="callout">
 					<strong>Two ways to run it.</strong> ① Dev mode, launched straight from source (a Vite dev
@@ -145,7 +144,7 @@ npm run start   # backend (8770) + frontend (5180) together</code></div>
 				<h3>Requirements</h3>
 				<table class="feature-table">
 					<tr><th>Item</th><th>Detail</th></tr>
-					<tr><td>Claude Code CLI</td><td><strong>Effectively required.</strong> The Task Manager, PR Review, and Claude Session tabs all run the local <code>claude</code> command as-is inside each worktree. Without it installed and logged in beforehand, the agent features simply won't run.</td></tr>
+					<tr><td>Claude Code CLI</td><td><strong>Effectively required.</strong> The Task Manager and Claude Session tabs both run the local <code>claude</code> command as-is inside each worktree. Without it installed and logged in beforehand, the agent features simply won't run.</td></tr>
 					<tr><td>Node.js</td><td>20 or later (per the <code>engines</code> field in <code>package.json</code>)</td></tr>
 					<tr><td>OS</td><td>macOS for the Electron desktop app. The source doesn't block cross-platform runs, but only macOS is officially supported</td></tr>
 					<tr><td>Package manager</td><td>Both npm and yarn are supported (both lockfiles are present)</td></tr>
@@ -222,16 +221,12 @@ npm run electron:rebuild</code></div>
 					(name and place) from the Task Manager: this one directs "the whole app," not "this task."
 				</p>
 
-				<h3>A live connection — PR review</h3>
+				<h3>A live connection — Calendar &amp; Cron Jobs</h3>
 				<p>
-					Click <strong>Apply</strong> on a PR review comment and a real instruction is injected into
-					that subtask's live terminal session, all the way through commit and push. Click
-					<strong>Dispute</strong> and a public reply is actually posted to GitHub.
+					Drag a subtask on the calendar and its real due date actually changes. A cron job fires at
+					its scheduled time and a genuinely new task gets created — not just a log line saying it
+					would have.
 				</p>
-				<div class="callout warn">
-					<strong>Irreversible actions.</strong> Neither of those is mere log information — both are
-					genuinely irreversible actions. OpenTask makes a point of visually setting these apart.
-				</div>
 			</section>
 
 			<section class="docs-section" id="use-tasks">
@@ -333,19 +328,6 @@ npm run electron:rebuild</code></div>
 				<video class="docs-shot" src="/videos/calendar-demo.mp4" autoplay loop muted playsinline></video>
 			</section>
 
-			<section class="docs-section" id="use-pr-review">
-				<h2>How to Use — PR Review</h2>
-				<ol>
-					<li>Check the badge on a task row in the sidebar — <strong>"N issues"</strong> if there's a
-						review to handle, or <strong>"Reviewed"</strong> if not.</li>
-					<li>Clicking the badge opens the PR review modal.</li>
-					<li>For each comment, choose <strong>Apply</strong> (injects an instruction into that
-						subtask's live session — confirm, and it actually commits and pushes) or
-						<strong>Dispute</strong> (write why it's wrong and it's posted as a public reply on
-						GitHub as-is).</li>
-				</ol>
-			</section>
-
 			<section class="docs-section" id="use-cronjobs">
 				<h2>How to Use — Cron Jobs</h2>
 				<ol>
@@ -371,9 +353,9 @@ npm run electron:rebuild</code></div>
 				<p>
 					In the global <strong>"Model Policy"</strong> tab, pick a model (Fable 5 / Opus 4.8 /
 					Sonnet 4.6, etc.) from a dropdown for each task type — design, Task Manager (subtask chain
-					orchestration), Assistant (calendar · cron jobs · settings), coding, PR review, applying
-					review feedback, generating QA test cases, and more. A common pattern is a lighter model
-					where speed matters and a stronger one where judgment matters.
+					orchestration), Assistant (calendar · cron jobs · settings), coding, generating QA test
+					cases, and more. A common pattern is a lighter model where speed matters and a stronger
+					one where judgment matters.
 				</p>
 				<img class="docs-shot" src="/screenshots/model-policy.png" alt="Model Policy tab — a dropdown list of AI models per task type" loading="lazy" />
 			</section>
@@ -428,12 +410,6 @@ npm run electron:rebuild</code></div>
 					<tr><td>Calendar</td><td>Week/month layout of subtask schedules, drag-to-reschedule, blocked periods</td></tr>
 					<tr><td>Assistant</td><td>Runs the whole app (calendar · cron jobs · settings) by conversation, not a single task</td></tr>
 				</table>
-				<h3>PR Review</h3>
-				<p>
-					When a review comment lands on a PR linked to a task/subtask, the sidebar badge flags it,
-					and the modal lets you choose <strong>Apply</strong> (commits and pushes) or
-					<strong>Dispute</strong> (a public reply on GitHub) per comment.
-				</p>
 			</section>
 
 			<section class="docs-section" id="configuration">
@@ -445,7 +421,7 @@ npm run electron:rebuild</code></div>
 				<h3>Integrations</h3>
 				<ul>
 					<li><strong>Claude Code CLI</strong> — Effectively required. If it isn't installed and logged in locally, agent execution simply won't run (see <a href="#install">Requirements</a> above).</li>
-					<li><strong>GitHub</strong> — Only needed for the PR Review (Apply/Dispute) feature. If <code>gh auth login</code> is already set up locally it's picked up automatically; otherwise you can connect it with one click via OAuth inside the app. Every other tab works fine without it.</li>
+					<li><strong>GitHub</strong> — Only needed to monitor PR/CI/issue status (badges, alerts). If <code>gh auth login</code> is already set up locally it's picked up automatically; otherwise you can connect it with one click via OAuth inside the app. Every tab still works without it, just without live GitHub status.</li>
 					<li><strong>Optional</strong> — Sentry, AWS, Slack, Notion, Figma. These only power link auto-detection when you paste a URL into a task title — no account is required if you don't have one; just type a plain title instead.</li>
 				</ul>
 				<h3>Network</h3>
@@ -465,8 +441,8 @@ npm run electron:rebuild</code></div>
 					standard user-data folder) and never sent to an external server.
 				</p>
 				<p>
-					Irreversible real actions (public GitHub posts, injecting into a live session) are
-					designed to be visually distinct from mere log information.
+					Real actions with consequences (a cron job creating a genuine task, injecting into a live
+					agent session) are designed to be visually distinct from mere log information.
 				</p>
 				<div class="callout">
 					<strong>Not yet decided.</strong> Concurrent multi-user access and permission separation
@@ -503,7 +479,7 @@ npm run electron:rebuild</code></div>
 				</div>
 				<div class="faq-item">
 					<h3>Can I use it without a GitHub or Notion account?</h3>
-					<p>Yes. GitHub is only needed for PR Review — every other tab works fine without it. Notion, Figma, and Slack are just link auto-detection conveniences when you paste a URL into a task title, so no account is needed there either. The one real prerequisite is the <strong>Claude Code CLI</strong> (the <code>claude</code> command) — it must be installed and logged in for agent features like the Task Manager, PR Review, and Claude Session tab to run. If you're already a Claude Code user, it just works with no extra setup.</p>
+					<p>Yes. GitHub is only needed to monitor PR/CI/issue status — every tab still works without it, just without live GitHub badges. Notion, Figma, and Slack are just link auto-detection conveniences when you paste a URL into a task title, so no account is needed there either. The one real prerequisite is the <strong>Claude Code CLI</strong> (the <code>claude</code> command) — it must be installed and logged in for agent features like the Task Manager and Claude Session tab to run. If you're already a Claude Code user, it just works with no extra setup.</p>
 				</div>
 			</section>
 
