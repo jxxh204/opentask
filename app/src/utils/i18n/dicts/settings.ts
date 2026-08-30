@@ -57,12 +57,12 @@ const dict: Record<string, string> = {
 	'태스크 매니저가 자동으로 지휘': 'The Task Manager conducts automatically',
 	'별도 시작 버튼이 없습니다 — 서브태스크가 생기면 곧바로 순차 웨이브로 지휘를 시작하고, 라이브 터미널과 계획·지시·보고 로그를 함께 보여줍니다.':
 		"There's no separate start button — as soon as a subtask appears, it starts directing work in sequential waves, showing the live terminal alongside plan/instruction/report logs.",
-	'PR 리뷰에 직접 적용·항의': 'Apply or dispute PR reviews directly',
-	'리뷰 코멘트에 "적용"을 누르면 실제로 커밋·푸시까지 진행되고, "항의"를 누르면 GitHub에 공개 답글이 게시됩니다.':
-		'Clicking "Apply" on a review comment actually commits and pushes the fix; clicking "Dispute" posts a public reply on GitHub.',
-	'캘린더 · 크론잡 · 비서': 'Calendar · Cron jobs · Assistant',
-	'캘린더로 일정을 잡고, 크론잡으로 반복 업무를 자동화하세요. "비서"는 태스크 하나가 아니라 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
-		'Schedule with the calendar, and automate recurring work with cron jobs. The "Assistant" is a top-level agent that controls the whole app in natural language, not just a single task.',
+	'비서에게 말해보세요': 'Talk to the Assistant',
+	'사이드바 "비서"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
+		'Open "Assistant" in the sidebar and the conversation starts right away, no button needed. Try something like "block off next Tue–Thu as a QA period" — it\'s a top-level agent that controls the whole app in natural language, not just a single task, including the calendar, cron jobs, and settings.',
+	'캘린더 · 크론잡': 'Calendar · Cron jobs',
+	'캘린더로 일정을 잡고 드래그로 재조정하세요. 크론잡으로 반복 업무를 예약하면 정해진 시각에 실제로 새 태스크가 만들어집니다.':
+		'Schedule with the calendar and drag to reschedule. Set up recurring work with cron jobs and a real new task gets created right on schedule.',
 	'더 자세한 사용법 →': 'More detailed usage →',
 	시작하기: 'Get started',
 
