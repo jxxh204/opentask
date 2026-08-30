@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 640" role="img" aria-label="서브태스크 상태 판정 흐름: 세션이 advance를 호출하면 검증 없이 즉시 done이 기록되고 다음 서브태스크가 바로 시작된다. blocked와 stalled는 각각 자가신고와 15분 무응답 휴리스틱으로 감지된다. 반면 PR/CI 상태는 GitHub API를 실제로 조회해 확정한다.">
+  <title>서브태스크 상태 판정 흐름 — advance 루프는 무엇을 거치지 않는가</title>
+  <style>
+    :root {
+      --ink: #1B1E24;
+      --ink-soft: #565C66;
+      --surface: #FFFFFF;
+      --border: #DDE0E8;
+      --bg: #F1F2F6;
+      --trust-low: #B8453A;
+      --trust-low-bg: #FBEAE8;
+      --trust-mid: #A6740D;
+      --trust-mid-bg: #FBF1DA;
+      --trust-high: #2F7D52;
+      --trust-high-bg: #E7F3EC;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #E7E9ED;
+        --ink-soft: #9BA3B0;
+        --surface: #1B1E25;
+        --border: #2B2F38;
+        --bg: #14161B;
+        --trust-low: #E2726A;
+        --trust-low-bg: #34201F;
+        --trust-mid: #E0A94F;
+        --trust-mid-bg: #332A17;
+        --trust-high: #6FC08D;
+        --trust-high-bg: #1B2E23;
+      }
+    }
+    text { font-family: "IBM Plex Sans", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; fill: var(--ink); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .soft { fill: var(--ink-soft); }
+    .box { fill: var(--surface); stroke: var(--ink-soft); }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="var(--ink-soft)" />
+    </marker>
+    <marker id="arrow-low" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="var(--trust-low)" />
+    </marker>
+    <marker id="arrow-high" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="var(--trust-high)" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1100" height="640" fill="var(--bg)" />
+
+  <!-- alive annotation -->
+  <rect x="310" y="8" width="220" height="26" rx="13" fill="none" stroke="var(--ink-soft)" stroke-dasharray="3,3" />
+  <text x="420" y="25" text-anchor="middle" font-size="11" class="soft">
+    <tspan fill="var(--trust-mid)">●</tspan> alive · Term.list() 교차확인
+  </text>
+  <line x1="420" y1="34" x2="420" y2="60" stroke="var(--ink-soft)" stroke-dasharray="3,3" marker-end="url(#arrow)" />
+
+  <!-- A -->
+  <rect class="box" x="20" y="60" width="180" height="60" rx="8" />
+  <text x="110" y="86" text-anchor="middle" font-size="13" font-weight="600">지휘자</text>
+  <text x="110" y="104" text-anchor="middle" font-size="11" class="mono soft">dispatch_subtask()</text>
+
+  <line x1="200" y1="90" x2="308" y2="90" stroke="var(--ink-soft)" marker-end="url(#arrow)" />
+  <text x="254" y="80" text-anchor="middle" font-size="11" class="soft">node-pty 시작</text>
+
+  <!-- B -->
+  <rect class="box" x="310" y="60" width="220" height="60" rx="8" />
+  <text x="420" y="86" text-anchor="middle" font-size="13" font-weight="600">서브태스크 세션 실행 중</text>
+  <text x="420" y="104" text-anchor="middle" font-size="11" class="mono soft">node-pty + 헤드리스 xterm</text>
+
+  <!-- fan-out bus -->
+  <line x1="530" y1="48" x2="530" y2="328" stroke="var(--ink-soft)" />
+
+  <line x1="530" y1="48" x2="648" y2="48" stroke="var(--ink-soft)" marker-end="url(#arrow)" />
+  <text x="589" y="38" text-anchor="middle" font-size="11" class="mono soft">advance()</text>
+
+  <line x1="530" y1="188" x2="648" y2="188" stroke="var(--ink-soft)" marker-end="url(#arrow)" />
+  <text x="589" y="178" text-anchor="middle" font-size="11" class="soft">15분 무응답</text>
+
+  <line x1="530" y1="328" x2="648" y2="328" stroke="var(--ink-soft)" marker-end="url(#arrow)" />
+  <text x="589" y="318" text-anchor="middle" font-size="11" class="mono soft">reportBlocked()</text>
+
+  <!-- C1 done -->
+  <rect x="650" y="20" width="220" height="56" rx="8" fill="var(--trust-low-bg)" stroke="var(--trust-low)" />
+  <circle cx="666" cy="36" r="4" fill="var(--trust-low)" />
+  <text x="760" y="44" text-anchor="middle" font-size="13" font-weight="600">완료(done) 기록</text>
+  <text x="760" y="61" text-anchor="middle" font-size="11" class="soft">자가신고 · 즉시 반영</text>
+
+  <line x1="870" y1="48" x2="938" y2="48" stroke="var(--trust-low)" marker-end="url(#arrow-low)" />
+  <text x="904" y="34" text-anchor="middle" font-size="10.5" fill="var(--trust-low)" font-weight="600">검증 없이</text>
+
+  <!-- D -->
+  <rect class="box" x="940" y="20" width="140" height="56" rx="8" />
+  <text x="1010" y="44" text-anchor="middle" font-size="12.5" font-weight="600">다음 서브태스크</text>
+  <text x="1010" y="61" text-anchor="middle" font-size="12.5" font-weight="600">자동 시작</text>
+
+  <!-- loop back: the finding -->
+  <polyline points="1010,76 1010,440 110,440 110,120" fill="none" stroke="var(--trust-low)" stroke-dasharray="6,4" marker-end="url(#arrow-low)" />
+  <text x="560" y="430" text-anchor="middle" font-size="11.5" fill="var(--trust-low)">다음 사이클도 지휘자 확인 없이 곧장 반복된다</text>
+
+  <!-- C2 stalled -->
+  <rect x="650" y="160" width="220" height="56" rx="8" fill="var(--trust-low-bg)" stroke="var(--trust-low)" />
+  <circle cx="666" cy="176" r="4" fill="var(--trust-low)" />
+  <text x="760" y="184" text-anchor="middle" font-size="13" font-weight="600">stalled / amber 기록</text>
+  <text x="760" y="201" text-anchor="middle" font-size="11" class="soft">화면 텍스트 휴리스틱</text>
+
+  <!-- C3 blocked -->
+  <rect x="650" y="300" width="220" height="56" rx="8" fill="var(--trust-mid-bg)" stroke="var(--trust-mid)" />
+  <circle cx="666" cy="316" r="4" fill="var(--trust-mid)" />
+  <text x="760" y="324" text-anchor="middle" font-size="13" font-weight="600">blocked / red 기록</text>
+  <text x="760" y="341" text-anchor="middle" font-size="11" class="soft">자가신고 · 방향은 안전</text>
+
+  <!-- divider -->
+  <line x1="20" y1="490" x2="1080" y2="490" stroke="var(--ink-soft)" stroke-dasharray="2,4" opacity="0.6" />
+  <text x="20" y="480" font-size="11" class="soft" opacity="0.8">참조 모델 — 실제로 검증하는 경우</text>
+
+  <!-- E -->
+  <rect class="box" x="20" y="510" width="170" height="56" rx="8" />
+  <text x="105" y="534" text-anchor="middle" font-size="13" font-weight="600">PR 업데이트</text>
+  <text x="105" y="551" text-anchor="middle" font-size="11" class="soft">GitHub</text>
+
+  <line x1="190" y1="538" x2="298" y2="538" stroke="var(--trust-high)" marker-end="url(#arrow-high)" />
+  <text x="244" y="525" text-anchor="middle" font-size="10.5" fill="var(--trust-high)" font-weight="600">GitHub API 실제 조회</text>
+
+  <!-- F -->
+  <rect x="300" y="510" width="240" height="56" rx="8" fill="var(--trust-high-bg)" stroke="var(--trust-high)" />
+  <circle cx="316" cy="526" r="4" fill="var(--trust-high)" />
+  <text x="420" y="534" text-anchor="middle" font-size="13" font-weight="600">CI pass/fail/pending 매핑</text>
+  <text x="420" y="551" text-anchor="middle" font-size="11" class="soft">외부 상태 그대로 반영</text>
+
+  <text x="580" y="538" font-size="11.5" class="soft">← 위 advance 루프에는 이런 조회 화살표가 없다</text>
+</svg>
