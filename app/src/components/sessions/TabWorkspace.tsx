@@ -359,7 +359,16 @@ export default function TabWorkspace() {
 	})
 	const orch = useSessionsStore((s) => (found?.folderId ? getOrchestration(s, found.folderId) : null))
 	const folderTasks = useSessionsStore((s) => (found?.kind === 'folder' ? (s.folders.find((f) => f.id === found.folderId)?.tasks ?? []) : []))
-	const folderRepoId = useSessionsStore((s) => (found?.kind === 'folder' ? (s.folders.find((f) => f.id === found.folderId)?.repo_id ?? null) : null))
+	// "자동 선택이 안되는데?" — folder.repo_id가 정답이어야 하는데(§ types.ts Folder.repo_id 주석)
+	// 실제론 비어있는 폴더가 있었다(태스크 쪽 repo_id만 채워진 채). 그러면 팀 규칙 탭이 폴더 고유
+	// 레포를 못 찾고 repos[0](알파벳/등록 순 첫 레포)로 조용히 폴백해 엉뚱한 레포가 열렸다 — 폴더
+	// 자체 값이 비어있으면 그 폴더 태스크들의 repo_id로 한 번 더 폴백한다.
+	const folderRepoId = useSessionsStore((s) => {
+		if (found?.kind !== 'folder') return null
+		const f = s.folders.find((x) => x.id === found.folderId)
+		if (!f) return null
+		return f.repo_id ?? f.tasks.find((t) => t.repo_id)?.repo_id ?? null
+	})
 	const repos = useSessionsStore((s) => s.repos)
 	const rootPath = useSessionsStore((s) => s.rootPath)
 
@@ -400,6 +409,27 @@ export default function TabWorkspace() {
 		window.addEventListener('keydown', onKeyDown)
 		return () => window.removeEventListener('keydown', onKeyDown)
 	}, [activeNodeId, activeTabId, closeTab, reopenLastClosed, cycleTab])
+
+	// "일반적인 cli 툴처럼 키 지정을 해줄수있어?" — "+" 탭 추가 패널이 열려 있을 때만 숫자키 1-9로
+	// 목록 순서대로 바로 선택(fzf/lazygit류 넘버 힌트 관례). 렌더에 쓰는 addableTabs(아래, found 기반
+	// 조건부 early-return 이후 선언)를 여기서 그대로 참조하면 hooks 순서 규칙에 걸려서, 같은 계산을
+	// found.kind만으로 이 자리에서 다시 한다 — early-return 전이라 found가 아직 null일 수 있다.
+	useEffect(() => {
+		if (!cmdkOpenGroup || !activeNodeId) return
+		const tabs = found?.kind === 'folder' ? ADDABLE_FOLDER_TABS : ADDABLE_TASK_TABS
+		function onKeyDown(e: KeyboardEvent) {
+			if (e.metaKey || e.ctrlKey || e.altKey) return
+			const idx = Number(e.key) - 1
+			if (!Number.isInteger(idx) || idx < 0 || idx >= tabs.length) return
+			e.preventDefault()
+			const tab = tabs[idx]
+			if (cmdkOpenGroup === 'left') openTab(activeNodeId!, tab)
+			else openTabInRight(activeNodeId!, tab)
+			setCmdkOpenGroup(null)
+		}
+		window.addEventListener('keydown', onKeyDown)
+		return () => window.removeEventListener('keydown', onKeyDown)
+	}, [cmdkOpenGroup, activeNodeId, found?.kind, openTab, openTabInRight])
 
 	useEffect(() => {
 		if (!menuForTab) return
@@ -647,7 +677,7 @@ export default function TabWorkspace() {
 					</button>
 					{cmdkOpenGroup === group && (
 						<div className={styles.cmdkPanel} onMouseLeave={() => !newWtOpen && setCmdkOpenGroup(null)}>
-							{addableTabs.map((t) => (
+							{addableTabs.map((t, i) => (
 								<div
 									key={t}
 									className={styles.cmdkItem}
@@ -661,6 +691,7 @@ export default function TabWorkspace() {
 										{TAB_ICON[t] && <span className={styles.tabIcon}>{TAB_ICON[t]}</span>}
 										<span>{TAB_LABEL[t]}</span>
 									</span>
+									{i < 9 && <kbd className={styles.cmdkBadge}>{i + 1}</kbd>}
 								</div>
 							))}
 							{group === 'left' && found!.kind === 'task' && (
