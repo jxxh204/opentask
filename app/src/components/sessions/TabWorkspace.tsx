@@ -126,13 +126,19 @@ function SubtaskSessionPane({ tabId, subtaskId, parentTaskId, fallbackCwd }: { t
 	const [error, setError] = useState<string | null>(null)
 	const startedRef = useRef(false)
 
+	// "완료했을때 세션에 접속하면 새로운 세션이 추가되고있어 — 이전에 완료된 그 세션에 접속되어야해"
+	// — st.alive는 done(ended_at 찍힘)이면 항상 false라, "완료된 서브태스크"를 다시 열 때마다 여기서
+	// 매번 새 즉석 세션을 만들어버렸다(아래 두 번째 useEffect, 원래는 "아직 워크트리조차 없는" 경우를
+	// 위한 폴백). tmuxSession/worktreePath는 완료된 서브태스크에도 그대로 남아있으니(§ getSubtaskWorkState)
+	// alive 여부와 무관하게 그 실제 세션·워크트리로 접속한다 — 새로 만드는 건 정말 한 번도 시작 안 한
+	// 경우(아래 폴백)뿐이어야 한다.
 	useEffect(() => {
 		let cancelled = false
 		getSubtaskWorkState(parentTaskId)
 			.then((r) => {
 				if (cancelled || !r.ok) return
 				const st = r.subtasks.find((x) => x.id === subtaskId)
-				if (st?.alive && st.tmuxSession && st.worktreePath) {
+				if (st?.tmuxSession && st.worktreePath) {
 					setLiveSession(st.tmuxSession)
 					setLiveCwd(st.worktreePath)
 				}
