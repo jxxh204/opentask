@@ -45,6 +45,20 @@ function gitRoot(cwd) {
     return cwd
   }
 }
+// 여러 OpenTask 인스턴스(포트가 다른 실행/데모/테스트)가 이 모노레포 체크아웃 하위의 고정 디렉토리를
+// cwd로 쓰면(§control.cjs CONTROL_CWD, §orchestrator.cjs conductorCwd), gitRoot()이 전부 같은 모노레포
+// 최상위로 수렴한다 — 그러면 registerControlMcp/trustFolder가 ~/.claude.json에 쓰는 MCP 서버 등록
+// (특히 OPENTASK_PORT)을 인스턴스끼리 서로 덮어쓴다. 실제로 격리된 데모 인스턴스의 비서가 이 경합
+// 때문에 실제 운영 인스턴스의 포트/DB를 직접 건드리려 시도한 사고로 확인됨. cwd 자신을 독립 git
+// 저장소로 만들면 gitRoot()이 그 cwd 자신을 반환해 더 이상 위로 안 올라간다 — .git 존재 여부로
+// 1회만 판단해서 호출마다 git init을 스폰하지 않는다.
+function ensureOwnGitRoot(dir) {
+  try {
+    if (!fs.existsSync(path.join(dir, '.git'))) {
+      execFileSync('git', ['init', '-q'], { cwd: dir })
+    }
+  } catch (_) {}
+}
 // mcpFolderId가 있으면 이 세션은 지휘자다 — mcpDispatch.cjs(§12 "지휘 방식 개선")를 이 cwd의
 // mcpServers에 등록해 curl-in-prompt 대신 구조화된 MCP 툴(dispatch_subtask/log_event/set_subtask_kind)을
 // 쓸 수 있게 한다. 사람 개입 없이 자동 — trustFolder()가 이미 하고 있던 "신뢰 다이얼로그 미리 우회"와
@@ -712,6 +726,7 @@ module.exports = {
   checkAvailable,
   trustFolder,
   gitRoot,
+  ensureOwnGitRoot,
   // WS 브리지(index.cjs) 전용 — 세션 레지스트리에 직접 접근.
   ensureNamed,
   attachWs,

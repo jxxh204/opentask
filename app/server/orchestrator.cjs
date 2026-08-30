@@ -645,6 +645,10 @@ const CONDUCTOR_CWD_ROOT = path.join(__dirname, '..', '.openrm', 'conductor-cwds
 function conductorCwd(folderId) {
 	const dir = path.join(CONDUCTOR_CWD_ROOT, folderId)
 	fs.mkdirSync(dir, { recursive: true })
+	// 독립 git 저장소화 — trustFolder가 쓰는 gitRoot()이 모노레포 최상위로 안 올라가게 한다(폴더별로는
+	// 이미 folderId로 유일하지만, git 저장소가 아니면 gitRoot()이 위로 계속 올라가 결국 모노레포
+	// 루트로 수렴해 인스턴스 간 MCP 포트 등록이 서로 덮어써진다 — §term.cjs ensureOwnGitRoot 참고).
+	Term.ensureOwnGitRoot(dir)
 	return dir
 }
 

@@ -14,8 +14,12 @@ const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.home
 // 작업 중인 무관한 개발 세션들과 claude --continue의 "이 cwd에서 가장 최근 대화" 탐색 범위를 공유했다.
 // conductor가 이미 겪고 고친 것과 완전히 같은 버그다(§ orchestrator.cjs conductorCwd 위 "엉뚱한
 // 세션을 물고있어" 주석) — 전용 빈 디렉토리를 줘서 --continue가 절대 다른 세션과 안 섞이게 한다.
-const CONTROL_CWD = path.join(__dirname, '..', '.openrm', 'control-cwd')
+// 포트별로 디렉토리를 분리 + 독립 git 저장소화 — 여러 인스턴스가 동시에 떠도 gitRoot()이 서로
+// 다른 값을 반환해 ~/.claude.json MCP 등록(registerControlMcp)이 인스턴스끼리 안 덮어쓴다
+// (§term.cjs ensureOwnGitRoot 주석 — 비서가 실제 앱 포트/DB를 건드릴 뻔한 사고로 확인된 버그).
+const CONTROL_CWD = path.join(__dirname, '..', '.openrm', `control-cwd-${process.env.OPENRM_PORT || 8770}`)
 fs.mkdirSync(CONTROL_CWD, { recursive: true })
+Term.ensureOwnGitRoot(CONTROL_CWD)
 
 let state = null // { session, model, modelLabel, startedAt, cwd } | null — 폴더별 Map이 필요 없다(전역 하나)
 
