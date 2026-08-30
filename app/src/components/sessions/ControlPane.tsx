@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import { getControlState, startControl, stopControl, askControl, getControlTranscript, uploadImage } from '../../api/control'
 import type { ControlState, ChatTurn, ChatPart } from '../../api/control'
 import StatusDot from '../common/StatusDot'
+import { TAB_ICON } from './tabIcons'
 import styles from './ControlPane.module.css'
 
 marked.setOptions({ breaks: true })
@@ -27,6 +28,13 @@ const TOOL_ICON = (
 const CHEVRON_ICON = (
 	<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
 		<path d="M9 6l6 6-6 6" />
+	</svg>
+)
+// "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai의 원형 아이콘 전송 버튼 관례. 같은 그려진 아이콘
+// 규칙(24x24, stroke 2, round cap/join)으로 위쪽 화살표만 새로 그린다.
+const SEND_ICON = (
+	<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M12 19V6M6 11l6-6 6 6" />
 	</svg>
 )
 
@@ -215,63 +223,73 @@ export default function ControlPane() {
 								비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.
 							</div>
 						)}
-						{turns.map((t) => (
-							<div key={t.id} className={`${styles.turnRow} ${t.role === 'user' ? styles.turnRowUser : styles.turnRowAssistant}`}>
-								<div className={styles.turnLabel}>
-									{t.role === 'assistant' && <span className={styles.turnLabelDot} />}
-									{t.role === 'user' ? '나' : '비서'}
+						{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai 웹 챗 기준(구도만, 색·토큰은
+						    OpenTask 것 그대로 § PRODUCT.md Brand Commitments). 좁은 탭 폭에 꽉 채워
+						    읽던 것을 중앙 정렬된 읽기 폭 컬럼(.thread)으로 — 넓은 창에서도 한 줄이
+						    너무 길어지지 않는다. 사람 턴만 말풍선(우측 정렬 pill), 비서 턴은 카드
+						    없이 평문(좌측, 컬럼 폭 그대로) — Claude.ai가 쓰는 비대칭 관례를 따른다.
+						    "비서가 말했다는걸 더 티나게해줘 잘 안보여" — 작은 점+글자 라벨은 카드가
+						    없어지니 눈에 잘 안 띄었다. 탭 아이콘에 이미 쓰던 비서 아이콘(§ tabIcons.tsx
+						    control — 말풍선, 이 시스템에서 이미 "비서"를 뜻하는 그 아이콘)을 그대로
+						    가져와 ChatGPT/Claude.ai식 좌측 아바타로 키운다 — 새 도상 발명 대신 이미
+						    있는 신호를 더 크게. */}
+						<div className={styles.thread}>
+							{turns.map((t) => (
+								<div key={t.id} className={`${styles.turnRow} ${t.role === 'user' ? styles.turnRowUser : styles.turnRowAssistant}`}>
+									{t.role === 'assistant' && <span className={styles.avatar}>{TAB_ICON.control}</span>}
+									<div className={`${styles.bubble} ${t.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}>
+										{t.parts.map((p, i) => (
+											<TurnPart key={i} part={p} />
+										))}
+									</div>
 								</div>
-								<div className={`${styles.bubble} ${t.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}>
-									{t.parts.map((p, i) => (
-										<TurnPart key={i} part={p} />
-									))}
+							))}
+							{pendingUser && (
+								<div className={`${styles.turnRow} ${styles.turnRowUser}`}>
+									<div className={`${styles.bubble} ${styles.bubbleUser}`} style={{ opacity: 0.6 }}>
+										{pendingUser}
+									</div>
 								</div>
-							</div>
-						))}
-						{pendingUser && (
-							<div className={`${styles.turnRow} ${styles.turnRowUser}`}>
-								<div className={styles.turnLabel}>나</div>
-								<div className={`${styles.bubble} ${styles.bubbleUser}`} style={{ opacity: 0.6 }}>
-									{pendingUser}
+							)}
+							{/* "비서가 지금 뭘 하고 있는지" — claude가 답할 때까지 몇 초~몇십 초 아무 신호도 없으면
+							    멈춘 것처럼 보인다(craft-floor "States: loading"). 마지막 턴이 사람 쪽이면 비서가
+							    아직 답을 준비 중이라는 뜻이라 점 3개로 알려준다. */}
+							{(pendingUser || turns[turns.length - 1]?.role === 'user') && (
+								<div className={`${styles.turnRow} ${styles.turnRowAssistant}`}>
+									<span className={styles.avatar}>{TAB_ICON.control}</span>
+									<div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
+										<span className={styles.thinkingDot} />
+										<span className={styles.thinkingDot} />
+										<span className={styles.thinkingDot} />
+									</div>
 								</div>
-							</div>
-						)}
-						{/* "비서가 지금 뭘 하고 있는지" — claude가 답할 때까지 몇 초~몇십 초 아무 신호도 없으면
-						    멈춘 것처럼 보인다(craft-floor "States: loading"). 마지막 턴이 사람 쪽이면 비서가
-						    아직 답을 준비 중이라는 뜻이라 점 3개로 알려준다. */}
-						{(pendingUser || turns[turns.length - 1]?.role === 'user') && (
-							<div className={`${styles.turnRow} ${styles.turnRowAssistant}`}>
-								<div className={styles.turnLabel}>
-									<span className={styles.turnLabelDot} />
-									비서
-								</div>
-								<div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
-									<span className={styles.thinkingDot} />
-									<span className={styles.thinkingDot} />
-									<span className={styles.thinkingDot} />
-								</div>
-							</div>
-						)}
+							)}
+						</div>
 					</div>
-					{uploadingImage && <div className={styles.imageUploading}>이미지 업로드 중…</div>}
-					<div className={styles.inputRow}>
-						<textarea
-							ref={textareaRef}
-							className={styles.textarea}
-							value={draft}
-							placeholder="비서에게 메시지… (이미지 붙여넣기 가능)"
-							onChange={(e) => setDraft(e.target.value)}
-							onPaste={handlePaste}
-							onKeyDown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey) {
-									e.preventDefault()
-									send()
-								}
-							}}
-						/>
-						<button className={styles.sendBtn} disabled={!draft.trim() || sending} onClick={send}>
-							보내기
-						</button>
+					<div className={styles.inputArea}>
+						{uploadingImage && <div className={styles.imageUploading}>이미지 업로드 중…</div>}
+						{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai의 떠 있는 pill형 입력창 관례.
+						    구분선 딸린 평평한 바 대신 elevation 있는 둥근 컴포저, 전송은 아이콘 원형
+						    버튼으로. */}
+						<div className={styles.composer}>
+							<textarea
+								ref={textareaRef}
+								className={styles.textarea}
+								value={draft}
+								placeholder="비서에게 메시지… (이미지 붙여넣기 가능)"
+								onChange={(e) => setDraft(e.target.value)}
+								onPaste={handlePaste}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter' && !e.shiftKey) {
+										e.preventDefault()
+										send()
+									}
+								}}
+							/>
+							<button className={styles.sendBtn} disabled={!draft.trim() || sending} onClick={send} title="보내기 (Enter)">
+								{SEND_ICON}
+							</button>
+						</div>
 					</div>
 				</>
 			) : (
