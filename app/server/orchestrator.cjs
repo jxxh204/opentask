@@ -643,7 +643,12 @@ async function restoreByName(name) {
 // 서로 다른 폴더의 지휘자를 복원해도 completely 무관한 대화(심지어 다른 태스크의 지휘자 대화)를
 // 이어받는 사고가 났다. 폴더마다 실제로는 아무 파일도 없는 전용 빈 디렉토리를 하나씩 줘서(git 저장소일
 // 필요 없음 — claude는 아무 디렉토리에서나 동작) --continue가 그 폴더의 지휘자 대화만 정확히 찾게 한다.
-const CONDUCTOR_CWD_ROOT = path.join(__dirname, '..', '.openrm', 'conductor-cwds')
+// __dirname 기준이면 안 된다 — 패키징된 앱에선 이 파일이 마운트된 읽기전용 DMG 볼륨 위
+// app.asar.unpacked 안에 있어 mkdirSync가 ENOENT로 실행을 막는다(§control.cjs CONTROL_CWD의 동일
+// 버그 참고 — v0.1.4에서 실제 재현). db.cjs의 DATA_DIR과 동일하게 OPENRM_DATA_DIR(Electron이 항상
+// 쓰기 가능한 userData 경로로 세팅)을 우선 쓰고, 순수 dev 모드에서만 레포-상대 경로로 폴백한다.
+const CONDUCTOR_DATA_DIR = process.env.OPENRM_DATA_DIR || path.join(__dirname, '..', '.openrm')
+const CONDUCTOR_CWD_ROOT = path.join(CONDUCTOR_DATA_DIR, 'conductor-cwds')
 function conductorCwd(folderId) {
 	const dir = path.join(CONDUCTOR_CWD_ROOT, folderId)
 	fs.mkdirSync(dir, { recursive: true })

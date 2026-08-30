@@ -17,7 +17,14 @@ const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.home
 // 포트별로 디렉토리를 분리 + 독립 git 저장소화 — 여러 인스턴스가 동시에 떠도 gitRoot()이 서로
 // 다른 값을 반환해 ~/.claude.json MCP 등록(registerControlMcp)이 인스턴스끼리 안 덮어쓴다
 // (§term.cjs ensureOwnGitRoot 주석 — 비서가 실제 앱 포트/DB를 건드릴 뻔한 사고로 확인된 버그).
-const CONTROL_CWD = path.join(__dirname, '..', '.openrm', `control-cwd-${process.env.OPENRM_PORT || 8770}`)
+//
+// __dirname 기준이면 안 된다 — 패키징된 앱은 이 파일이 app.asar.unpacked(마운트된 읽기전용 DMG
+// 볼륨 위) 안에 있어, 여기 mkdirSync가 ENOENT로 실행 자체를 막는다(v0.1.4에서 실제 재현: 이전
+// 빌드 산출물에 우연히 남아있던 폴더 덕에 v0.1.3까지는 안 드러났을 뿐인 잠재 버그). db.cjs의
+// DATA_DIR과 동일하게 OPENRM_DATA_DIR(Electron이 app.getPath('userData')로 세팅, 항상 쓰기 가능)을
+// 우선 쓰고, 그게 없는 순수 dev 모드(`npm run dev`/`start`)에서만 기존 레포-상대 경로로 폴백한다.
+const DATA_DIR = process.env.OPENRM_DATA_DIR || path.join(__dirname, '..', '.openrm')
+const CONTROL_CWD = path.join(DATA_DIR, `control-cwd-${process.env.OPENRM_PORT || 8770}`)
 fs.mkdirSync(CONTROL_CWD, { recursive: true })
 Term.ensureOwnGitRoot(CONTROL_CWD)
 
