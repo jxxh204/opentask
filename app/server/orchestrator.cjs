@@ -186,7 +186,12 @@ async function launchSubtask(task, subtask) {
 	// 체인을 넘기게 한다 — 마지막 단계여도 같은 curl로 안전하게 "완료"만 기록된다(advanceSubtaskWork
 	// 참고).
 	const port = process.env.OPENRM_PORT || 8770
-	const advanceLine = `■ 이 서브태스크를 실제로 다 마쳤으면(테스트 통과·리뷰 반영 등 확인까지 끝난 상태) 사람이나 태스크 매니저를 기다리지 말고 바로 이 curl로 다음 단계를 직접 시작해라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/advance (마지막 단계면 다음 세션 없이 완료만 기록된다 — 안전하게 항상 이 curl을 써라)`
+	// "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해. 다이어그램을
+	// 포함해서. 지금은 끝나도 뭐가 완료되었는지 확인하지 못해" — 완료 curl 자체의 JSON body에
+	// reportHtml을 실어 보내게 한다(별도 API 왕복 안 만듦, § advanceSubtaskWork/db.cjs v25). 완성된
+	// HTML을 요구하는 이유: 서버는 그대로 저장·서빙만 하고 렌더링을 안 하므로, 반쪽 마크업이면 그대로
+	// 깨져 보인다.
+	const advanceLine = `■ 이 서브태스크를 실제로 다 마쳤으면(테스트 통과·리뷰 반영 등 확인까지 끝난 상태) 사람이나 태스크 매니저를 기다리지 말고 바로 다음 단계를 직접 시작해라. 그 전에 뭘 했고 어떻게 끝났는지 정리한 완성된 HTML 리포트를 만들어라(<html>부터 시작하는 완전한 문서 — 무엇을 왜 했는지, 주요 변경점, 가능하면 흐름을 보여주는 다이어그램(Mermaid CDN 스크립트 태그나 인라인 SVG 중 편한 쪽) 포함). 파일로 먼저 써두고(예: /tmp/report.html), 셸 따옴표 escape 사고 없이 안전하게 JSON body를 만들어 이 curl로 보내라: node -e "const fs=require('fs');fs.writeFileSync('/tmp/report-body.json',JSON.stringify({reportHtml:fs.readFileSync('/tmp/report.html','utf8')}))" && curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/advance -H 'Content-Type: application/json' -d @/tmp/report-body.json (마지막 단계면 다음 세션 없이 완료만 기록된다 — 안전하게 항상 이 curl을 써라)`
 	// "메인 태스크와 서브 태스크가 서로 대화를 안 하거든... 업무가 멈추든" — 완료(advanceLine)와 대칭되는
 	// "막힘" 보고 경로. 혼자 못 푸는 결정(정책 판단, 크리덴셜, 애매한 요구사항 등)을 만나면 조용히 멈추는
 	// 대신 이 curl로 바로 지휘자를 깨운다 — 세션 자체는 안 죽는다, 응답 기다리며 계속 살아있어도 된다.
@@ -254,7 +259,7 @@ async function startSubtaskWork(taskId) {
 // 사람이 상세 패널에서 버튼을 눌러야만 호출됐다. 이제 launchSubtask의 seed가 서브태스크 자신에게
 // "끝나면 이 curl로 직접 다음 단계로 넘겨라"를 지시하므로(§ launchSubtask), 실제로는 그 서브태스크
 // 세션 자신이 이 함수를 호출한다 — 판단(지휘자 승인 등) 없이 서버가 바로 다음 단계를 시작한다.
-async function advanceSubtaskWork(taskId) {
+async function advanceSubtaskWork(taskId, reportHtml) {
 	const task = StoreTasks.get(taskId)
 	if (!task) return { ok: false, error: 'task not found' }
 	const subtasks = StoreSubtasks.listByTask(taskId)
@@ -265,7 +270,9 @@ async function advanceSubtaskWork(taskId) {
 	if (liveIdx === -1) return { ok: false, error: '진행 중인 서브태스크가 없습니다 — 먼저 시작하세요.' }
 	const current = subtasks[liveIdx]
 	const currentSession = StoreSubtaskSessions.getActiveForSubtask(current.id)
-	StoreSubtaskSessions.markEnded(currentSession.id)
+	// "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해" — advanceLine이
+	// 완료 curl의 body에 실어 보내라고 지시한 HTML 리포트를 같은 UPDATE로 저장(§ db.cjs v25).
+	StoreSubtaskSessions.markEnded(currentSession.id, reportHtml)
 	const next = subtasks[liveIdx + 1]
 	// "서로 대화를 안 하거든" — pushFeed(로그 기록)만으론 지휘자가 대화 로그를 스스로 보러 가지 않는
 	// 한 절대 못 알아챈다. notifyConductor로 지휘자 pty에 직접 타이핑해 능동적으로 통보한다(사람→지휘자
@@ -397,6 +404,9 @@ async function getSubtaskWorkState(taskId) {
 			tmuxSession: session ? session.tmux_session : null,
 			worktreePath: session ? session.worktree_path : null,
 			branch: branch ? branch.name : null,
+			// "이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘" — 완료 시 저장된 리포트가
+			// 있으면(§ advanceSubtaskWork) 서빙 URL을, 없으면 null(버튼 자체를 안 보여줌).
+			reportUrl: session && session.report_html ? `/api/subtask-sessions/${session.id}/report` : null,
 		})
 	}
 	return { ok: true, subtasks: result }

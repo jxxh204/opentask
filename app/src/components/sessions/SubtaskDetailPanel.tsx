@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
+import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import { getSubtaskWorkState, stopSubtaskSession } from '../../api/sessions'
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
+import { useT, useTp } from '../../utils/i18n'
 import styles from './TaskDetailModal.module.css'
 
 function pad(n: number) {
@@ -23,6 +25,8 @@ function dateInputValueToMs(v: string) {
 // 를 쓰되 내용은 이 서브태스크 자신의 이름/설명/예정일/기간 + 지금 세션 상태로 좁힌다. 상단의
 // "메인 태스크: X"를 누르면 이 패널을 닫고 그 태스크의 다이어그램 탭으로 넘어가 전체 체인을 보여준다.
 export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }: { subtaskId: string | null; parentTaskId: string | null; onClose(): void }) {
+	const t = useT()
+	const tp = useTp()
 	const open = !!subtaskId && !!parentTaskId
 	const parentTask = useSessionsStore((s) => {
 		if (!parentTaskId) return null
@@ -96,6 +100,18 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 		onClose()
 	}
 
+	// "이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘" — 완료된 서브태스크 세션이
+	// 스스로 작성해 저장한 HTML 리포트(§ orchestrator.cjs advanceSubtaskWork)를 내부 브라우저로
+	// 연다. openSession과 같은 openOrFocusTab 스코프(parentFolderId)를 쓰되 탭 종류는 'browser' —
+	// 이미 있는 "탭 열고 URL로 이동시키기" 관례(§ XTerm.tsx WebLinksAddon, SessionShell.tsx openDevServer).
+	function openReport() {
+		if (!parentFolderId || !work?.reportUrl) return
+		const port = window.location.port || '18771'
+		useTabsStore.getState().openOrFocusTab(parentFolderId, 'browser')
+		useBrowserNavStore.getState().request(parentFolderId, `http://localhost:${port}${work.reportUrl}`)
+		onClose()
+	}
+
 	async function stopSession() {
 		if (!subtaskId) return
 		setBusy(true)
@@ -128,31 +144,31 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 								type="button"
 								className={`${styles.doneToggle} ${subtask.completed_at ? styles.doneToggleActive : ''}`}
 								onClick={() => setSubtaskDone(subtask.id, !subtask.completed_at)}
-								title="완료 처리 — 사이드바 목록에서는 사라지고 캘린더에는 남습니다"
+								title={t('완료 처리 — 사이드바 목록에서는 사라지고 캘린더에는 남습니다')}
 							>
 								<span className={styles.doneCheck} />
-								완료
+								{t('완료')}
 							</button>
-							<button type="button" className={styles.closeBtn} onClick={onClose} title="닫기">
+							<button type="button" className={styles.closeBtn} onClick={onClose} title={t('닫기')}>
 								×
 							</button>
 						</div>
 						<div className={styles.body}>
 							{parentFolderId ? (
-								<button type="button" className={mainTaskLinkClass()} onClick={goToMainTask} title="메인 태스크 다이어그램으로 이동">
-									↰ 메인 태스크: {parentTask.name}
+								<button type="button" className={mainTaskLinkClass()} onClick={goToMainTask} title={t('메인 태스크 다이어그램으로 이동')}>
+									{tp('↰ 메인 태스크: {name}', { name: parentTask.name })}
 								</button>
 							) : (
 								<div className={mainTaskLinkClass()} style={{ justifyContent: 'space-between', cursor: 'default' }}>
-									<span>↰ 메인 태스크: {parentTask.name}</span>
-									<button type="button" className={styles.metaClear} disabled={promoting} onClick={promoteMainTask} title="이 메인 태스크를 승격해 오케스트레이션(워크트리·다이어그램)을 시작합니다">
-										{promoting ? '승격 중…' : '승격'}
+									<span>{tp('↰ 메인 태스크: {name}', { name: parentTask.name })}</span>
+									<button type="button" className={styles.metaClear} disabled={promoting} onClick={promoteMainTask} title={t('이 메인 태스크를 승격해 오케스트레이션(워크트리·다이어그램)을 시작합니다')}>
+										{promoting ? t('승격 중…') : t('승격')}
 									</button>
 								</div>
 							)}
 
 							<div className={styles.metaRow}>
-								<span className={styles.metaLabel}>예정일</span>
+								<span className={styles.metaLabel}>{t('예정일')}</span>
 								<input
 									type="date"
 									className="fin m"
@@ -162,13 +178,13 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 								/>
 								{subtask.due_date !== null && (
 									<button type="button" className={styles.metaClear} onClick={() => updateSubtaskDueDate(subtask.id, null)}>
-										지우기
+										{t('지우기')}
 									</button>
 								)}
 							</div>
 							{subtask.due_date !== null && (
 								<div className={styles.metaRow}>
-									<span className={styles.metaLabel}>기간</span>
+									<span className={styles.metaLabel}>{t('기간')}</span>
 									<input
 										type="number"
 										min={1}
@@ -178,49 +194,63 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 										value={subtask.duration_days ?? ''}
 										onChange={(e) => updateSubtaskDuration(subtask.id, e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null)}
 									/>
-									<span className={styles.metaHint}>영업일</span>
+									<span className={styles.metaHint}>{t('영업일')}</span>
 									{subtask.duration_days !== null && subtask.duration_days > 1 && (
 										<span className={styles.metaHint}>
-											~ {new Date(addBusinessDays(subtask.due_date, subtask.duration_days)).getMonth() + 1}월 {new Date(addBusinessDays(subtask.due_date, subtask.duration_days)).getDate()}일 종료
+											{tp('~ {month}월 {day}일 종료', {
+												month: new Date(addBusinessDays(subtask.due_date, subtask.duration_days)).getMonth() + 1,
+												day: new Date(addBusinessDays(subtask.due_date, subtask.duration_days)).getDate(),
+											})}
 										</span>
 									)}
 								</div>
 							)}
 
 							<div className={styles.metaRow} style={{ alignItems: 'center' }}>
-								<span className={styles.metaLabel}>세션</span>
+								<span className={styles.metaLabel}>{t('세션')}</span>
 								{work?.alive ? (
 									<>
-										<span className={sessionBadgeClass('alive')}>진행 중</span>
+										<span className={sessionBadgeClass('alive')}>{t('진행 중')}</span>
 										{parentFolderId && (
 											<button type="button" className={styles.metaClear} onClick={openSession}>
-												세션 보기
+												{t('세션 보기')}
 											</button>
 										)}
 										<button type="button" className={styles.metaClear} disabled={busy} onClick={stopSession}>
-											{busy ? '종료 중…' : '세션 종료'}
+											{busy ? t('종료 중…') : t('세션 종료')}
 										</button>
 									</>
 								) : work?.started ? (
 									<>
-										<span className={sessionBadgeClass('done')}>세션 종료됨</span>
+										<span className={sessionBadgeClass('done')}>{t('세션 종료됨')}</span>
 										{parentFolderId && (
 											<button type="button" className={styles.metaClear} onClick={openSession}>
-												세션 보기
+												{t('세션 보기')}
 											</button>
 										)}
 									</>
 								) : (
-									<span className={sessionBadgeClass('idle')}>대기</span>
+									<span className={sessionBadgeClass('idle')}>{t('대기')}</span>
 								)}
 							</div>
+							{/* "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해.
+							    이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘" — alive/started
+							    여부와 무관하게 reportUrl이 있으면(완료 시 저장됨) 항상 뜬다. */}
+							{work?.reportUrl && (
+								<div className={styles.metaRow} style={{ alignItems: 'center' }}>
+									<span className={styles.metaLabel}>{t('완료 보고서')}</span>
+									<button type="button" className={styles.metaClear} onClick={openReport}>
+										{t('보고서 보기')}
+									</button>
+								</div>
+							)}
 							{work?.worktreePath && <div className={styles.metaHint}>worktree: {work.worktreePath}</div>}
 							{work?.branch && <div className={styles.metaHint}>⎇ {work.branch}</div>}
 
 							<div className={styles.descLabel} style={{ marginTop: 16 }}>
-								설명
+								{t('설명')}
 							</div>
-							<textarea className={styles.descInput} value={subtask.desc} onChange={(e) => updateSubtaskDesc(subtask.id, e.target.value)} placeholder="이 서브태스크에 대해 설명해 주세요" />
+							<textarea className={styles.descInput} value={subtask.desc} onChange={(e) => updateSubtaskDesc(subtask.id, e.target.value)} placeholder={t('이 서브태스크에 대해 설명해 주세요')} />
 						</div>
 					</>
 				)}

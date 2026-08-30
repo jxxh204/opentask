@@ -19,6 +19,11 @@ export function startControl() {
 export function stopControl() {
 	return api.post<{ ok: boolean }>('/api/control/stop', {})
 }
+// "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(위 stopControl과 다름), 지금 생성 중인
+// 응답만 ESC로 끊는다(§ server/control.cjs interrupt).
+export function interruptControl() {
+	return api.post<{ ok: boolean; error?: string }>('/api/control/interrupt', {})
+}
 // "비서에게 질문하는 버튼" — 비서가 떠 있으면 그 세션에 바로, 없으면 콜드 스타트하며 이 텍스트를
 // 최초 지시에 실어 보낸다(§ server/control.cjs ask).
 export function askControl(text: string) {

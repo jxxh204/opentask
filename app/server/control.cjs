@@ -10,7 +10,12 @@ const Term = require('./term.cjs')
 const Settings = require('./settings.cjs')
 
 const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.homedir(), '.claude.json')
-const CONTROL_CWD = path.join(__dirname, '..') // OpenTask 앱 자신의 루트 — 특정 타깃 레포에 묶이지 않음
+// "비서 껏다키면 이전에 명령한것 지워져" — CONTROL_CWD가 앱 루트 자체였던 시절엔, 이 코드베이스에서
+// 작업 중인 무관한 개발 세션들과 claude --continue의 "이 cwd에서 가장 최근 대화" 탐색 범위를 공유했다.
+// conductor가 이미 겪고 고친 것과 완전히 같은 버그다(§ orchestrator.cjs conductorCwd 위 "엉뚱한
+// 세션을 물고있어" 주석) — 전용 빈 디렉토리를 줘서 --continue가 절대 다른 세션과 안 섞이게 한다.
+const CONTROL_CWD = path.join(__dirname, '..', '.openrm', 'control-cwd')
+fs.mkdirSync(CONTROL_CWD, { recursive: true })
 
 let state = null // { session, model, modelLabel, startedAt, cwd } | null — 폴더별 Map이 필요 없다(전역 하나)
 
@@ -113,6 +118,12 @@ async function stop() {
 	return { ok: true }
 }
 
+// "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(stop과 다름), 지금 생성 중인 응답만 ESC로 끊는다.
+async function interrupt() {
+	if (!state) return { ok: false, error: '비서 세션이 없습니다.' }
+	return Term.interrupt(state.session)
+}
+
 // "이게 그냥 작성하기는 어려운데... 나한테 질문하면서 작성하게 할 수 있도록 관제에 질문하는 버튼
 // 있으면 어떨까" — 팀 규칙처럼 빈 화면에 자연어를 바로 적기 어려운 자리에서, 관제에게 맥락(레포·
 // 어떤 규칙칸)을 실어 보내면 관제가 사람에게 되물어가며 대신 채워준다. 관제가 이미 떠 있으면 그
@@ -129,4 +140,4 @@ async function ask(text) {
 	return await start(text)
 }
 
-module.exports = { getState, start, stop, ask, CONTROL_CWD }
+module.exports = { getState, start, stop, ask, interrupt, CONTROL_CWD }

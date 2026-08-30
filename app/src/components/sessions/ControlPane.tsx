@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ClipboardEventHandler } from 'react'
 import { marked } from 'marked'
-import { getControlState, startControl, stopControl, askControl, getControlTranscript, uploadImage } from '../../api/control'
+import { getControlState, startControl, stopControl, askControl, getControlTranscript, uploadImage, interruptControl } from '../../api/control'
 import type { ControlState, ChatTurn, ChatPart } from '../../api/control'
 import StatusDot from '../common/StatusDot'
 import { TAB_ICON } from './tabIcons'
+import { useT, useTp } from '../../utils/i18n'
 import styles from './ControlPane.module.css'
 
 marked.setOptions({ breaks: true })
@@ -37,8 +38,16 @@ const SEND_ICON = (
 		<path d="M12 19V6M6 11l6-6 6 6" />
 	</svg>
 )
+// "중간에 대화 정지 기능도 있어야함" — 생성 중일 때 전송 버튼 자리에 대신 뜨는 정지 아이콘. 채워진
+// 사각형은 ChatGPT/Claude.ai가 공통으로 쓰는 "생성 중단" 관례 그대로.
+const STOP_ICON = (
+	<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+		<rect x="5" y="5" width="14" height="14" rx="2" />
+	</svg>
+)
 
 function ToolPart({ name, input, result }: { name: string; input: unknown; result: string | null }) {
+	const t = useT()
 	const inputStr = (() => {
 		try {
 			return JSON.stringify(input)
@@ -55,12 +64,12 @@ function ToolPart({ name, input, result }: { name: string; input: unknown; resul
 				<span className={styles.toolChevron}>{CHEVRON_ICON}</span>
 			</summary>
 			<div className={styles.toolBody}>
-				<div className={styles.toolBodyLabel}>입력</div>
+				<div className={styles.toolBodyLabel}>{t('입력')}</div>
 				{inputStr}
 				{result != null && (
 					<>
 						<div className={styles.toolBodyLabel} style={{ marginTop: 6 }}>
-							결과
+							{t('결과')}
 						</div>
 						{result}
 					</>
@@ -76,6 +85,8 @@ function TurnPart({ part }: { part: ChatPart }) {
 }
 
 export default function ControlPane() {
+	const t = useT()
+	const tp = useTp()
 	const [state, setState] = useState<ControlState | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [busy, setBusy] = useState(false)
@@ -98,7 +109,7 @@ export default function ControlPane() {
 				if (!s.running && !startedRef.current) {
 					startedRef.current = true
 					startControl()
-						.then((r) => !cancelled && (r.ok ? setState({ running: true, session: r.session ?? null, cwd: r.cwd, modelLabel: r.modelLabel }) : setError(r.error || '세션 생성 실패')))
+						.then((r) => !cancelled && (r.ok ? setState({ running: true, session: r.session ?? null, cwd: r.cwd, modelLabel: r.modelLabel }) : setError(t(r.error || '세션 생성 실패'))))
 						.catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
 				}
 			})
@@ -140,7 +151,7 @@ export default function ControlPane() {
 			setTurns([])
 			const r = await startControl()
 			if (r.ok) setState({ running: true, session: r.session ?? null, cwd: r.cwd, modelLabel: r.modelLabel })
-			else setError(r.error || '세션 생성 실패')
+			else setError(t(r.error || '세션 생성 실패'))
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		} finally {
@@ -157,11 +168,28 @@ export default function ControlPane() {
 		turnCountAtSendRef.current = turns.length
 		try {
 			const r = await askControl(text)
-			if (!r.ok) setError(r.error || '전송 실패')
+			if (!r.ok) setError(t(r.error || '전송 실패'))
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		} finally {
 			setSending(false)
+		}
+	}
+
+	// "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다, 지금 생성 중인 응답만 ESC로 끊는다
+	// (§ server/control.cjs interrupt). 끊긴 뒤 반응은 다음 폴링 tick(대화 기록)이 그대로 반영한다 —
+	// 여기서 로컬 state를 따로 되돌릴 필요 없음.
+	const [interrupting, setInterrupting] = useState(false)
+	async function interrupt() {
+		if (interrupting) return
+		setInterrupting(true)
+		try {
+			const r = await interruptControl()
+			if (!r.ok) setError(t(r.error || '정지 실패'))
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+		} finally {
+			setInterrupting(false)
 		}
 	}
 
@@ -186,10 +214,10 @@ export default function ControlPane() {
 			})
 			const r = await uploadImage(dataUrl)
 			if (!r.ok || !r.path) {
-				setError(r.error || '이미지 업로드 실패')
+				setError(t(r.error || '이미지 업로드 실패'))
 				return
 			}
-			const insertText = `[이미지 첨부: ${r.path}]`
+			const insertText = tp('[이미지 첨부: {path}]', { path: r.path })
 			const ta = textareaRef.current
 			setDraft((d) => {
 				const start = ta ? (ta.selectionStart ?? d.length) : d.length
@@ -203,15 +231,19 @@ export default function ControlPane() {
 		}
 	}
 
+	// 마지막 턴이 사람 쪽이면(또는 방금 보낸 게 아직 안 도착했으면) 비서가 생성 중이라는 뜻 —
+	// "정지" 버튼을 보여줄지, 아래 "생각 중" 점 3개를 보여줄지가 같은 조건을 공유한다.
+	const generating = !!pendingUser || turns[turns.length - 1]?.role === 'user'
+
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
 				<StatusDot color={state?.running ? 'green' : 'muted'} pulse={!!state?.running} />
-				<span className={styles.state}>비서</span>
+				<span className={styles.state}>{t('비서')}</span>
 				{state?.modelLabel && <span className={`m ${styles.meta}`}>{state.modelLabel}</span>}
 				<div style={{ flex: 1 }} />
 				<button className={styles.btn} disabled={busy} onClick={restart}>
-					재시작
+					{t('재시작')}
 				</button>
 			</div>
 			{state?.running ? (
@@ -220,7 +252,7 @@ export default function ControlPane() {
 						{turns.length === 0 && !pendingUser && (
 							<div className={styles.empty}>
 								<span className={styles.emptyDot} />
-								비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.
+								{t('비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.')}
 							</div>
 						)}
 						{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai 웹 챗 기준(구도만, 색·토큰은
@@ -254,7 +286,7 @@ export default function ControlPane() {
 							{/* "비서가 지금 뭘 하고 있는지" — claude가 답할 때까지 몇 초~몇십 초 아무 신호도 없으면
 							    멈춘 것처럼 보인다(craft-floor "States: loading"). 마지막 턴이 사람 쪽이면 비서가
 							    아직 답을 준비 중이라는 뜻이라 점 3개로 알려준다. */}
-							{(pendingUser || turns[turns.length - 1]?.role === 'user') && (
+							{generating && (
 								<div className={`${styles.turnRow} ${styles.turnRowAssistant}`}>
 									<span className={styles.avatar}>{TAB_ICON.control}</span>
 									<div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
@@ -267,7 +299,7 @@ export default function ControlPane() {
 						</div>
 					</div>
 					<div className={styles.inputArea}>
-						{uploadingImage && <div className={styles.imageUploading}>이미지 업로드 중…</div>}
+						{uploadingImage && <div className={styles.imageUploading}>{t('이미지 업로드 중…')}</div>}
 						{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai의 떠 있는 pill형 입력창 관례.
 						    구분선 딸린 평평한 바 대신 elevation 있는 둥근 컴포저, 전송은 아이콘 원형
 						    버튼으로. */}
@@ -276,7 +308,7 @@ export default function ControlPane() {
 								ref={textareaRef}
 								className={styles.textarea}
 								value={draft}
-								placeholder="비서에게 메시지… (이미지 붙여넣기 가능)"
+								placeholder={t('비서에게 메시지… (이미지 붙여넣기 가능)')}
 								onChange={(e) => setDraft(e.target.value)}
 								onPaste={handlePaste}
 								onKeyDown={(e) => {
@@ -286,14 +318,20 @@ export default function ControlPane() {
 									}
 								}}
 							/>
-							<button className={styles.sendBtn} disabled={!draft.trim() || sending} onClick={send} title="보내기 (Enter)">
-								{SEND_ICON}
-							</button>
+							{generating ? (
+								<button className={styles.sendBtn} disabled={interrupting} onClick={interrupt} title={t('정지')}>
+									{STOP_ICON}
+								</button>
+							) : (
+								<button className={styles.sendBtn} disabled={!draft.trim() || sending} onClick={send} title={t('보내기 (Enter)')}>
+									{SEND_ICON}
+								</button>
+							)}
 						</div>
 					</div>
 				</>
 			) : (
-				<div className={styles.starting}>{error ?? '비서 세션 시작 중…'}</div>
+				<div className={styles.starting}>{error ?? t('비서 세션 시작 중…')}</div>
 			)}
 		</div>
 	)

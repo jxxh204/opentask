@@ -95,6 +95,10 @@ export interface SubtaskWorkStatus {
 	tmuxSession: string | null
 	worktreePath: string | null
 	branch: string | null
+	// "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해" — 완료 시
+	// 서브태스크 세션 자신이 작성해 저장된 HTML 리포트가 있으면 그 서빙 경로, 없으면 null
+	// (§ orchestrator.cjs getSubtaskWorkState).
+	reportUrl: string | null
 }
 export function startSubtaskWork(taskId: string) {
 	return api.post<{ ok: true; already?: boolean; subtaskId: string; subtaskName: string; tmuxSession: string } | { ok: false; error: string }>(`/api/tasks/${taskId}/subtask-work/start`)

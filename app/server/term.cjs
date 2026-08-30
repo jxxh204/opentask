@@ -665,6 +665,17 @@ async function restartDevSession({ id, name, command, port }) {
   return { ok: true, restartedIn: name || tgt, command: cmd }
 }
 
+// "중간에 대화 정지 기능도 있어야함" — claude CLI 자신이 생성 중 화면에 "esc to interrupt"를
+// 띄운다(§ status() working 판정에 이미 이 문자열을 씀 — 실제 CLI가 ESC로 중단됨을 확인해주는
+// 근거). raw ESC 하나만 pty에 써넣으면 된다 — restartDevSession의 Ctrl-C(\x03)와 같은 raw
+// keystroke 패턴.
+async function interrupt(name) {
+  const entry = sessions.get(name)
+  if (!entry || entry.exited) return { ok: false, error: '세션 없음' }
+  entry.proc.write('\x1b')
+  return { ok: true }
+}
+
 // 텍스트/명령 한 줄 전송(원샷 — 진짜 입력은 WS로)
 async function send({ name, message, enter = true }) {
   if (!name || !name.startsWith(PREFIX) || !message) return { ok: false, error: 'name·message 필수' }
@@ -682,6 +693,7 @@ module.exports = {
   create,
   kill,
   send,
+  interrupt,
   exists,
   // "관제에게 질문하는 버튼" — send()는 한 방 던지고 끝(제출 확인 없음)이라 세션이 아직 스플래시
   // 렌더링 중이면 씹혀 유실될 수 있다. injectSeed는 원래 새 세션 최초 지시 전용이었지만 화면에

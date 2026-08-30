@@ -88,12 +88,12 @@ const EnvVars = require('./store/envVars.cjs')
 const StoreFolders = require('./store/folders.cjs')
 const StoreTasks = require('./store/tasks.cjs')
 const StoreSubtasks = require('./store/subtasks.cjs') // 태스크 하나를 개발/개발자테스트/QA/배포 등으로 쪼갠 서브태스크
+const StoreSubtaskSessions = require('./store/subtaskSessions.cjs') // 서브태스크 단위 워크트리+클로드 세션 이력(완료 리포트 포함)
 const StoreBranches = require('./store/branches.cjs')
 const StoreRepos = require('./store/repos.cjs') // 멀티레포 프로젝트용 레포 레지스트리
 const StoreBlockedPeriods = require('./store/blockedPeriods.cjs') // 캘린더 "일정 막기"(QA 기간 등) CRUD
 const StoreDecisions = require('./store/decisions.cjs') // AI 판정 감사 로그(§12) — feed와 달리 재시작에도 안 날아감
 const RepoAdd = require('./repoAdd.cjs') // "레포 추가" 모달의 clone/새 프로젝트
-const RepoClassify = require('./repoClassify.cjs') // 새 태스크 → 레포 자동배정(헤드리스 claude)
 const DurationEstimate = require('./durationEstimate.cjs') // 태스크 설명 → 예상 소요 영업일 추정(헤드리스 claude, 제안만)
 const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
 const Control = require('./control.cjs') // "비서" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)
@@ -597,6 +597,12 @@ const server = http.createServer((req, res) => {
       .then((r) => sendJSON(res, 200, r))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
+  // "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(위 stop과 다름), 지금 생성 중인 응답만 끊는다.
+  if (url === '/api/control/interrupt' && req.method === 'POST') {
+    return Control.interrupt()
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // "관제에 질문하는 버튼" — 관제가 떠 있으면 그 세션에, 없으면 콜드 스타트하며 이 요청을 최초 seed에
   // 실어 안전하게 전달(§ control.cjs ask).
   if (url === '/api/control/ask' && req.method === 'POST') {
@@ -717,9 +723,8 @@ const server = http.createServer((req, res) => {
     return readBody(req)
       .then((b) => {
         const task = StoreTasks.composeTask(StoreTasks.create(b || {}))
-        // 레포를 명시 안 했고(사람이 직접 안 골랐고) 등록된 레포가 2개 이상이면 백그라운드로 자동배정 —
-        // 태스크 생성 응답은 안 기다리고 바로 나감(수 초 걸리는 헤드리스 claude 호출이라 블로킹 안 함).
-        if (!task.repo_id) RepoClassify.classifyTask(task.id).catch(() => {})
+        // 레포 자동배정(repoClassify.cjs)은 비활성화 — LLM 추론 결과를 검증 없이 바로 써서
+        // 코드 구조 단서만으로 엉뚱한 레포에 배정되는 사고가 반복됐다. 레포는 사람이 직접 고른다.
         sendJSON(res, 200, task)
       })
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
@@ -909,7 +914,13 @@ const server = http.createServer((req, res) => {
       const done = (p) => p.then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r)).catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       if (action === 'state' && req.method === 'GET') return done(Orchestrator.getSubtaskWorkState(tid))
       if (action === 'start' && req.method === 'POST') return done(Orchestrator.startSubtaskWork(tid))
-      if (action === 'advance' && req.method === 'POST') return done(Orchestrator.advanceSubtaskWork(tid))
+      // "서브 태스크가 끝나면... 정리해서 보여줬으면해" — advanceLine이 완료 curl의 body에 실어
+      // 보내라고 지시한 HTML 리포트(§ orchestrator.cjs advanceSubtaskWork, db.cjs v25)를 읽어 전달.
+      if (action === 'advance' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => done(Orchestrator.advanceSubtaskWork(tid, b && b.reportHtml)))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
       // "업무가 멈추든" — 완료(advance)와 대칭되는 막힘 보고. advanceLine과 같은 자리에서 launchSubtask의
       // seed가 서브태스크 자신에게 curl로 이걸 부르라고 지시한다(§ orchestrator.cjs blockedLine).
       if (action === 'report-blocked' && req.method === 'POST') {
@@ -918,6 +929,20 @@ const server = http.createServer((req, res) => {
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
     }
+  }
+  // "이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘" — 서브태스크 완료 시 저장된
+  // HTML 리포트(§ orchestrator.cjs advanceSubtaskWork)를 그대로 서빙. durationEstimate.cjs의
+  // /estimate-duration/report와 같은 자리·패턴이지만 여긴 렌더링 없이 저장된 HTML을 그대로 돌려준다
+  // (에이전트가 이미 완성된 HTML을 만들어 보냈으므로).
+  if (url.startsWith('/api/subtask-sessions/') && url.endsWith('/report') && req.method === 'GET') {
+    const sid = decodeURIComponent(url.slice('/api/subtask-sessions/'.length, url.length - '/report'.length))
+    const session = StoreSubtaskSessions.getById(sid)
+    if (!session || !session.report_html) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      return res.end('리포트 없음')
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    return res.end(session.report_html)
   }
   // ── 지휘자(conductor) 세션 (Phase 3.4) — 오케스트레이터 자체의 클로드 세션. say/event는 지휘자
   //    세션 자신이 curl로 호출(conductorSeed 참고), tell은 UI가 사람 발화를 지휘자에게 전달할 때 쓴다. ──

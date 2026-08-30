@@ -39,9 +39,16 @@ function create({ subtaskId, taskId, tmuxSession, worktreePath, branch, model, m
 	return db.prepare('SELECT * FROM subtask_sessions WHERE id = ?').get(id)
 }
 
-function markEnded(id) {
-	db.prepare('UPDATE subtask_sessions SET ended_at = ? WHERE id = ?').run(Date.now(), id)
+// reportHtml — "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해"
+// (§ db.cjs v25). 완료를 스스로 보고하는 서브태스크 세션 자신이 작성한 완성된 HTML을 같은 UPDATE로
+// 같이 찍는다 — optional이라 사람이 직접 끄는 stopSubtaskSession(리포트 없음)은 그대로 동작한다.
+function markEnded(id, reportHtml) {
+	db.prepare('UPDATE subtask_sessions SET ended_at = ?, report_html = COALESCE(?, report_html) WHERE id = ?').run(Date.now(), reportHtml || null, id)
 	return { ok: true }
 }
 
-module.exports = { listBySubtask, listByTask, latestForSubtask, getActiveForSubtask, create, markEnded }
+function getById(id) {
+	return db.prepare('SELECT * FROM subtask_sessions WHERE id = ?').get(id) || null
+}
+
+module.exports = { listBySubtask, listByTask, latestForSubtask, getActiveForSubtask, create, markEnded, getById }

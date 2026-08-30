@@ -398,6 +398,13 @@ const MIGRATIONS = [
 	(db) => {
 		db.exec(`ALTER TABLE folders ADD COLUMN conductor_session TEXT;`)
 	},
+	// v25 — "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해. 지금은
+	// 끝나도 뭐가 완료되었는지 확인하지 못해." 완료를 스스로 보고하는 서브태스크 세션 자신이 작성한
+	// 완성된 HTML 리포트(다이어그램 포함 가능)를 그대로 저장 — 서버는 렌더링 없이 그대로 서빙만
+	// 한다(§ orchestrator.cjs advanceSubtaskWork, server/index.cjs /api/subtask-sessions/:id/report).
+	(db) => {
+		db.exec(`ALTER TABLE subtask_sessions ADD COLUMN report_html TEXT;`)
+	},
 ]
 
 function migrate() {
