@@ -934,6 +934,37 @@ table.feature-table th {
 	margin: 4px 0 18px;
 }
 
+img.docs-shot {
+	cursor: zoom-in;
+}
+
+img.docs-shot:hover {
+	opacity: 0.94;
+}
+
+.lightbox-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(10, 10, 12, 0.85);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 40px;
+	z-index: 100;
+	cursor: zoom-out;
+}
+
+.lightbox-overlay[hidden] {
+	display: none;
+}
+
+.lightbox-overlay img {
+	max-width: 100%;
+	max-height: 100%;
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-popover);
+}
+
 .faq-item {
 	padding: 16px 0;
 	border-bottom: 1px solid var(--line);

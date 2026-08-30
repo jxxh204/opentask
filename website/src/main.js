@@ -54,6 +54,34 @@ if (demoTabs.length) {
 	})
 }
 
+// docs 스크린샷 클릭 확대(라이트박스) — 이미지만 대상, 영상은 제외
+const docsShots = document.querySelectorAll('img.docs-shot')
+if (docsShots.length) {
+	const overlay = document.createElement('div')
+	overlay.className = 'lightbox-overlay'
+	overlay.hidden = true
+	const overlayImg = document.createElement('img')
+	overlay.appendChild(overlayImg)
+	document.body.appendChild(overlay)
+
+	const close = () => {
+		overlay.hidden = true
+		overlayImg.src = ''
+	}
+	overlay.addEventListener('click', close)
+	document.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape' && !overlay.hidden) close()
+	})
+
+	docsShots.forEach((img) => {
+		img.addEventListener('click', () => {
+			overlayImg.src = img.src
+			overlayImg.alt = img.alt
+			overlay.hidden = false
+		})
+	})
+}
+
 // docs 사이드바 스크롤 스파이
 const docsNav = document.querySelector('.docs-nav')
 if (docsNav) {
