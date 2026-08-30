@@ -23,13 +23,16 @@ function projectDirFor(cwd) {
 // 시작하므로, 그 마커가 있는 파일만 후보로 삼는다(이름이 "관제"였던 옛 세션도 같은 접두사라 함께 잡힘).
 const SEED_MARKER = '[역할: OpenTask'
 
+// "비서에게 물어보고 다른 탭을 가면 초기화되는문제" — 실제로는 파일이 사라진 게 아니라 이 함수가
+// 그 파일을 아예 못 찾아서 매번 turns:[]만 돌려주고 있었다. claude CLI가 최근 버전부터 진짜 첫 대화
+// 턴(=시드 마커) 앞에 세션 메타데이터 줄(last-prompt/mode/permission-mode/atis-latch/bridge-session
+// 등)을 여러 줄 먼저 쓰기 시작했는데, 4096바이트 고정 창은 이 마커가 실측 2만 바이트 근처에 있는
+// 경우를 못 잡는다(그 창을 넘겨서 늘려봤자 다음 CLI 버전이 또 늘리면 재발). 바이트 수 가정 자체를
+// 버리고 파일 전체에서 찾는다 — 격리된 전용 cwd(§ control.cjs CONTROL_CWD)라 후보 파일이 보통
+// 하나뿐이라 비용도 작다.
 function looksLikeControlTranscript(filePath) {
 	try {
-		const fd = fs.openSync(filePath, 'r')
-		const buf = Buffer.alloc(4096)
-		const n = fs.readSync(fd, buf, 0, 4096, 0)
-		fs.closeSync(fd)
-		return buf.toString('utf8', 0, n).includes(SEED_MARKER)
+		return fs.readFileSync(filePath, 'utf8').includes(SEED_MARKER)
 	} catch (_) {
 		return false
 	}
