@@ -25,8 +25,9 @@ web
 ## Operating Context
 
 - 정적 사이트(Vite 빌드, HTML/CSS + 약간의 JS) — 모노레포 안 `website/` 서브프로젝트. `app/`(Electron 데스크톱 앱)와는 별개 코드베이스이자 별개 방문자층.
-- 영어가 기본(루트 도메인) — 오픈소스 프로젝트라 글로벌 GitHub 방문자가 1차 대상. 한국어는 `/ko/` 경로로 병행 제공(리디자인 시 확정할 정확한 경로). 콘텐츠는 항상 두 언어 동시에 갱신한다. (2026-08-30: 기존엔 한국어가 루트였으나 방문자 우선순위를 영어로 전환하기로 확정.)
-- Vercel(`jxxh204s-projects/opentask-website`)에 배포, `opentask-website.vercel.app`에서 서비스.
+- 영어가 기본(루트 도메인) — 오픈소스 프로젝트라 글로벌 GitHub 방문자가 1차 대상. 한국어는 `/ko/` 경로로 병행 제공. 콘텐츠는 항상 두 언어 동시에 갱신한다. (2026-08-30: 기존엔 한국어가 루트였으나 방문자 우선순위를 영어로 전환 — `index.html`↔`en/`을 `index.html`↔`ko/`로 실제 교체 완료.)
+- 다운로드/변경 이력/Docs 페이지도 동일 구조: `download.html`·`docs.html`·`changelog.html`(영어, 루트) / `ko/download.html`·`ko/docs.html`·`ko/changelog.html`(한국어).
+- Cloudflare Workers(Direct Upload, `npx wrangler deploy`)에 배포, 커스텀 도메인 `opentask.jaehwankim.dev`에서 서비스. Vercel(`opentask-website.vercel.app`)은 2026-08-30부로 롤백용으로만 남겨두고 더는 배포 대상이 아님 — 자세한 경위는 `CLOUDFLARE_MIGRATION.md` 참고.
 - 실제 앱 다운로드는 GitHub Releases(`jxxh204/opentask`) 자산으로 링크 — 웹사이트가 파일을 직접 호스팅하지 않는다.
 - 페이지 구성: 랜딩(index.html) · Docs(docs.html) · 다운로드(download.html) · 릴리스 노트(changelog.html), 각 한/영.
 
