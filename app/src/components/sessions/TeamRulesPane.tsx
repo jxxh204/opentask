@@ -105,10 +105,17 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 	const activeRepoId = repoId && repos.some((r) => r.id === repoId) ? repoId : (initialRepoId ?? repos[0]?.id ?? null)
 	const repo = repos.find((r) => r.id === activeRepoId) ?? null
 
+	// "저게 레포를 바꾼거고 저장 버튼활성화가 안된거야" — 레포 선택은 "저장" 버튼과 무관하게(§ 아래
+	// dirty는 규칙 텍스트만 본다) 고르는 즉시 기억되는데, 그 확정 신호가 하나도 없어서 바뀐 건지
+	// 알 수가 없었다. "저장" 버튼을 활성화하는 건 의미가 안 맞는다(레포 선택엔 미확정 상태가 없다 —
+	// 이미 반영됐다) — 대신 SessionShell의 "복사됨" 토스트와 같은 패턴으로 잠깐 확인 텍스트만 띄운다.
+	const [repoSaved, setRepoSaved] = useState(false)
 	function handleRepoChange(id: string | null) {
 		if (!id) return
 		setRepoId(id)
 		saveLastRepoId(id)
+		setRepoSaved(true)
+		setTimeout(() => setRepoSaved(false), 1200)
 	}
 
 	// "저장하기 버튼이 있어야할듯" — 전엔 textarea가 blur될 때마다 조용히 자동저장돼서 "저장됐다"는
@@ -247,6 +254,7 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 				<>
 					<div className={styles.repoSelectRow}>
 						<RepoSelect repos={repos} valueId={repo.id} onChange={handleRepoChange} allowNone={false} />
+						{repoSaved && <span className={styles.repoSelectSaved}>기억됨</span>}
 					</div>
 
 					<div className={styles.slots}>
