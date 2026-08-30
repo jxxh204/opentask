@@ -20,10 +20,15 @@ function latestForSubtask(subtaskId) {
 	return rows.length ? rows[rows.length - 1] : null
 }
 
-// "끝났다고 기록 안 된" 세션 — 실제로 tmux에 살아있는지는 호출부가 Term.list()로 따로 확인해야 한다
-// (컴퓨터가 꺼졌다 켜지면 이 행은 ended_at이 null인 채로 남아있지만 진짜 tmux 세션은 죽어 있다).
+// "끝난 세션은 체크 초록색 아냐?" — 서버 재시작 등으로 이 서브태스크의 세션이 여러 번 새로 만들어졌는데
+// 그중 더 오래된 시도가 ended_at을 못 찍은 채 고아로 남아있으면(§ 위 주석), 정작 최신 시도는 정상
+// 종료됐어도(done:true) "ended_at IS NULL AND 가장 최근"만 보는 예전 쿼리가 그 고아 행을 "활성"으로
+// 잘못 골라버렸다 — checkStalledSubtasks가 그 죽은 척하는 옛 세션 이름으로 계속 상태를 확인해 이미
+// 끝난 서브태스크를 "응답없음"(amber)으로 영구 오탐. "활성"은 항상 가장 최근 시도 하나만 기준으로
+// 판정해야 한다 — 그 최근 시도가 안 끝났을 때만 활성, 끝났으면 그보다 오래된 고아 행이 있어도 비활성.
 function getActiveForSubtask(subtaskId) {
-	return db.prepare('SELECT * FROM subtask_sessions WHERE subtask_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1').get(subtaskId) || null
+	const row = db.prepare('SELECT * FROM subtask_sessions WHERE subtask_id = ? ORDER BY started_at DESC LIMIT 1').get(subtaskId)
+	return row && row.ended_at == null ? row : null
 }
 
 function create({ subtaskId, taskId, tmuxSession, worktreePath, branch, model, modelLabel }) {
