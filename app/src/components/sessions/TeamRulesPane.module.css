@@ -51,10 +51,12 @@
 	gap: 8px;
 	margin-bottom: 22px;
 }
-.repoSelectSaved {
+/* "저장버튼으로 저장되게 해줘" — 레포 선택도 이제 즉시 반영이 아니라 저장 버튼을 눌러야 확정되니,
+   바뀐 채 아직 안 눌렀다는 걸 amber(추정/대기 신호 — §stalled와 같은 톤)로 알려준다. */
+.repoSelectPending {
 	font-size: 11px;
 	font-weight: 700;
-	color: var(--green);
+	color: var(--amber);
 }
 
 .slots {

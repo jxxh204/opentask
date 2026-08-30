@@ -99,23 +99,25 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 	const updateRepo = useSessionsStore((s) => s.updateRepo)
 	const setFolderTaskRule = useSessionsStore((s) => s.setFolderTaskRule)
 	const folder = useSessionsStore((s) => (folderId ? s.folders.find((f) => f.id === folderId) : undefined))
-	const [repoId, setRepoId] = useState<string | null>(() => (folderId ? null : loadLastRepoId()))
-	// repoId가 저장된 값을 가리키는데 그 레포가 삭제됐으면(repos엔 없음) 조용히 빈 화면이 되는 대신
-	// initialRepoId/첫 레포로 폴백한다.
-	const activeRepoId = repoId && repos.some((r) => r.id === repoId) ? repoId : (initialRepoId ?? repos[0]?.id ?? null)
+	// "저장버튼으로 저장되게 해줘. 처음 팀규칙을 킬때 저장된걸로 켜지게해줘" — 전엔 레포를 고르는
+	// 즉시 localStorage에 반영돼서(§ "기억됨" 토스트) 그냥 훑어보기만 해도 다음 기본값이 계속
+	// 바뀌었다. savedRepoId(마지막으로 실제 저장 버튼을 눌러 확정한 값)와 repoId(지금 화면에 고른
+	// 값, 아직 미확정일 수 있음)를 분리 — 전역 탭의 기본값은 savedRepoId를 따르고, 저장 버튼을
+	// 눌러야만 그 확정값이 바뀐다. 폴더 탭("+"로 연 것)은 원래부터 이 기억과 무관하게 항상 그
+	// 폴더 고유 레포(initialRepoId)로 스코프되므로 그대로 둔다.
+	const [savedRepoId, setSavedRepoId] = useState<string | null>(() => loadLastRepoId())
+	const [repoId, setRepoId] = useState<string | null>(null)
+	const defaultRepoId = (folderId ? initialRepoId : savedRepoId && repos.some((r) => r.id === savedRepoId) ? savedRepoId : initialRepoId) ?? repos[0]?.id ?? null
+	// repoId가 가리키는 레포가 삭제됐으면(repos엔 없음) 조용히 빈 화면이 되는 대신 기본값으로 폴백한다.
+	const activeRepoId = repoId && repos.some((r) => r.id === repoId) ? repoId : defaultRepoId
 	const repo = repos.find((r) => r.id === activeRepoId) ?? null
+	// 폴더 탭에서의 레포 전환은 저장 대상이 아니다(그 폴더의 고유 레포 배정과 무관한 일시적 열람) —
+	// 전역 탭에서 고른 것만 "저장" 대상.
+	const repoDirty = !folderId && repoId !== null && repoId !== savedRepoId
 
-	// "저게 레포를 바꾼거고 저장 버튼활성화가 안된거야" — 레포 선택은 "저장" 버튼과 무관하게(§ 아래
-	// dirty는 규칙 텍스트만 본다) 고르는 즉시 기억되는데, 그 확정 신호가 하나도 없어서 바뀐 건지
-	// 알 수가 없었다. "저장" 버튼을 활성화하는 건 의미가 안 맞는다(레포 선택엔 미확정 상태가 없다 —
-	// 이미 반영됐다) — 대신 SessionShell의 "복사됨" 토스트와 같은 패턴으로 잠깐 확인 텍스트만 띄운다.
-	const [repoSaved, setRepoSaved] = useState(false)
 	function handleRepoChange(id: string | null) {
 		if (!id) return
 		setRepoId(id)
-		saveLastRepoId(id)
-		setRepoSaved(true)
-		setTimeout(() => setRepoSaved(false), 1200)
 	}
 
 	// "저장하기 버튼이 있어야할듯" — 전엔 textarea가 blur될 때마다 조용히 자동저장돼서 "저장됐다"는
@@ -144,7 +146,7 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 		lastRepoIdRef.current = repo?.id ?? null
 	}, [repo, folder])
 
-	const dirty = RULE_SLOTS.some((slot) => draft[slot.key] !== (repo?.[slot.key] ?? '')) || (!!folder && draft.rule_task !== (folder.rule_task ?? ''))
+	const dirty = repoDirty || RULE_SLOTS.some((slot) => draft[slot.key] !== (repo?.[slot.key] ?? '')) || (!!folder && draft.rule_task !== (folder.rule_task ?? ''))
 	const [saving, setSaving] = useState(false)
 
 	async function handleSave() {
@@ -152,6 +154,10 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 		setSaving(true)
 		try {
 			const jobs: Promise<unknown>[] = []
+			if (repoDirty && repoId) {
+				saveLastRepoId(repoId)
+				setSavedRepoId(repoId)
+			}
 			// 서버는 저장할 때 trim한 값을 저장한다(store/repos.cjs, folders.cjs) — draft는 사용자가
 			// 타이핑한 원문(trim 전)을 그대로 들고 있으므로, 앞뒤 공백만 있던 경우 저장 후에도
 			// draft !== repo[key]가 계속 참이 돼 "저장" 버튼이 안 꺼지는 문제가 있었다. 실제로 보낸
@@ -254,7 +260,7 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 				<>
 					<div className={styles.repoSelectRow}>
 						<RepoSelect repos={repos} valueId={repo.id} onChange={handleRepoChange} allowNone={false} />
-						{repoSaved && <span className={styles.repoSelectSaved}>기억됨</span>}
+						{repoDirty && <span className={styles.repoSelectPending}>저장 필요</span>}
 					</div>
 
 					<div className={styles.slots}>
