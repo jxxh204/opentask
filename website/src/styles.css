@@ -15,7 +15,7 @@
 
 	--ink: #16171a;
 	--t2: #55565c;
-	--t3: #8a8b91;
+	--t3: #6e6f71;
 
 	--line: #e4e4e7;
 	--line2: #d6d7db;
@@ -56,7 +56,7 @@
 
 		--ink: #ededf0;
 		--t2: #a5a5ac;
-		--t3: #7d7e86;
+		--t3: #818284;
 
 		--line: #2c2d33;
 		--line2: #34353d;
@@ -84,7 +84,7 @@
 	--card-hover: #2a2b32;
 	--ink: #ededf0;
 	--t2: #a5a5ac;
-	--t3: #7d7e86;
+	--t3: #818284;
 	--line: #2c2d33;
 	--line2: #34353d;
 	--violet: #9ba4b3;
@@ -363,7 +363,7 @@ section + section {
 
 .section-head p {
 	color: var(--t2);
-	font-size: 15px;
+	font-size: 16px;
 	line-height: 1.7;
 	margin: 0;
 }
@@ -390,7 +390,7 @@ section + section {
 .statement p {
 	margin: 0;
 	color: var(--t2);
-	font-size: 14.5px;
+	font-size: 15px;
 	line-height: 1.75;
 }
 
@@ -417,7 +417,7 @@ section + section {
 .card p {
 	margin: 0;
 	color: var(--t2);
-	font-size: 13.5px;
+	font-size: 14px;
 	line-height: 1.65;
 }
 
@@ -491,7 +491,7 @@ section + section {
 .principle .body p {
 	margin: 0;
 	color: var(--t2);
-	font-size: 13.5px;
+	font-size: 14px;
 	line-height: 1.65;
 }
 
