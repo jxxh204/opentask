@@ -123,7 +123,7 @@ npm run electron:dev</code></div>
 
 				<h3>방법 A · 다운로드 앱</h3>
 				<p>
-					Apple Developer ID 서명 · 공증이 적용된 macOS 앱을 <a href="/download.html">다운로드 페이지</a>에서
+					Apple Developer ID로 서명된 macOS 앱(공증 전)을 <a href="/download.html">다운로드 페이지</a>에서
 					바로 받을 수 있습니다.
 				</p>
 
@@ -143,6 +143,7 @@ npm run start   # 백엔드(8770) + 프론트(5180) 동시 실행</code></div>
 				<h3>요구 사항</h3>
 				<table class="feature-table">
 					<tr><th>항목</th><th>내용</th></tr>
+					<tr><td>Claude Code CLI</td><td><strong>사실상 필수.</strong> 태스크 매니저·PR 리뷰·클로드 세션 탭 전부 각 워크트리에서 로컬 <code>claude</code> 명령을 그대로 실행합니다. 미리 설치하고 로그인해두지 않으면 에이전트가 동작하지 않습니다.</td></tr>
 					<tr><td>Node.js</td><td>20 이상 (<code>package.json</code>의 <code>engines</code> 기준)</td></tr>
 					<tr><td>OS</td><td>macOS (Electron 데스크톱 앱 기준). 소스는 크로스플랫폼 실행을 막진 않지만 공식 지원은 macOS만</td></tr>
 					<tr><td>패키지 매니저</td><td>npm 또는 yarn 둘 다 지원(둘 다 lockfile 존재)</td></tr>
@@ -427,13 +428,14 @@ npm run electron:rebuild</code></div>
 			<section class="docs-section" id="configuration">
 				<h2>설정</h2>
 				<p>
-					초기 설정(Setup)을 마치기 전에는 메인 화면 전체가 게이팅되어 접근할 수 없습니다.
-					설정 전에는 데모 데이터로 동작합니다.
+					레포를 연결하지 않아도 메인 화면에 바로 들어갈 수 있습니다 — 연결 전에는 데모 데이터로
+					전체 화면 구조를 둘러볼 수 있습니다. 강제로 거쳐야 하는 온보딩 화면은 없습니다.
 				</p>
 				<h3>연동</h3>
 				<ul>
-					<li><strong>필수</strong> — GitHub (PR/이슈/CI 상태를 읽고, 필요 시 코멘트를 게시)</li>
-					<li><strong>선택</strong> — Sentry, AWS, Slack, Notion, Figma. 필요한 것만 연결하면 됩니다.</li>
+					<li><strong>Claude Code CLI</strong> — 사실상 필수. 로컬에 설치·로그인이 안 돼 있으면 에이전트 실행 자체가 안 됩니다(위 <a href="#install">요구 사항</a> 참고).</li>
+					<li><strong>GitHub</strong> — PR 리뷰(적용/항의) 기능에만 필요합니다. 로컬에 이미 <code>gh auth login</code>이 돼 있으면 자동으로 인식되고, 없으면 앱 안에서 버튼 한 번으로 OAuth 연결할 수 있습니다. 연결하지 않아도 다른 탭은 그대로 씁니다.</li>
+					<li><strong>선택</strong> — Sentry, AWS, Slack, Notion, Figma. 태스크 제목에 관련 링크를 붙여넣으면 자동 인식되는 편의 기능일 뿐이라, 계정이 없으면 그냥 일반 텍스트로 제목을 쓰면 됩니다.</li>
 				</ul>
 				<h3>네트워크</h3>
 				<p>
@@ -489,6 +491,10 @@ npm run electron:rebuild</code></div>
 				<div class="faq-item">
 					<h3>이전 이름이 있었나요?</h3>
 					<p>내부 코드네임 "MRM" → "OpenRM"을 거쳐 "OpenTask"로 리브랜딩했습니다 — 무엇을 최상위 단위로 삼는가를 기준으로 태스크 중심 정체성을 이름에 반영했습니다.</p>
+				</div>
+				<div class="faq-item">
+					<h3>GitHub나 Notion 계정이 없어도 쓸 수 있나요?</h3>
+					<p>네. GitHub은 PR 리뷰 기능에만 필요하고, 없어도 다른 탭은 정상 동작합니다. Notion·Figma·Slack은 태스크 제목에 링크를 붙여넣으면 자동 인식되는 편의 기능일 뿐이라 계정 자체가 필요 없습니다. 반면 <strong>Claude Code CLI(<code>claude</code> 명령)는 설치·로그인이 돼 있어야</strong> 태스크 매니저·PR 리뷰·클로드 세션 같은 에이전트 기능이 동작합니다 — 이미 Claude Code를 쓰고 있다면 별도 설정 없이 그대로 됩니다.</p>
 				</div>
 			</section>
 

@@ -125,7 +125,7 @@ npm run electron:dev</code></div>
 
 				<h3>Option A · Download the app</h3>
 				<p>
-					A macOS app signed and notarized with an Apple Developer ID is available right now on the
+					A macOS app signed with an Apple Developer ID (not yet notarized) is available right now on the
 					<a href="/en/download.html">download page</a>.
 				</p>
 
@@ -145,6 +145,7 @@ npm run start   # backend (8770) + frontend (5180) together</code></div>
 				<h3>Requirements</h3>
 				<table class="feature-table">
 					<tr><th>Item</th><th>Detail</th></tr>
+					<tr><td>Claude Code CLI</td><td><strong>Effectively required.</strong> The Task Manager, PR Review, and Claude Session tabs all run the local <code>claude</code> command as-is inside each worktree. Without it installed and logged in beforehand, the agent features simply won't run.</td></tr>
 					<tr><td>Node.js</td><td>20 or later (per the <code>engines</code> field in <code>package.json</code>)</td></tr>
 					<tr><td>OS</td><td>macOS for the Electron desktop app. The source doesn't block cross-platform runs, but only macOS is officially supported</td></tr>
 					<tr><td>Package manager</td><td>Both npm and yarn are supported (both lockfiles are present)</td></tr>
@@ -437,13 +438,14 @@ npm run electron:rebuild</code></div>
 			<section class="docs-section" id="configuration">
 				<h2>Configuration</h2>
 				<p>
-					The entire main screen is gated until initial setup is complete. Before that, it runs on
-					demo data.
+					You can land on the main screen without connecting a repo — before that, it runs on demo
+					data so you can explore the full layout. There's no mandatory onboarding screen to get past.
 				</p>
 				<h3>Integrations</h3>
 				<ul>
-					<li><strong>Required</strong> — GitHub (reads PR/issue/CI status, posts comments when needed)</li>
-					<li><strong>Optional</strong> — Sentry, AWS, Slack, Notion, Figma. Connect only what you need.</li>
+					<li><strong>Claude Code CLI</strong> — Effectively required. If it isn't installed and logged in locally, agent execution simply won't run (see <a href="#install">Requirements</a> above).</li>
+					<li><strong>GitHub</strong> — Only needed for the PR Review (Apply/Dispute) feature. If <code>gh auth login</code> is already set up locally it's picked up automatically; otherwise you can connect it with one click via OAuth inside the app. Every other tab works fine without it.</li>
+					<li><strong>Optional</strong> — Sentry, AWS, Slack, Notion, Figma. These only power link auto-detection when you paste a URL into a task title — no account is required if you don't have one; just type a plain title instead.</li>
 				</ul>
 				<h3>Network</h3>
 				<p>
@@ -497,6 +499,10 @@ npm run electron:rebuild</code></div>
 				<div class="faq-item">
 					<h3>Did it have a different name before?</h3>
 					<p>It was rebranded from the internal codename "MRM" → "OpenRM" → "OpenTask" — reflecting a task-centered identity in the name, based on what the top-level unit of work should be.</p>
+				</div>
+				<div class="faq-item">
+					<h3>Can I use it without a GitHub or Notion account?</h3>
+					<p>Yes. GitHub is only needed for PR Review — every other tab works fine without it. Notion, Figma, and Slack are just link auto-detection conveniences when you paste a URL into a task title, so no account is needed there either. The one real prerequisite is the <strong>Claude Code CLI</strong> (the <code>claude</code> command) — it must be installed and logged in for agent features like the Task Manager, PR Review, and Claude Session tab to run. If you're already a Claude Code user, it just works with no extra setup.</p>
 				</div>
 			</section>
 
