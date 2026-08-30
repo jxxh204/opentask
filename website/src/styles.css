@@ -690,6 +690,12 @@ footer {
 	   너비만큼 줄어들길 거부해 .docs-shell 전체(따라서 .docs-content 본문까지)가 뷰포트 밖으로
 	   밀려났다. .docs-content는 이미 min-width:0을 갖고 있었는데 같은 그리드의 이 쪽만 빠져 있었다. */
 	min-width: 0;
+	/* 항목이 20개+라 짧은 뷰포트에선 sticky 목록 높이가 뷰포트를 넘는다 — 넘는 만큼은 잘려서
+	   아예 안 보이고 도달할 방법도 없었다. 목록 자체에 독립 스크롤을 줘서 본문 스크롤과 무관하게
+	   끝까지 훑을 수 있게 한다. */
+	max-height: calc(100vh - 104px);
+	overflow-y: auto;
+	padding-right: 4px;
 }
 
 .docs-nav .group-label {
@@ -914,6 +920,8 @@ table.feature-table th {
 		border-bottom: 1px solid var(--line);
 		padding-bottom: 20px;
 		margin-bottom: 8px;
+		max-height: none;
+		overflow-y: visible;
 	}
 
 	.docs-nav .group-label {
