@@ -394,6 +394,64 @@ section + section {
 	line-height: 1.75;
 }
 
+/* ── live demo tabs ──────────────────────────────────────────────── */
+
+.demo-tab-list {
+	display: flex;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 20px;
+}
+
+.demo-tab {
+	appearance: none;
+	background: var(--card2);
+	border: 1px solid transparent;
+	color: var(--t2);
+	font-family: inherit;
+	font-size: 13.5px;
+	font-weight: 600;
+	padding: 9px 16px;
+	border-radius: 999px;
+	cursor: pointer;
+}
+
+.demo-tab:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+
+.demo-tab.active {
+	background: var(--ink);
+	color: var(--bg);
+}
+
+.demo-video-frame {
+	position: relative;
+	max-width: 860px;
+	margin: 0 auto;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-card);
+	overflow: hidden;
+	aspect-ratio: 8 / 5;
+	background: var(--card);
+}
+
+.demo-video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: none;
+}
+
+.demo-video.active {
+	display: block;
+}
+
 /* ── feature grid ────────────────────────────────────────────────── */
 
 .grid {

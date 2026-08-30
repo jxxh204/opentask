@@ -32,6 +32,28 @@ document.querySelectorAll('.codeblock').forEach((block) => {
 	block.appendChild(btn)
 })
 
+// 홈페이지 라이브 데모 탭 — 탭 클릭 시 해당 영상만 보이게 전환하고, 매번 처음부터 재생
+const demoTabs = document.querySelectorAll('.demo-tab')
+if (demoTabs.length) {
+	const demoVideos = document.querySelectorAll('.demo-video')
+	demoTabs.forEach((tab) => {
+		tab.addEventListener('click', () => {
+			const targetId = tab.dataset.target
+			demoTabs.forEach((t) => t.classList.toggle('active', t === tab))
+			demoVideos.forEach((v) => {
+				if (v.id === targetId) {
+					v.classList.add('active')
+					v.currentTime = 0
+					v.play()
+				} else {
+					v.classList.remove('active')
+					v.pause()
+				}
+			})
+		})
+	})
+}
+
 // docs 사이드바 스크롤 스파이
 const docsNav = document.querySelector('.docs-nav')
 if (docsNav) {
