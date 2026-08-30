@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>다운로드 — OpenTask</title>
-	<meta name="description" content="OpenTask macOS 데스크톱 앱 다운로드. Apple Developer ID로 서명된 v0.1.3 빌드를 바로 받거나 소스에서 직접 빌드할 수 있습니다." />
+	<title>Download — OpenTask</title>
+	<meta name="description" content="Download the OpenTask macOS desktop app. Grab the Apple Developer ID-signed v0.1.3 build now, or build it from source yourself." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,27 +12,27 @@
 	<link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-	<div class="banner">🔏 Apple Developer ID로 서명된 빌드입니다(공증 진행 전) — 첫 실행 시 "확인되지 않은 개발자" 경고가 뜨면 앱을 우클릭 → 열기로 실행하세요</div>
+	<div class="banner">🔏 Signed with Apple Developer ID (not yet notarized) — if macOS warns "unidentified developer" on first launch, right-click the app → Open</div>
 
 	<header class="nav">
 		<div class="container nav-inner">
-			<a class="brand" href="/">
+			<a class="brand" href="/en/index.html">
 				<img src="/icon.png" alt="" />
 				OpenTask
 			</a>
 			<nav class="nav-links">
-				<a href="/#features">기능</a>
-				<a href="/#workflow">워크플로</a>
-				<a href="/docs.html">Docs</a>
-				<a href="/changelog.html">릴리스 노트</a>
+				<a href="/en/index.html#features">Features</a>
+				<a href="/en/index.html#workflow">Workflow</a>
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/changelog.html">Changelog</a>
 				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
 			</nav>
 			<div class="nav-cta">
-				<a class="lang-switch" href="/en/download.html">EN</a>
-				<a class="btn btn-ghost" href="/docs.html">Docs</a>
-				<a class="btn btn-primary" href="/download.html">다운로드</a>
+				<a class="lang-switch" href="/download.html">한국어</a>
+				<a class="btn btn-ghost" href="/en/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/en/download.html">Download</a>
 			</div>
-			<button class="nav-toggle" aria-label="메뉴 열기">☰</button>
+			<button class="nav-toggle" aria-label="Open menu">☰</button>
 		</div>
 	</header>
 
@@ -40,19 +40,19 @@
 		<section style="padding-top: 56px;">
 			<div class="container">
 				<div class="section-head">
-					<h2>OpenTask 다운로드</h2>
-					<p>macOS용 데스크톱 앱입니다. v0.1.3 빌드를 바로 받을 수 있어요.</p>
+					<h2>Download OpenTask</h2>
+					<p>A macOS desktop app. The v0.1.3 build is available right now.</p>
 				</div>
 
 				<div class="download-card">
-					<img src="/icon.png" alt="OpenTask 아이콘" />
+					<img src="/icon.png" alt="OpenTask icon" />
 					<h3>OpenTask.app</h3>
-					<div class="ver">v0.1.3 · Apple Developer ID 서명(공증 전)</div>
-					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64.dmg">Apple Silicon (arm64) · .dmg 다운로드</a>
+					<div class="ver">v0.1.3 · Developer ID signed (not notarized)</div>
+					<a class="btn btn-primary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64.dmg">Apple Silicon (arm64) · Download .dmg</a>
 					<div style="height:10px"></div>
-					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64-mac.zip">.zip으로 다운로드</a>
-					<div class="arch-note">Intel(x64) 빌드는 준비 중입니다. 모든 릴리스는 <a href="https://github.com/jxxh204/opentask/releases" target="_blank" rel="noopener">GitHub Releases</a>에서도 받을 수 있어요.</div>
-					<div class="arch-note">아직 공증(notarize)은 안 됐습니다 — 첫 실행 시 macOS가 "확인되지 않은 개발자" 경고를 띄우면 앱 아이콘 우클릭 → 열기를 눌러주세요.</div>
+					<a class="btn btn-secondary" href="https://github.com/jxxh204/opentask/releases/download/v0.1.3/OpenTask-0.1.3-arm64-mac.zip">Download .zip</a>
+					<div class="arch-note">Intel (x64) build coming soon. All releases are also available on <a href="https://github.com/jxxh204/opentask/releases" target="_blank" rel="noopener">GitHub Releases</a>.</div>
+					<div class="arch-note">Not yet notarized — if macOS blocks the first launch as "unidentified developer," right-click the app icon → Open.</div>
 				</div>
 			</div>
 		</section>
@@ -60,29 +60,29 @@
 		<section>
 			<div class="container">
 				<div class="section-head">
-					<h2>소스에서 직접 빌드하기</h2>
-					<p>OpenTask는 오픈소스입니다. 정식 빌드를 기다리지 않고 지금 바로 로컬에서 빌드해 사용할 수 있습니다.</p>
+					<h2>Build it from source</h2>
+					<p>OpenTask is open source. You don't have to wait for the official build — run it locally right now.</p>
 				</div>
 				<div class="steps">
 					<div class="step">
 						<div class="marker"></div>
 						<div>
-							<h4>저장소 클론</h4>
-							<p>터미널에서 아래 명령으로 저장소를 내려받습니다.</p>
+							<h4>Clone the repository</h4>
+							<p>Grab the source with the command below in your terminal.</p>
 						</div>
 					</div>
 					<div class="step">
 						<div class="marker"></div>
 						<div>
-							<h4>의존성 설치 후 개발 모드 실행</h4>
-							<p><code>app/</code> 폴더에서 <code>npm install</code> 이후 <code>npm run electron:dev</code>로 데스크톱 창을 바로 띄울 수 있습니다.</p>
+							<h4>Install dependencies and run dev mode</h4>
+							<p>From the <code>app/</code> folder, run <code>npm install</code>, then <code>npm run electron:dev</code> to launch the desktop window directly.</p>
 						</div>
 					</div>
 					<div class="step">
 						<div class="marker"></div>
 						<div>
-							<h4>배포용 앱으로 패키징 (선택)</h4>
-							<p><code>npm run electron:build</code>로 <code>.dmg</code>/<code>.zip</code>을 직접 만들 수 있습니다.</p>
+							<h4>Package it as a distributable app (optional)</h4>
+							<p><code>npm run electron:build</code> produces a <code>.dmg</code>/<code>.zip</code> directly.</p>
 						</div>
 					</div>
 				</div>
@@ -93,7 +93,7 @@ npm install
 npm run electron:dev</code></div>
 				</div>
 				<div style="text-align:center; margin-top: 20px;">
-					<a class="btn btn-ghost" href="/docs.html#getting-started">Docs에서 자세히 보기 →</a>
+					<a class="btn btn-ghost" href="/en/docs.html#getting-started">More detail in the Docs →</a>
 				</div>
 			</div>
 		</section>
@@ -101,15 +101,15 @@ npm run electron:dev</code></div>
 		<section>
 			<div class="container">
 				<div class="section-head">
-					<h2>요구 사항</h2>
+					<h2>System requirements</h2>
 				</div>
 				<table class="req-table">
-					<tr><th>운영체제</th><td>macOS (Apple Silicon / Intel 모두 지원 예정)</td></tr>
-					<tr><th>배포 형태</th><td>.dmg / .zip — Apple Developer ID 서명(공증 전)</td></tr>
-					<tr><th>런타임</th><td>별도 설치 불필요 (Electron 번들 포함)</td></tr>
-					<tr><th>필요 전제조건</th><td>Claude Code CLI 설치·로그인 — 에이전트 실행(태스크 매니저 등)에 필요합니다</td></tr>
-					<tr><th>선택 연동</th><td>GitHub 계정(PR/이슈 조작 기능 사용 시), Sentry/AWS/Slack/Notion/Figma(선택) — 없어도 나머지 기능은 그대로 씁니다</td></tr>
-					<tr><th>데이터</th><td>로컬 컴퓨터에 저장, 기본값은 외부 네트워크에 열리지 않음(127.0.0.1)</td></tr>
+					<tr><th>Operating system</th><td>macOS (Apple Silicon / Intel, both planned)</td></tr>
+					<tr><th>Distribution format</th><td>.dmg / .zip — signed with Apple Developer ID (not notarized yet)</td></tr>
+					<tr><th>Runtime</th><td>No separate install needed (Electron is bundled)</td></tr>
+					<tr><th>Prerequisite</th><td>Claude Code CLI installed and logged in — required for agent execution (Task Manager, etc.)</td></tr>
+				<tr><th>Optional integrations</th><td>GitHub account (for PR/issue actions), Sentry/AWS/Slack/Notion/Figma (optional) — every other feature works without them</td></tr>
+					<tr><th>Data</th><td>Stored on your local machine; not exposed to the network by default (127.0.0.1)</td></tr>
 				</table>
 			</div>
 		</section>
@@ -117,15 +117,15 @@ npm run electron:dev</code></div>
 
 	<footer>
 		<div class="container footer-inner">
-			<a class="brand" href="/">
+			<a class="brand" href="/en/index.html">
 				<img src="/icon.png" alt="" />
 				OpenTask
 			</a>
 			<div class="footer-links">
-				<a href="/docs.html">Docs</a>
-				<a href="/download.html">다운로드</a>
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/download.html">Download</a>
 				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
-				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">라이선스 (MIT)</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">License (MIT)</a>
 			</div>
 			<div class="footer-copy">© 2026 OpenTask</div>
 		</div>

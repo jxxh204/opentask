@@ -36,3 +36,13 @@ export interface ChatTurn {
 export function getControlTranscript() {
 	return api.get<{ ok: boolean; turns: ChatTurn[] }>('/api/control/transcript')
 }
+
+// "비서에서 이미지가 안 붙여넣어져. 일반 클로드세션처럼 사용할 수 있어야해" — raw 터미널(XTerm)에
+// 붙여넣으면 claude CLI 자신이 클립보드 이미지를 감지해 처리하지만, 비서는 그 터미널 화면 대신
+// 채팅 말풍선 UI라 일반 <textarea>는 이미지 붙여넣기를 아예 못 받는다(§ ControlPane.tsx). 서버의
+// 기존 /api/dev/upload-image(원래 "요소 명령 첨부 이미지"용으로 만들어졌던 것, 지금까지 프론트
+// 호출부가 없었음)를 재사용 — dataUrl을 파일로 저장하고 절대경로를 돌려주면, 그 경로를 메시지에
+// 얹어 보내 비서(claude)가 Read 툴로 직접 확인하게 한다.
+export function uploadImage(dataUrl: string) {
+	return api.post<{ ok: boolean; path?: string; error?: string }>('/api/dev/upload-image', { dataUrl })
+}

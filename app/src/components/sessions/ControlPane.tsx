@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ClipboardEventHandler } from 'react'
 import { marked } from 'marked'
-import { getControlState, startControl, stopControl, askControl, getControlTranscript } from '../../api/control'
+import { getControlState, startControl, stopControl, askControl, getControlTranscript, uploadImage } from '../../api/control'
 import type { ControlState, ChatTurn, ChatPart } from '../../api/control'
 import StatusDot from '../common/StatusDot'
 import styles from './ControlPane.module.css'
@@ -75,9 +75,11 @@ export default function ControlPane() {
 	const [draft, setDraft] = useState('')
 	const [sending, setSending] = useState(false)
 	const [pendingUser, setPendingUser] = useState<string | null>(null)
+	const [uploadingImage, setUploadingImage] = useState(false)
 	const startedRef = useRef(false)
 	const turnCountAtSendRef = useRef(0)
 	const bodyRef = useRef<HTMLDivElement>(null)
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
 	useEffect(() => {
 		let cancelled = false
@@ -155,6 +157,44 @@ export default function ControlPane() {
 		}
 	}
 
+	// "비서에서 이미지가 안 붙여넣어져. 일반 클로드세션처럼 사용할 수 있어야해" — raw 터미널
+	// (XTerm)에 붙여넣으면 claude CLI 자신이 클립보드 이미지를 잡아서 처리하지만, 비서는 그 화면
+	// 대신 채팅 UI라(§ 위 "대화형으로 가자") 일반 <textarea>는 이미지 자체를 못 받는다. 저장 후
+	// 절대경로를 텍스트로 얹어 보내면 비서(claude)가 자기 Read 툴로 그 파일을 직접 열어본다 —
+	// 눈에 보이는 이미지 미리보기 대신 텍스트 참조라 단순하지만, 실제로 보게 하는 목적은 같다.
+	const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = async (e) => {
+		const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith('image/'))
+		if (!item) return
+		e.preventDefault()
+		const file = item.getAsFile()
+		if (!file) return
+		setUploadingImage(true)
+		try {
+			const dataUrl = await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader()
+				reader.onload = () => resolve(String(reader.result))
+				reader.onerror = () => reject(reader.error)
+				reader.readAsDataURL(file)
+			})
+			const r = await uploadImage(dataUrl)
+			if (!r.ok || !r.path) {
+				setError(r.error || '이미지 업로드 실패')
+				return
+			}
+			const insertText = `[이미지 첨부: ${r.path}]`
+			const ta = textareaRef.current
+			setDraft((d) => {
+				const start = ta ? (ta.selectionStart ?? d.length) : d.length
+				const end = ta ? (ta.selectionEnd ?? d.length) : d.length
+				return d.slice(0, start) + insertText + d.slice(end)
+			})
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err))
+		} finally {
+			setUploadingImage(false)
+		}
+	}
+
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
@@ -213,12 +253,15 @@ export default function ControlPane() {
 							</div>
 						)}
 					</div>
+					{uploadingImage && <div className={styles.imageUploading}>이미지 업로드 중…</div>}
 					<div className={styles.inputRow}>
 						<textarea
+							ref={textareaRef}
 							className={styles.textarea}
 							value={draft}
-							placeholder="비서에게 메시지…"
+							placeholder="비서에게 메시지… (이미지 붙여넣기 가능)"
 							onChange={(e) => setDraft(e.target.value)}
+							onPaste={handlePaste}
 							onKeyDown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey) {
 									e.preventDefault()

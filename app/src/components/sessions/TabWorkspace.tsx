@@ -516,7 +516,7 @@ export default function TabWorkspace() {
 						</div>
 					))}
 				</div>
-				<div className={styles.body}>{activeTabInstance?.kind === 'terminal' && <AdHocTerminalPane tabId={activeTabInstance.id} cwd={wtPath} />}</div>
+				<div className={styles.body}>{activeTabInstance?.kind === 'terminal' && <AdHocTerminalPane key={activeTabInstance.id} tabId={activeTabInstance.id} cwd={wtPath} />}</div>
 			</div>
 		)
 	}
@@ -565,7 +565,11 @@ export default function TabWorkspace() {
 				    탭 안에 끼워 넣어도 좌측 네비의 비서(CONTROL_NODE_ID)와 완전히 같은 대화가 이어진다.
 				    업무 범위(앱 전체 조작)는 그대로, 보여주는 자리만 늘어난 것. */}
 				{t?.kind === 'control' && <ControlPane />}
-				{t?.kind === 'subtask' && t.subtaskId && t.parentTaskId && <SubtaskSessionPane tabId={t.id} subtaskId={t.subtaskId} parentTaskId={t.parentTaskId} fallbackCwd={claudeCwd} />}
+				{/* key=t.id — 없으면 "두 개 서브태스크 탭을 바꿔도 안 바뀌는" 버그가 난다. liveSession/liveCwd가
+				    로컬 state라 tabId/subtaskId prop만 바뀌어서는(React가 같은 위치·같은 컴포넌트 타입이라
+				    재사용) 초기화가 안 되고 이전 탭의 세션을 계속 붙들고 있는다 — 탭 인스턴스가 바뀌면
+				    아예 새 인스턴스로 마운트되게 강제한다. */}
+				{t?.kind === 'subtask' && t.subtaskId && t.parentTaskId && <SubtaskSessionPane key={t.id} tabId={t.id} subtaskId={t.subtaskId} parentTaskId={t.parentTaskId} fallbackCwd={claudeCwd} />}
 				{t?.kind === 'terminal' &&
 					(mainSession ? (
 						<div className={styles.termWrap}>
@@ -577,7 +581,9 @@ export default function TabWorkspace() {
 					) : (
 						<NoSessionStub folderKind={found!.kind === 'folder'} />
 					))}
-				{t?.kind === 'claude' && (claudeCwd ? <ClaudeSessionPane tabId={t.id} cwd={claudeCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
+				{/* key=t.id — SubtaskSessionPane과 같은 버그: startedRef가 로컬 ref라 다른 클로드 세션 탭으로
+				    바꿔도 "이미 시작함" 상태가 새 탭까지 이어져 그 탭은 영영 세션이 안 켜졌다. */}
+				{t?.kind === 'claude' && (claudeCwd ? <ClaudeSessionPane key={t.id} tabId={t.id} cwd={claudeCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
 				{t?.kind === 'server' && (realProjectCwd ? <ServerPane cwd={realProjectCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
 				{t?.kind === 'browser' && <BrowserPane taskId={activeNodeId!} cwd={realProjectCwd} />}
 			</>

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>OpenTask — 병렬 AI 개발 관제탑</title>
-	<meta name="description" content="태스크만 만들면 워크트리·브랜치·AI 세션은 OpenTask가 알아서 돌아가는 macOS 데스크톱 앱. 캘린더, PR 리뷰, 크론잡까지 탭 전환 없이 한 화면에서." />
+	<title>OpenTask — Parallel AI Dev Control Tower</title>
+	<meta name="description" content="Write down a task and OpenTask runs the worktree, branch, and AI session underneath it — automatically. Calendar, PR review, and cron jobs, all in one screen, no tab switching." />
 	<link rel="icon" type="image/png" href="/favicon-32.png" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -14,56 +14,57 @@
 <body>
 	<header class="nav">
 		<div class="container nav-inner">
-			<a class="brand" href="/">
+			<a class="brand" href="/en/index.html">
 				<img src="/icon.png" alt="" />
 				OpenTask
 			</a>
 			<nav class="nav-links">
-				<a href="#features">기능</a>
-				<a href="#workflow">워크플로</a>
-				<a href="/docs.html">Docs</a>
-				<a href="/changelog.html">릴리스 노트</a>
+				<a href="#features">Features</a>
+				<a href="#workflow">Workflow</a>
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/changelog.html">Changelog</a>
 				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
 			</nav>
 			<div class="nav-cta">
-				<a class="lang-switch" href="/en/index.html">EN</a>
-				<a class="btn btn-ghost" href="/docs.html">Docs</a>
-				<a class="btn btn-primary" href="/download.html">다운로드</a>
+				<a class="lang-switch" href="/index.html">한국어</a>
+				<a class="btn btn-ghost" href="/en/docs.html">Docs</a>
+				<a class="btn btn-primary" href="/en/download.html">Download</a>
 			</div>
-			<button class="nav-toggle" aria-label="메뉴 열기">☰</button>
+			<button class="nav-toggle" aria-label="Open menu">☰</button>
 		</div>
 	</header>
 
 	<main>
 		<section class="hero">
 			<div class="container">
-				<img class="hero-icon" src="/icon.png" alt="OpenTask 아이콘" />
-				<h1>태스크만 만들면,<br />워크트리·세션은 알아서 돌아간다</h1>
+				<img class="hero-icon" src="/icon.png" alt="OpenTask icon" />
+				<h1>Write down the task.<br />The worktree and session run themselves.</h1>
 				<p class="lede">
-					워크트리, 브랜치, 터미널 세션 — 전부 태스크 아래 디테일입니다. 할 일을 태스크로 적으면
-					격리된 git worktree가 열리고, 태스크 매니저가 순차 웨이브로 AI 에이전트를 지휘합니다.
-					캘린더로 일정을 잡고, 크론잡으로 반복 업무를 자동화하고, PR 리뷰에 직접 적용·항의까지 —
-					탭 전환 없이 한 화면에서.
+					Worktree, branch, terminal session — all of it is a detail underneath the task. Write
+					down what needs doing and OpenTask opens an isolated git worktree, then drives AI agents
+					through it in sequential waves. Schedule work on the calendar, automate recurring chores
+					with cron jobs, and apply or dispute PR review comments directly — all without switching tabs.
 				</p>
 				<div class="hero-actions">
-					<a class="btn btn-primary btn-lg" href="/download.html">macOS용 다운로드</a>
-					<a class="btn btn-secondary btn-lg" href="/docs.html">Docs 보기</a>
+					<a class="btn btn-primary btn-lg" href="/en/download.html">Download for macOS</a>
+					<a class="btn btn-secondary btn-lg" href="/en/docs.html">Read the Docs</a>
 				</div>
-				<div class="hero-meta">macOS 지원 · MIT 라이선스 · 오픈소스 · 로컬 우선(데이터는 내 컴퓨터에 저장)</div>
+				<div class="hero-meta">macOS · MIT licensed · open source · local-first (your data stays on your machine)</div>
 			</div>
 		</section>
 
 		<section id="positioning">
 			<div class="container">
 				<div class="statement">
-					<blockquote>“리뷰에 ‘적용’을 누르면, 실제로 그 서브태스크의 살아있는 터미널 세션에 지시가 전달됩니다.”</blockquote>
+					<blockquote>“Click Apply on a review, and the instruction is delivered straight into that subtask's live terminal session.”</blockquote>
 					<p>
-						OpenTask는 상태를 보여주기만 하는 대시보드나 태스크 트래커가 아닙니다. 실제 tmux 세션·git
-						worktree·GitHub API에 직접 물려 있는 제어판입니다. PR 리뷰에 <strong style="color:var(--ink)">적용</strong>을
-						누르면 커밋·푸시까지 실제로 진행되고, <strong style="color:var(--ink)">항의</strong>를 누르면 실제
-						GitHub에 공개 답글이 게시됩니다. 캘린더에서 일정을 드래그하면 서브태스크의 실제 예정일이
-						바뀌고, 크론잡은 정해진 시각에 진짜로 새 일감을 만듭니다 — 일반 대시보드는 이 살아있는
-						연결을 흉내낼 수 없습니다.
+						OpenTask isn't a dashboard or a task tracker that only shows you state. It's a control
+						panel wired directly into real tmux sessions, git worktrees, and the GitHub API.
+						Click <strong style="color:var(--ink)">Apply</strong> on a PR review and it actually
+						commits and pushes; click <strong style="color:var(--ink)">Dispute</strong> and a
+						public reply is posted to GitHub. Drag an item on the calendar and the subtask's real
+						due date changes; a cron job fires at its scheduled time and genuinely creates a new
+						task — a plain dashboard can't fake this kind of live connection.
 					</p>
 				</div>
 			</div>
@@ -72,37 +73,37 @@
 		<section id="features">
 			<div class="container">
 				<div class="section-head">
-					<h2>한 화면에서 끝나는 워크플로</h2>
-					<p>태스크 생성부터 에이전트 실행, PR 리뷰, 일정 관리까지 — 탭 전환 없이 판단하고 조작합니다.</p>
+					<h2>A workflow that never leaves one screen</h2>
+					<p>From creating a task to running agents, reviewing PRs, and managing schedules — without switching tabs.</p>
 				</div>
 				<div class="grid">
 					<div class="card">
-						<h3>태스크 매니저</h3>
-						<p>서브태스크가 생기는 순간 AI 오케스트레이터가 자동으로 통제를 시작해 순차 웨이브로 지휘합니다. 실시간 터미널과 계획·지시·보고 로그를 함께 봅니다.</p>
+						<h3>Task Manager</h3>
+						<p>The moment a subtask appears, the AI orchestrator takes over and drives the queue in sequential waves — watch the live terminal alongside its plan / dispatch / report log.</p>
 					</div>
 					<div class="card">
-						<h3>터미널 · 브라우저 · 로컬 서버</h3>
-						<p>서브태스크(워크트리)마다 실제 tmux 터미널, 임베디드 브라우저, 로컬 dev 서버 탭을 열어 결과를 바로 확인합니다.</p>
+						<h3>Terminal · Browser · Local Server</h3>
+						<p>Each subtask (worktree) gets real tmux terminals, an embedded browser, and a local dev-server tab so you can check results on the spot.</p>
 					</div>
 					<div class="card">
-						<h3>캘린더</h3>
-						<p>서브태스크 일정을 주/월 단위로 배치하고 드래그로 재조정합니다. QA 기간처럼 막아야 하는 구간은 차단 기간으로 표시합니다.</p>
+						<h3>Calendar</h3>
+						<p>Lay subtasks out on a week or month view and drag to reschedule. Mark off periods — like a QA freeze — where work shouldn't happen, as blocked periods.</p>
 					</div>
 					<div class="card">
-						<h3>PR 리뷰</h3>
-						<p>리뷰 코멘트에 <strong>적용</strong>을 누르면 실제로 커밋·푸시까지 진행되고, <strong>항의</strong>를 누르면 GitHub에 공개 답글이 게시됩니다.</p>
+						<h3>PR Review</h3>
+						<p>Click <strong>Apply</strong> on a comment and it actually commits and pushes; click <strong>Dispute</strong> and a public reply goes straight to GitHub.</p>
 					</div>
 					<div class="card">
-						<h3>크론잡</h3>
-						<p>N분마다 · 매일 · 매주 — 정해진 시각에 실제로 새 일감을 자동 생성합니다.</p>
+						<h3>Cron Jobs</h3>
+						<p>Every N minutes, daily, or weekly — a new task is genuinely created for you at the scheduled time.</p>
 					</div>
 					<div class="card">
-						<h3>비서</h3>
-						<p>캘린더 · 크론잡 · 설정까지 — 태스크 하나가 아니라 앱 전체를 대화로 조작합니다.</p>
+						<h3>Assistant</h3>
+						<p>Calendar, cron jobs, settings — run the whole app by conversation, not just one task.</p>
 					</div>
 				</div>
 				<div style="text-align:center; margin-top: 28px;">
-					<a class="btn btn-ghost" href="/docs.html#features">전체 기능 보기 →</a>
+					<a class="btn btn-ghost" href="/en/docs.html#features">See all features →</a>
 				</div>
 			</div>
 		</section>
@@ -110,16 +111,16 @@
 		<section id="workflow">
 			<div class="container">
 				<div class="section-head">
-					<h2>태스크 생성부터 자동화까지, 하나의 루프</h2>
-					<p>OpenTask는 이 루프가 끊기지 않도록 각 단계를 같은 화면 안에서 연결합니다.</p>
+					<h2>One loop, from creating a task to automating it</h2>
+					<p>OpenTask keeps every stage of this loop connected in the same screen.</p>
 				</div>
 				<div class="flow">
-					<div class="flow-step"><div class="n">1</div><div class="label">태스크</div></div>
-					<div class="flow-step"><div class="n">2</div><div class="label">서브태스크</div></div>
-					<div class="flow-step"><div class="n">3</div><div class="label">에이전트 웨이브</div></div>
-					<div class="flow-step"><div class="n">4</div><div class="label">PR 리뷰</div></div>
-					<div class="flow-step"><div class="n">5</div><div class="label">캘린더 반영</div></div>
-					<div class="flow-step"><div class="n">6</div><div class="label">크론잡 자동화</div></div>
+					<div class="flow-step"><div class="n">1</div><div class="label">Task</div></div>
+					<div class="flow-step"><div class="n">2</div><div class="label">Subtask</div></div>
+					<div class="flow-step"><div class="n">3</div><div class="label">Agent wave</div></div>
+					<div class="flow-step"><div class="n">4</div><div class="label">PR review</div></div>
+					<div class="flow-step"><div class="n">5</div><div class="label">Calendar sync</div></div>
+					<div class="flow-step"><div class="n">6</div><div class="label">Cron automation</div></div>
 				</div>
 			</div>
 		</section>
@@ -127,37 +128,37 @@
 		<section id="principles">
 			<div class="container">
 				<div class="section-head">
-					<h2>제품 원칙</h2>
+					<h2>Product principles</h2>
 				</div>
 				<div class="principles">
 					<div class="principle">
 						<div class="body">
-							<h4>살아있는 연결을 우선한다</h4>
-							<p>상태 스냅샷보다, 실제 세션 · 저장소 · API에 물린 실제 제어를 항상 우선합니다.</p>
+							<h4>Live connections come first</h4>
+							<p>Real control wired to actual sessions, repos, and APIs always wins over a state snapshot.</p>
 						</div>
 					</div>
 					<div class="principle">
 						<div class="body">
-							<h4>컨텍스트 스위칭 제거가 핵심 가치다</h4>
-							<p>GitHub · Slack · Notion · 터미널을 오가지 않고, 한 화면에서 판단하고 조작할 수 있어야 합니다.</p>
+							<h4>Removing context switching is the core value</h4>
+							<p>You should be able to decide and act from one screen — no bouncing between GitHub, Slack, Notion, and terminals.</p>
 						</div>
 					</div>
 					<div class="principle">
 						<div class="body">
-							<h4>팀 규모에 맞게 확장하되 속도를 잃지 않는다</h4>
-							<p>소규모 팀이 함께 쓰지만, 무거운 협업 오버헤드(권한 체계, 승인 플로우)를 강제하지 않습니다.</p>
+							<h4>Scale with the team, without losing solo-operator speed</h4>
+							<p>Built for small teams working together, without forcing heavy collaboration overhead like permission systems or approval flows.</p>
 						</div>
 					</div>
 					<div class="principle">
 						<div class="body">
-							<h4>되돌릴 수 없는 실제 액션은 명확히 구분한다</h4>
-							<p>GitHub 게시, 세션 지시처럼 되돌릴 수 없는 액션은 로그성 정보와 시각적으로 분리됩니다.</p>
+							<h4>Irreversible real actions are clearly set apart</h4>
+							<p>Actions you can't undo — posting to GitHub, injecting into a live session — are visually separated from mere log information.</p>
 						</div>
 					</div>
 					<div class="principle">
 						<div class="body">
-							<h4>설정 전에는 안전하게 게이팅한다</h4>
-							<p>필수 설정이 끝나기 전까지 위험하거나 의미 없는 상태로 핵심 페이지에 진입시키지 않습니다.</p>
+							<h4>Safely gated until setup is done</h4>
+							<p>You're never dropped into a risky or meaningless state on a core screen before required setup is complete.</p>
 						</div>
 					</div>
 				</div>
@@ -167,15 +168,15 @@
 		<section id="brand">
 			<div class="container">
 				<div class="section-head">
-					<h2>절제된 시맨틱 컬러, 라이트/다크 모두 지원</h2>
-					<p>상태색만 뚜렷하게 씁니다 — 파랑은 PR/링크, 초록은 진행·성공, 호박색은 대기·주의, 빨강은 실패·삭제.</p>
+					<h2>Restrained semantic color, light and dark alike</h2>
+					<p>Only state colors stand out — blue for PRs/links, green for progress/success, amber for waiting/caution, red for failure/deletion.</p>
 				</div>
 				<div class="legend">
-					<span class="chip"><span class="dot" style="background:var(--blue)"></span>PR · 링크</span>
-					<span class="chip"><span class="dot" style="background:var(--green)"></span>진행 · 성공 · 병렬</span>
-					<span class="chip"><span class="dot" style="background:var(--amber)"></span>대기 · 주의</span>
-					<span class="chip"><span class="dot" style="background:var(--red)"></span>실패 · 삭제</span>
-					<span class="chip"><span class="dot" style="background:var(--violet)"></span>에이전트 · 선택</span>
+					<span class="chip"><span class="dot" style="background:var(--blue)"></span>PR · link</span>
+					<span class="chip"><span class="dot" style="background:var(--green)"></span>progress · success · parallel</span>
+					<span class="chip"><span class="dot" style="background:var(--amber)"></span>waiting · caution</span>
+					<span class="chip"><span class="dot" style="background:var(--red)"></span>failure · delete</span>
+					<span class="chip"><span class="dot" style="background:var(--violet)"></span>agent · selection</span>
 				</div>
 			</div>
 		</section>
@@ -183,12 +184,12 @@
 		<section id="oss">
 			<div class="container" style="text-align:center;">
 				<div class="section-head">
-					<h2>MIT 라이선스로 공개된 제어판</h2>
-					<p>소스를 직접 빌드해 셀프호스팅하거나, GitHub에서 기여할 수 있습니다. 로컬 실행이 기본이며, 기본값은 127.0.0.1 loopback 바인딩입니다.</p>
+					<h2>A control panel released under MIT</h2>
+					<p>Build it from source and self-host it, or contribute on GitHub. Local execution is the default, and it binds to 127.0.0.1 loopback out of the box.</p>
 				</div>
 				<div class="hero-actions">
-					<a class="btn btn-secondary btn-lg" href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub에서 보기</a>
-					<a class="btn btn-ghost btn-lg" href="/docs.html#getting-started">소스에서 빌드하기</a>
+					<a class="btn btn-secondary btn-lg" href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">View on GitHub</a>
+					<a class="btn btn-ghost btn-lg" href="/en/docs.html#getting-started">Build from source</a>
 				</div>
 			</div>
 		</section>
@@ -196,15 +197,15 @@
 
 	<footer>
 		<div class="container footer-inner">
-			<a class="brand" href="/">
+			<a class="brand" href="/en/index.html">
 				<img src="/icon.png" alt="" />
 				OpenTask
 			</a>
 			<div class="footer-links">
-				<a href="/docs.html">Docs</a>
-				<a href="/download.html">다운로드</a>
+				<a href="/en/docs.html">Docs</a>
+				<a href="/en/download.html">Download</a>
 				<a href="https://github.com/jxxh204/opentask" target="_blank" rel="noopener">GitHub</a>
-				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">라이선스 (MIT)</a>
+				<a href="https://github.com/jxxh204/opentask/blob/master/LICENSE" target="_blank" rel="noopener">License (MIT)</a>
 			</div>
 			<div class="footer-copy">© 2026 OpenTask</div>
 		</div>

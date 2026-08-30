@@ -286,6 +286,12 @@
 	font-weight: 700;
 }
 
+.imageUploading {
+	flex: none;
+	font-size: 11px;
+	color: var(--t3);
+	padding: 0 16px 6px;
+}
 .inputRow {
 	flex: none;
 	display: flex;
