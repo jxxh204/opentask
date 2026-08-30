@@ -214,6 +214,24 @@
 	background: var(--atint);
 	color: var(--amber);
 }
+/* "클로드세션 동작 여부에 따라서... 여러 상태가 보여야해" — running/waiting 둘뿐이던 헤더 상태 원을
+   TaskRow의 statusDot(§ TaskRow.module.css needsAuth/needsInput)과 같은 팔레트로 맞춘다 — 지휘자
+   (태스크 매니저) 세션이 인증/질문 대기 중이면 빨강 펄스로 놓치지 않게. */
+.needsAuth,
+.needsInput {
+	background: var(--rtint);
+	color: var(--red);
+	animation: folderAlert 1.4s ease-in-out infinite;
+}
+@keyframes folderAlert {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
 .spinner {
 	width: 10px;
 	height: 10px;

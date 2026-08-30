@@ -67,6 +67,13 @@ interface TabsState {
 	activeNodeId: string | null
 	tabsByNode: Record<string, TabInstance[]>
 	activeTabByNode: Record<string, string>
+	// "태스크를 반으로 나누면 탭도 반으로 나뉘어야해. vscode처럼" — 단일 탭을 오른쪽에 고정만 하던
+	// 이전 방식(splitTabByNode) 대신, VSCode 에디터 그룹처럼 진짜 두 번째 탭 그룹을 둔다. 이 배열에
+	// 담긴 탭 id는 "오른쪽 그룹" 소속 — tabsByNode의 순서·존재 자체는 그대로 두고 소속만 여기로 갈라
+	// 관리한다(탭을 지우거나 다시 부를 때 로직을 하나로 유지하기 위함). 비어있으면 분할 안 된 상태 —
+	// 왼쪽(activeTabByNode) 하나만 쓰던 이전 화면 그대로 보인다.
+	rightTabIdsByNode: Record<string, string[]>
+	activeRightTabByNode: Record<string, string>
 	// Cmd/Ctrl+Shift+T(VSCode 기본) — 닫은 탭을 노드별 스택으로 보관, 마지막 것부터 되살린다.
 	closedByNode: Record<string, TabInstance[]>
 	// "클로드 세션" 탭은 매 인스턴스가 독립된 tmux 세션이다(Term.create는 detached라 탭을 닫아도
@@ -86,12 +93,19 @@ interface TabsState {
 	cycleTab(id: string, dir: 1 | -1): void
 	renameTab(id: string, tabId: string, label: string): void
 	setClaudeSession(tabId: string, name: string, modelLabel: string | null): void
+	// 오른쪽 그룹으로/에서 옮기기 — 드래그로 탭바 자체를 끌어다 놓을 때 호출.
+	moveTabToRight(id: string, tabId: string): void
+	moveTabToLeft(id: string, tabId: string): void
+	setActiveRightTab(id: string, tabId: string): void
+	openTabInRight(id: string, kind: TabKind): void
 }
 
 export const useTabsStore = create<TabsState>()((set, get) => ({
 	activeNodeId: null,
 	tabsByNode: {},
 	activeTabByNode: {},
+	rightTabIdsByNode: {},
+	activeRightTabByNode: {},
 	closedByNode: {},
 	claudeSessionByTab: {},
 	claudeModelByTab: {},
@@ -164,10 +178,19 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 		const s = get()
 		const closing = (s.tabsByNode[id] ?? []).find((t) => t.id === tabId)
 		const tabs = (s.tabsByNode[id] ?? []).filter((t) => t.id !== tabId)
-		const wasActive = s.activeTabByNode[id] === tabId
+		const rightIds = (s.rightTabIdsByNode[id] ?? []).filter((x) => x !== tabId)
+		const wasRight = (s.rightTabIdsByNode[id] ?? []).includes(tabId)
+		const leftTabs = tabs.filter((t) => !rightIds.includes(t.id))
+		const rightTabs = tabs.filter((t) => rightIds.includes(t.id))
+		const wasActiveLeft = !wasRight && s.activeTabByNode[id] === tabId
+		const wasActiveRight = wasRight && s.activeRightTabByNode[id] === tabId
 		set({
 			tabsByNode: { ...s.tabsByNode, [id]: tabs },
-			activeTabByNode: wasActive ? { ...s.activeTabByNode, [id]: tabs[tabs.length - 1]?.id ?? '' } : s.activeTabByNode,
+			activeTabByNode: wasActiveLeft ? { ...s.activeTabByNode, [id]: leftTabs[leftTabs.length - 1]?.id ?? '' } : s.activeTabByNode,
+			// 오른쪽 그룹(§ "탭도 반으로 나뉘어야해")에서 탭이 닫히면 그 그룹 안에서만 다음 탭으로 넘기고,
+			// 그룹이 통째로 비면 rightTabIdsByNode도 비어 자연히 분할이 접힌다(빈 오른쪽 창이 안 남음).
+			rightTabIdsByNode: wasRight ? { ...s.rightTabIdsByNode, [id]: rightIds } : s.rightTabIdsByNode,
+			activeRightTabByNode: wasActiveRight ? { ...s.activeRightTabByNode, [id]: rightTabs[rightTabs.length - 1]?.id ?? '' } : s.activeRightTabByNode,
 			closedByNode: closing ? { ...s.closedByNode, [id]: [...(s.closedByNode[id] ?? []), closing] } : s.closedByNode,
 		})
 	},
@@ -210,4 +233,48 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 			claudeSessionByTab: { ...s.claudeSessionByTab, [tabId]: name },
 			claudeModelByTab: { ...s.claudeModelByTab, [tabId]: modelLabel },
 		})),
+
+	// "탭도 반으로 나뉘어야해. vscode처럼" — 왼쪽 그룹에 있던 탭을 오른쪽 그룹으로 옮긴다. 왼쪽에 남는
+	// 탭이 하나도 없어지면(=지금 이 탭이 왼쪽의 유일한 탭) 왼쪽이 텅 빈 채로 분할되는 어색한 상태라
+	// 그 경우는 조용히 무시한다.
+	moveTabToRight: (id, tabId) => {
+		const s = get()
+		const rightIds = s.rightTabIdsByNode[id] ?? []
+		if (rightIds.includes(tabId)) return
+		const leftTabs = (s.tabsByNode[id] ?? []).filter((t) => !rightIds.includes(t.id) && t.id !== tabId)
+		if (leftTabs.length === 0) return
+		const wasActiveLeft = s.activeTabByNode[id] === tabId
+		set({
+			rightTabIdsByNode: { ...s.rightTabIdsByNode, [id]: [...rightIds, tabId] },
+			activeRightTabByNode: { ...s.activeRightTabByNode, [id]: tabId },
+			// 옮긴 탭이 왼쪽에서 활성 탭이었으면 왼쪽 활성 탭을 남은 탭 중 하나로 다시 잡아준다.
+			activeTabByNode: wasActiveLeft ? { ...s.activeTabByNode, [id]: leftTabs[leftTabs.length - 1].id } : s.activeTabByNode,
+		})
+	},
+	// 오른쪽 그룹의 탭을 왼쪽으로 되돌린다 — 오른쪽 그룹이 비면 rightTabIdsByNode도 비어 분할이 자연히
+	// 접힌다(렌더 쪽은 그 배열 길이만 본다).
+	moveTabToLeft: (id, tabId) => {
+		const s = get()
+		const rightIds = (s.rightTabIdsByNode[id] ?? []).filter((x) => x !== tabId)
+		const wasActiveRight = s.activeRightTabByNode[id] === tabId
+		const rightTabs = (s.tabsByNode[id] ?? []).filter((t) => rightIds.includes(t.id))
+		set({
+			rightTabIdsByNode: { ...s.rightTabIdsByNode, [id]: rightIds },
+			activeRightTabByNode: wasActiveRight ? { ...s.activeRightTabByNode, [id]: rightTabs[rightTabs.length - 1]?.id ?? '' } : s.activeRightTabByNode,
+			activeTabByNode: { ...s.activeTabByNode, [id]: tabId },
+		})
+	},
+	setActiveRightTab: (id, tabId) => set((s) => ({ activeRightTabByNode: { ...s.activeRightTabByNode, [id]: tabId } })),
+	// 오른쪽 그룹 전용 "+" — 왼쪽과 똑같이 새 탭 인스턴스를 만들되 소속만 오른쪽으로 바로 넣는다.
+	openTabInRight: (id, kind) => {
+		set((s) => {
+			const tabs = s.tabsByNode[id] ?? []
+			const next: TabInstance = { id: genTabId(), kind }
+			return {
+				tabsByNode: { ...s.tabsByNode, [id]: [...tabs, next] },
+				rightTabIdsByNode: { ...s.rightTabIdsByNode, [id]: [...(s.rightTabIdsByNode[id] ?? []), next.id] },
+				activeRightTabByNode: { ...s.activeRightTabByNode, [id]: next.id },
+			}
+		})
+	},
 }))

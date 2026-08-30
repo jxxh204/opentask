@@ -41,7 +41,7 @@ async function tick() {
 	if (Settings.get('agentNotify') === false) {
 		// 꺼져 있어도 상태는 계속 추적(다시 켰을 때 오래된 전이로 폭탄 알림 방지)
 		try {
-			const sessions = await Term.list()
+			const sessions = await Term.listLive()
 			const now = {}
 			for (const s of sessions) now[s.name] = stateOf(s)
 			prev = now
@@ -50,7 +50,10 @@ async function tick() {
 	}
 	let sessions, built
 	try {
-		;[sessions, built] = await Promise.all([Term.list(), Tasks.build().catch(() => ({ tasks: [] }))])
+		// "notify.cjs가 완전히 죽어있음" — Term.list()는 status 필드를 아예 안 채운다(status는
+		// Term.listLive()에서만 계산됨). 그래서 stateOf()가 매번 'idle'만 리턴해 상태 전이가 절대
+		// 감지 안 됐다 — 알림이 한 번도 안 울린 근본 원인.
+		;[sessions, built] = await Promise.all([Term.listLive(), Tasks.build().catch(() => ({ tasks: [] }))])
 	} catch (_) {
 		return
 	}

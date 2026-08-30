@@ -902,7 +902,7 @@ const server = http.createServer((req, res) => {
   // 체이닝으로" — 태스크 단위(위 폴더 오케스트레이션)와 별개로, 태스크 하나의 실제 코드 작업을
   // 서브태스크(개발 단위) 체인으로 진행한다.
   if (url.startsWith('/api/tasks/') && url.includes('/subtask-work/')) {
-    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state)$/)
+    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state|report-blocked)$/)
     if (sm) {
       const tid = decodeURIComponent(sm[1])
       const action = sm[2]
@@ -910,6 +910,13 @@ const server = http.createServer((req, res) => {
       if (action === 'state' && req.method === 'GET') return done(Orchestrator.getSubtaskWorkState(tid))
       if (action === 'start' && req.method === 'POST') return done(Orchestrator.startSubtaskWork(tid))
       if (action === 'advance' && req.method === 'POST') return done(Orchestrator.advanceSubtaskWork(tid))
+      // "업무가 멈추든" — 완료(advance)와 대칭되는 막힘 보고. advanceLine과 같은 자리에서 launchSubtask의
+      // seed가 서브태스크 자신에게 curl로 이걸 부르라고 지시한다(§ orchestrator.cjs blockedLine).
+      if (action === 'report-blocked' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => done(Orchestrator.reportSubtaskBlocked(tid, b && b.reason)))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
     }
   }
   // ── 지휘자(conductor) 세션 (Phase 3.4) — 오케스트레이터 자체의 클로드 세션. say/event는 지휘자
@@ -2303,6 +2310,7 @@ function startServer(opts = {}) {
       loop(C.pollTmux, 5000)
       loop(C.pollPorts, 10000)
       loop(C.pollPRs, 30000)
+      loop(Orchestrator.checkStalledSubtasks, 60000) // "업무가 어떻든간에" — 침묵형 막힘 안전망(§ orchestrator.cjs)
       Monitor.start() // PR·이슈 모니터 자동 시작 (cmux "10분 모니터링" 세션 대체)
       console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
       Aws.startExpiryWatch() // AWS MFA 세션 만료 감시 — 인증 풀리면 맥 알림 (읽기전용 STS 호출만, aws.cjs 참고)

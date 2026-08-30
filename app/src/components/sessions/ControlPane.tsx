@@ -16,6 +16,20 @@ marked.setOptions({ breaks: true })
 // 쓰는 진짜 대화 기록(jsonl)을 폴링해서 채팅 말풍선으로 보여준다(§ server/transcript.cjs). 입력은
 // 여전히 같은 pty에 타이핑해 넣는다(askControl → server/control.cjs ask — MCP 등록·seed 주입이 이미
 // 검증된 기존 경로 그대로, 화면만 바꿨다).
+// 이모지(🔧) 대신 이 시스템의 그려진 아이콘 관례를 그대로(§tabIcons.tsx terminal 아이콘 재사용 —
+// "기술적인 동작"을 표현하는 자리에 이미 이 시스템이 쓰던 바로 그 아이콘).
+const TOOL_ICON = (
+	<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+		<rect x="3" y="4" width="18" height="16" rx="2.2" />
+		<path d="M7 9.5l3 2.5-3 2.5M12.5 14.5h4.5" />
+	</svg>
+)
+const CHEVRON_ICON = (
+	<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M9 6l6 6-6 6" />
+	</svg>
+)
+
 function ToolPart({ name, input, result }: { name: string; input: unknown; result: string | null }) {
 	const inputStr = (() => {
 		try {
@@ -27,8 +41,10 @@ function ToolPart({ name, input, result }: { name: string; input: unknown; resul
 	return (
 		<details className={styles.tool}>
 			<summary className={styles.toolSummary}>
+				<span className={styles.toolIcon}>{TOOL_ICON}</span>
 				{name}
 				{inputStr && inputStr !== '{}' ? ` — ${inputStr.slice(0, 80)}${inputStr.length > 80 ? '…' : ''}` : ''}
+				<span className={styles.toolChevron}>{CHEVRON_ICON}</span>
 			</summary>
 			<div className={styles.toolBody}>
 				<div className={styles.toolBodyLabel}>입력</div>
@@ -153,10 +169,18 @@ export default function ControlPane() {
 			{state?.running ? (
 				<>
 					<div className={styles.body} ref={bodyRef}>
-						{turns.length === 0 && !pendingUser && <div className={styles.empty}>비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.</div>}
+						{turns.length === 0 && !pendingUser && (
+							<div className={styles.empty}>
+								<span className={styles.emptyDot} />
+								비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.
+							</div>
+						)}
 						{turns.map((t) => (
 							<div key={t.id} className={`${styles.turnRow} ${t.role === 'user' ? styles.turnRowUser : styles.turnRowAssistant}`}>
-								<div className={styles.turnLabel}>{t.role === 'user' ? '나' : '비서'}</div>
+								<div className={styles.turnLabel}>
+									{t.role === 'assistant' && <span className={styles.turnLabelDot} />}
+									{t.role === 'user' ? '나' : '비서'}
+								</div>
 								<div className={`${styles.bubble} ${t.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}>
 									{t.parts.map((p, i) => (
 										<TurnPart key={i} part={p} />
@@ -169,6 +193,22 @@ export default function ControlPane() {
 								<div className={styles.turnLabel}>나</div>
 								<div className={`${styles.bubble} ${styles.bubbleUser}`} style={{ opacity: 0.6 }}>
 									{pendingUser}
+								</div>
+							</div>
+						)}
+						{/* "비서가 지금 뭘 하고 있는지" — claude가 답할 때까지 몇 초~몇십 초 아무 신호도 없으면
+						    멈춘 것처럼 보인다(craft-floor "States: loading"). 마지막 턴이 사람 쪽이면 비서가
+						    아직 답을 준비 중이라는 뜻이라 점 3개로 알려준다. */}
+						{(pendingUser || turns[turns.length - 1]?.role === 'user') && (
+							<div className={`${styles.turnRow} ${styles.turnRowAssistant}`}>
+								<div className={styles.turnLabel}>
+									<span className={styles.turnLabelDot} />
+									비서
+								</div>
+								<div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
+									<span className={styles.thinkingDot} />
+									<span className={styles.thinkingDot} />
+									<span className={styles.thinkingDot} />
 								</div>
 							</div>
 						)}

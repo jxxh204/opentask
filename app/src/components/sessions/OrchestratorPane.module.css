@@ -177,8 +177,15 @@
 .node_result {
 	border-color: var(--blue);
 }
-.node_error {
+.node_error,
+.node_blocked {
 	border-color: var(--red);
+}
+/* kind_stalled(칩)과 짝 — 이게 없으면 e.kind==='stalled'/'blocked'일 때 styles[`node_${e.kind}`]가
+   undefined가 돼 기본 회색 테두리(§ 위 .feedNode)로만 보이고 도움요청/응답없음 타임라인 노드가
+   구분되지 않는다. */
+.node_stalled {
+	border-color: var(--amber);
 }
 .feedCard {
 	background: var(--card2);
@@ -226,9 +233,15 @@
 	color: var(--t3);
 	border: 1px solid var(--line2);
 }
-.kind_error {
+.kind_error,
+.kind_blocked {
 	background: var(--rtint);
 	color: var(--red);
+}
+/* "업무가 어떻든간에" — stalled(추정)는 error/blocked(확정)와 같은 빨강이 아니라 amber로 구분. */
+.kind_stalled {
+	background: var(--atint);
+	color: var(--amber);
 }
 .feedTime {
 	font-size: 9.5px;

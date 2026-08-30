@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Folder, Task, Repo, BlockedPeriod, Subtask } from './types'
 import * as SessionsApi from '../api/sessions'
-import type { OrchestrationState, GitStatusEntry, CockpitSummary, SubtaskWorkStatus } from '../api/sessions'
+import type { OrchestrationState, GitStatusEntry, CockpitSummary, SubtaskWorkStatus, DevServerEntry } from '../api/sessions'
 import { detectLink, LINK_LABEL } from '../utils/linkDetect'
 import { listTerm } from '../api/term'
 import type { TermStatus } from '../api/term'
@@ -9,6 +9,30 @@ import { useReviewStore } from './useReviewStore'
 import { useTabsStore } from './useTabsStore'
 
 const EMPTY_ORCHESTRATION: OrchestrationState = { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, feed: [] }
+
+// "체크한 거 유지되게 해줘 계속 초기화되는데" — repoFilters가 순수 인메모리 상태라 창을 새로고침·재시작할
+// 때마다 null(전체 선택)로 돌아갔다. null은 "필터 없음"을 뜻하는 유효 상태라 빈 배열과 구분해서 저장한다.
+const REPO_FILTERS_KEY = 'openrm.repoFilters'
+
+function loadRepoFilters(): Set<string> | null {
+	try {
+		const raw = localStorage.getItem(REPO_FILTERS_KEY)
+		if (!raw) return null
+		const arr = JSON.parse(raw)
+		return Array.isArray(arr) ? new Set(arr) : null
+	} catch {
+		return null
+	}
+}
+
+function saveRepoFilters(filters: Set<string> | null) {
+	try {
+		if (!filters) localStorage.removeItem(REPO_FILTERS_KEY)
+		else localStorage.setItem(REPO_FILTERS_KEY, JSON.stringify(Array.from(filters)))
+	} catch {
+		/* private mode / no storage — fine, just won't persist */
+	}
+}
 
 // 서브태스크는 각 Task 안에 중첩된 배열이라, inbox/folders 양쪽 트리를 순회하며 그 안의 서브태스크
 // 하나만 갱신하는 걸 여러 액션(이름/설명/예정일/기간)이 공유한다.
@@ -52,8 +76,14 @@ export interface SessionsState {
 	// 겹칠 일은 없지만 의미를 분리해두는 게 나음).
 	deleteBusy: string | null
 	gitStatus: Record<string, GitStatusEntry> // 브랜치명 → PR/ahead-behind (server/cockpit.cjs 실데이터)
+	// "PR뱃지도 자동으로 안잡혀" — 서브태스크가 자기 워크트리 안에서 브랜치를 바꾸면 위 gitStatus(브랜치명
+	// 키)는 그 순간 낡는다. 워크트리 경로는 안 바뀌므로 경로 키로도 같은 데이터를 들고 있는다.
+	gitStatusByPath: Record<string, GitStatusEntry>
 	termStatus: Record<string, TermStatus> // tmux 세션명 → 질문대기/인증필요(term.cjs status() 실데이터, 저장값 아님)
 	cockpitSummary: CockpitSummary | null // 사이드바 하단 상태바 요약 (dev/스트림/dirty/PR 총계, 메인 브랜치)
+	// "가장 하단에 켜져있는 로컬서버 바로 클릭 가능한 버튼" — cockpitSummary.devCount는 개수뿐이라
+	// 실제로 열 URL(port)이 없었다. 같은 /api/cockpit 응답의 devServers를 그대로 노출.
+	devServers: DevServerEntry[]
 	apiAddress: string | null // "host:port" — 상태바 우측의 실제 백엔드 주소
 	rootPath: string | null // 프로젝트 루트 경로 — 오케스트레이터/지휘자가 아직 없어도 클로드 세션을 띄울 기본 cwd
 
@@ -229,8 +259,10 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	archiveBusy: null,
 	deleteBusy: null,
 	gitStatus: {},
+	gitStatusByPath: {},
 	termStatus: {},
 	cockpitSummary: null,
+	devServers: [],
 	apiAddress: null,
 	rootPath: null,
 
@@ -258,7 +290,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	detailSubtaskId: null,
 	detailSubtaskParentId: null,
 	detailNoteId: null,
-	repoFilters: null,
+	repoFilters: loadRepoFilters(),
 
 	loadBoard: async () => {
 		set({ loading: true, error: null })
@@ -952,8 +984,8 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	// 정도는 아님).
 	loadGitStatus: async () => {
 		try {
-			const { byBranch, summary } = await SessionsApi.getCockpit()
-			set({ gitStatus: byBranch || {}, cockpitSummary: summary || null })
+			const { byBranch, byPath, summary, devServers } = await SessionsApi.getCockpit()
+			set({ gitStatus: byBranch || {}, gitStatusByPath: byPath || {}, cockpitSummary: summary || null, devServers: devServers || [] })
 		} catch {
 			// no-op
 		}
@@ -1028,14 +1060,19 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	closeSubtaskDetail: () => set({ detailSubtaskId: null, detailSubtaskParentId: null }),
 	openNoteDetail: (noteId) => set({ detailNoteId: noteId }),
 	closeNoteDetail: () => set({ detailNoteId: null }),
-	setRepoFilters: (filters) => set({ repoFilters: filters }),
+	setRepoFilters: (filters) => {
+		saveRepoFilters(filters)
+		set({ repoFilters: filters })
+	},
 	toggleRepoFilter: (repoId) =>
 		set((s) => {
 			const base = s.repoFilters ?? new Set(s.repos.map((r) => r.id))
 			const next = new Set(base)
 			if (next.has(repoId)) next.delete(repoId)
 			else next.add(repoId)
-			return { repoFilters: next.size === s.repos.length ? null : next }
+			const repoFilters = next.size === s.repos.length ? null : next
+			saveRepoFilters(repoFilters)
+			return { repoFilters }
 		}),
 	setDisputeText: (v) => set({ disputeText: v }),
 	startDispute: (reviewId) => set({ disputingReviewId: reviewId, disputeText: '' }),

@@ -4,7 +4,7 @@ import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore
 import { useTabsStore } from '../../store/useTabsStore'
 import { LINK_LABEL } from '../../utils/linkDetect'
 import type { LinkKind } from '../../utils/linkDetect'
-import TaskRow from './TaskRow'
+import TaskRow, { PR_LABEL, CHECK, HELP } from './TaskRow'
 import TaskColorDot from './TaskColorDot'
 import styles from './FolderCard.module.css'
 import taskRowStyles from './TaskRow.module.css'
@@ -13,6 +13,19 @@ const CLOCK = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 		<circle cx="12" cy="12" r="9" />
 		<path d="M12 7v5l3.5 2" />
+	</svg>
+)
+// "클로드세션 동작 여부에 따라서... 여러 상태가 보여야해" — TaskRow의 statusDot과 같은 아이콘(LOCK/QUESTION).
+const LOCK = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+		<rect x="5" y="11" width="14" height="9" rx="2" />
+		<path d="M8 11V7a4 4 0 0 1 8 0v4" />
+	</svg>
+)
+const QUESTION = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M9 9a3 3 0 1 1 4 2.8c-.9.4-1.5 1.1-1.5 2.2" />
+		<path d="M12 17h.01" />
 	</svg>
 )
 const ARCHIVE_ICON = (
@@ -87,6 +100,23 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	const setOverSubtask = useSessionsStore((s) => s.setOverSubtask)
 	const reorderSubtasks = useSessionsStore((s) => s.reorderSubtasks)
 	const orch = useSessionsStore((s) => getOrchestration(s, folder.id))
+	// "태스크 매니저가 명령했으면 움직이는 모션이 있어야하는데... 너무 정적이야" — 단일 태스크+서브태스크
+	// 체인 폴더(simpleWithSubtasks)는 TaskRow를 아예 안 그려서(§ 아래 taskBody 분기) TaskRow.tsx의 flash가
+	// 이 폴더엔 한 번도 안 붙어 있었다. 지휘자(=태스크 매니저) feed에 새 이벤트가 들어온 순간 폴더 헤더
+	// 자체를 반짝여 "명령이 오갔다"는 걸 보여준다 — TaskRow의 flash와 같은 원칙(§10), 대상만 폴더 헤더.
+	const lastFeedTs = orch.feed.reduce((max, f) => Math.max(max, f.ts), 0) || null
+	const [flash, setFlash] = useState(false)
+	const lastSeenFeedRef = useRef<number | null>(null)
+	useEffect(() => {
+		if (!lastFeedTs) return
+		if (lastSeenFeedRef.current !== null && lastFeedTs > lastSeenFeedRef.current) {
+			setFlash(true)
+			const id = setTimeout(() => setFlash(false), 500)
+			lastSeenFeedRef.current = lastFeedTs
+			return () => clearTimeout(id)
+		}
+		lastSeenFeedRef.current = lastFeedTs
+	}, [lastFeedTs])
 	const archiveFolder = useSessionsStore((s) => s.archiveFolder)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy === folder.id)
 	const deleteFolder = useSessionsStore((s) => s.deleteFolder)
@@ -117,9 +147,27 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	// "진행중 표기도 안돼" — subChain 점의 진행 중/세션 종료 색은 여기서 읽는다(§ useSessionsStore.subtaskWork,
 	// SessionShell이 15초마다 전체 갱신).
 	const subtaskWork = useSessionsStore((s) => (onlyTask ? s.subtaskWork[onlyTask.id] : undefined))
+	// "PR 상황이 보이지 않고 있어. 워크트리 이름도" — TaskRow의 subChainCard와 같은 gitStatus[branch] 조인.
+	const gitStatus = useSessionsStore((s) => s.gitStatus)
+	const gitStatusByPath = useSessionsStore((s) => s.gitStatusByPath)
+	// "클로드세션 동작 여부에 따라서... 여러 상태가 보여야해. 지금은 아무것도 표현되어있지 않아" — 헤더
+	// 원이 running/waiting 둘뿐이라 지휘자(태스크 매니저)가 인증·질문 대기 중이어도 티가 안 났다.
+	// TaskRow의 statusDot과 같은 소스(termStatus, § term.cjs가 계산)를 지휘자 세션명으로 조인한다.
+	const conductorTermStatus = useSessionsStore((s) => (orch.conductor ? s.termStatus[orch.conductor.session] : undefined))
+	const needsAuth = !!conductorTermStatus?.needsAuth
+	const needsInput = !needsAuth && !!conductorTermStatus?.waiting
+	// "서브태스크가 돌아도 메인태스크 스피너가 도는것같기도하고" — orch.running은 웨이브 오케스트레이션이
+	// 한 번이라도 시작됐는지만 볼 뿐(start()에서 세션이 하나라도 있으면 켜지고, stop() 전까진 절대 안
+	// 꺼짐) 지금 실제로 뭔가 돌고 있는지와 무관했다. subChainDot과 같은 실데이터(subtaskWork[].alive)를
+	// 이 폴더의 모든 태스크에 걸쳐 조인해, 실제 서브태스크가 살아있을 때만 스피너가 돈다.
+	const subtaskWorkMap = useSessionsStore((s) => s.subtaskWork)
+	const anySubtaskAlive = folder.tasks.some((t) => subtaskWorkMap[t.id]?.some((w) => w.alive))
+	const isRunning = !needsAuth && !needsInput && anySubtaskAlive
+	// 서브태스크별 세션명으로 다시 조인(§ TaskRow의 subChainDot과 동일 패턴).
+	const termStatusMap = useSessionsStore((s) => s.termStatus)
 	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 이 목록에서 걸러낸다(§ TaskRow
-	// visibleSubtasks와 동일 원칙). 전부 완료되면 서브태스크가 없던 것처럼 isSimple로 접힌다.
-	const visibleOnlyTaskSubtasks = onlyTask ? onlyTask.subtasks.filter((st) => !st.completed_at) : []
+	// visibleSubtasks와 동일 원칙 — 세션이 아직 살아있으면 예외). 전부 완료되면 서브태스크가 없던 것처럼 isSimple로 접힌다.
+	const visibleOnlyTaskSubtasks = onlyTask ? onlyTask.subtasks.filter((st) => !st.completed_at || subtaskWork?.find((w) => w.id === st.id)?.alive) : []
 	const simpleWithSubtasks = !!onlyTask && visibleOnlyTaskSubtasks.length > 0
 	const isSimple = !!onlyTask && !simpleWithSubtasks
 
@@ -227,7 +275,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 			}}
 		>
 			<div
-				className={`${styles.head} ${selected ? styles.headSelected : ''}`}
+				className={`${styles.head} ${selected ? styles.headSelected : ''} ${flash ? taskRowStyles.flash : ''}`}
 				onClick={enter}
 				onContextMenu={(e) => {
 					e.preventDefault()
@@ -253,8 +301,11 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 						<path d="M9 6l6 6-6 6" />
 					</svg>
 				)}
-				<span className={`${styles.statusIcon} ${orch.running ? styles.running : styles.waiting}`}>
-					{orch.running ? <span className={styles.spinner} /> : CLOCK}
+				<span
+					className={`${styles.statusIcon} ${needsAuth ? styles.needsAuth : needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting}`}
+					title={needsAuth ? '태스크 매니저에 인증이 필요합니다' : needsInput ? '태스크 매니저가 입력을 기다리고 있습니다' : undefined}
+				>
+					{needsAuth ? LOCK : needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
 				{renaming ? (
 					<input
@@ -387,57 +438,118 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 							}}
 						>
 							<div className={taskRowStyles.subChainRail} />
-							{visibleOnlyTaskSubtasks.map((st) => (
-								<div
-									key={st.id}
-									className={taskRowStyles.subChainNode}
-									draggable
-									style={{ opacity: dragSubtaskId === st.id ? 0.4 : 1 }}
-									onDragStart={(e) => {
-										e.stopPropagation()
-										e.dataTransfer.effectAllowed = 'move'
-										e.dataTransfer.setData('text/plain', st.id)
-										setDragSubtask(st.id, onlyTask!.id)
-									}}
-									onDragEnd={(e) => {
-										e.stopPropagation()
-										setDragSubtask(null, null)
-										setOverSubtask(null)
-									}}
-								>
-									<span
-										className={`${taskRowStyles.subChainDot} ${
-											subtaskWork?.find((w) => w.id === st.id)?.alive
-												? taskRowStyles.subChainDotAlive
-												: subtaskWork?.find((w) => w.id === st.id)?.started
-													? taskRowStyles.subChainDotDone
-													: ''
-										}`}
-									/>
+							{visibleOnlyTaskSubtasks.map((st) => {
+								const work = subtaskWork?.find((w) => w.id === st.id)
+								// "PR뱃지도 자동으로 안잡혀" — § TaskRow와 동일 원인·수정(gitStatusByPath 우선, 표시
+								// 브랜치명도 실제 지금 값 우선).
+								const subGit = work?.worktreePath ? gitStatusByPath[work.worktreePath] : work?.branch ? gitStatus[work.branch] : undefined
+								const subBranch = subGit?.branch ?? work?.branch
+								const subTermStatus = work?.tmuxSession ? termStatusMap[work.tmuxSession] : undefined
+								const subNeedsAuth = !!subTermStatus?.needsAuth
+								const subNeedsInput = !subNeedsAuth && !!subTermStatus?.waiting
+								return (
 									<div
-										className={`${taskRowStyles.subChainCard} ${overSubtaskId === st.id && dragSubtaskId !== st.id ? taskRowStyles.subChainCardDropTarget : ''}`}
-										onClick={(e) => { e.stopPropagation(); openSubtaskDetail(st.id, onlyTask!.id) }}
-										onDragOver={(e) => {
-											if (dragSubtaskTaskId !== onlyTask!.id || dragSubtaskId === st.id) return
-											e.preventDefault()
+										key={st.id}
+										className={taskRowStyles.subChainNode}
+										draggable
+										style={{ opacity: dragSubtaskId === st.id ? 0.4 : 1 }}
+										onDragStart={(e) => {
 											e.stopPropagation()
-											if (overSubtaskId !== st.id) setOverSubtask(st.id)
+											e.dataTransfer.effectAllowed = 'move'
+											e.dataTransfer.setData('text/plain', st.id)
+											setDragSubtask(st.id, onlyTask!.id)
 										}}
-										onDragLeave={(e) => {
+										onDragEnd={(e) => {
 											e.stopPropagation()
-											if (overSubtaskId === st.id) setOverSubtask(null)
-										}}
-										onDrop={(e) => {
-											if (dragSubtaskTaskId !== onlyTask!.id || !dragSubtaskId) return
-											e.preventDefault()
-											e.stopPropagation()
-											reorderSubtasks(onlyTask!.id, dragSubtaskId, st.id)
+											setDragSubtask(null, null)
+											setOverSubtask(null)
 										}}
 									>
-										<span className={taskRowStyles.subChainName}>{st.name}</span>
+										<span
+											className={`${taskRowStyles.subChainDot} ${
+												work?.blocked || subNeedsAuth || subNeedsInput
+													? taskRowStyles.subChainDotAlert
+													: work?.stalled
+														? taskRowStyles.subChainDotStalled
+														: work?.alive
+															? taskRowStyles.subChainDotAlive
+															: work?.done
+																? taskRowStyles.subChainDotComplete
+																: work?.started
+																	? taskRowStyles.subChainDotDone
+																	: ''
+											}`}
+											title={
+												work?.blocked
+													? `도움 요청: ${work.blockedReason}`
+													: subNeedsAuth
+														? '인증이 필요합니다'
+														: subNeedsInput
+															? '입력이 필요합니다'
+															: work?.stalled
+																? '한동안 응답이 없습니다 — 확인해보세요'
+																: work?.done
+																	? '완료'
+																	: undefined
+											}
+										>
+											{work?.blocked ? HELP : work?.done && !subNeedsAuth && !subNeedsInput && !work?.alive ? CHECK : null}
+										</span>
+										<div
+											className={`${taskRowStyles.subChainCard} ${overSubtaskId === st.id && dragSubtaskId !== st.id ? taskRowStyles.subChainCardDropTarget : ''}`}
+											onClick={(e) => {
+											e.stopPropagation()
+											// "스피너가 있는 태스크는 클릭 시 클로드세션탭이 열렸으면해" — § TaskRow와 동일.
+											if (work?.alive) {
+												useTabsStore.getState().openSubtaskTab(folder.id, st.id, onlyTask!.id, st.name)
+												useTabsStore.getState().setActiveNode(folder.id, 'orchestrator')
+											} else {
+												openSubtaskDetail(st.id, onlyTask!.id)
+											}
+										}}
+											onDragOver={(e) => {
+												if (dragSubtaskTaskId !== onlyTask!.id || dragSubtaskId === st.id) return
+												e.preventDefault()
+												e.stopPropagation()
+												if (overSubtaskId !== st.id) setOverSubtask(st.id)
+											}}
+											onDragLeave={(e) => {
+												e.stopPropagation()
+												if (overSubtaskId === st.id) setOverSubtask(null)
+											}}
+											onDrop={(e) => {
+												if (dragSubtaskTaskId !== onlyTask!.id || !dragSubtaskId) return
+												e.preventDefault()
+												e.stopPropagation()
+												reorderSubtasks(onlyTask!.id, dragSubtaskId, st.id)
+											}}
+										>
+											<div className={taskRowStyles.subChainTop}>
+												<span className={taskRowStyles.subChainName}>{st.name}</span>
+												{subGit?.pr && (
+													<a
+														href={subGit.pr.url}
+														target="_blank"
+														rel="noreferrer"
+														className={`m ${taskRowStyles.subChainPill} ${subGit.pr.draft ? taskRowStyles.pillPrDraft : taskRowStyles.pillPr}`}
+														onClick={(e) => e.stopPropagation()}
+													>
+														{subGit.pr.draft ? 'PR draft' : PR_LABEL[subGit.pr.state]}
+													</a>
+												)}
+											</div>
+											{subBranch && (
+												<div className={`m ${taskRowStyles.subChainWt}`}>
+													<span className={taskRowStyles.wtIcon}>⎇</span>
+													{subBranch}
+													{!!subGit?.ahead && <span className={taskRowStyles.deltaAhead}> ↑{subGit.ahead}</span>}
+													{!!subGit?.behind && <span className={taskRowStyles.deltaBehind}> ↓{subGit.behind}</span>}
+												</div>
+											)}
+										</div>
 									</div>
-								</div>
-							))}
+								)
+							})}
 						</div>
 					) : (
 						<>

@@ -3,6 +3,7 @@
 // Non-secret only: tokens/connection strings live in store/secrets.cjs instead.
 'use strict'
 const { db } = require('../db.cjs')
+const StoreRepos = require('./repos.cjs')
 
 function get(key, fallback) {
 	const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key)
@@ -64,15 +65,28 @@ function updateAppConfig(patch) {
 // PR/이슈 모니터(monitor.cjs)·GitHub 통계(githubStats.cjs)·내 PR 목록(prs.cjs)이 대상으로 삼는 레포 목록.
 // 하나의 소스로 통일 — Setup 페이지의 githubRepo 필드가 "owner/repo" 또는 콤마로 여러 개("owner/repo1,owner/repo2")
 // 담당. 과거 OPENRM_PR_REPOS 환경변수는 AppConfig가 비어있을 때만 폴백(하위호환, 미설정 배포 지원).
+// "PR 상황이 여전히 안 보여" — githubRepo를 한 번도 설정 안 한 멀티레포 세팅(§ store/repos.cjs)에선 위 셋이
+// 다 비어 결국 PR을 아예 못 가져왔다. 이미 등록된 레포(worktree 생성에 실제 쓰는 그 목록)의 origin
+// 리모트에서 owner/repo를 뽑아 자동 폴백 — Setup 페이지에 같은 정보를 또 입력하게 만들지 않는다.
 // ⚠️ 호출부는 이 함수를 매번 새로 불러야 함(모듈 로드 시 한 번만 얼려두면 UI에서 설정해도 재시작 전까진 반영 안 됨).
 function prRepos() {
 	const cfg = getAppConfig()
 	const raw = (cfg.githubRepo && String(cfg.githubRepo).trim()) || (Array.isArray(cfg.githubRepos) && cfg.githubRepos.length ? cfg.githubRepos.join(',') : '') || process.env.OPENRM_PR_REPOS || ''
-	return raw
+	const manual = raw
 		.split(',')
 		.map((s) => s.trim())
 		.filter(Boolean)
 		.map((slug) => ({ slug, name: slug.split('/').pop() }))
+	if (manual.length) return manual
+	const seen = new Set()
+	const out = []
+	for (const r of StoreRepos.list()) {
+		const slug = StoreRepos.deriveSlug(r.path)
+		if (!slug || seen.has(slug)) continue
+		seen.add(slug)
+		out.push({ slug, name: r.name })
+	}
+	return out
 }
 
 module.exports = { get, set, getAppConfig, updateAppConfig, prRepos }

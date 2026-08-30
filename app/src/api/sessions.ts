@@ -81,6 +81,17 @@ export interface SubtaskWorkStatus {
 	name: string
 	started: boolean
 	alive: boolean
+	// "서브태스크가 완료되면 초록색 동그라미에 체크표시로" — 세션이 그냥 죽은 것(alive:false, done:false)과
+	// 실제로 다음 단계로 넘어간 것(done:true)을 구분하는 신호(§ orchestrator.cjs getSubtaskWorkState).
+	done: boolean
+	// "업무가 멈추든... 서로가 답장을 주는거야" — 서브태스크가 report-blocked curl로 스스로 보고한
+	// "도움 필요" 상태. needsAuth/needsInput과 같은 "확정된 사람 개입 필요" 카테고리(§ orchestrator.cjs
+	// reportSubtaskBlocked).
+	blocked: boolean
+	blockedReason: string | null
+	// "업무가 어떻든간에" — 명시적 보고 없이 조용해진 걸 서버가 추정한 신호(§ checkStalledSubtasks).
+	// blocked(확정)와 구분해서 다른 색(amber)으로 보여준다 — 섞으면 확정 신호의 긴급도가 희석된다.
+	stalled: boolean
 	tmuxSession: string | null
 	worktreePath: string | null
 	branch: string | null
@@ -213,7 +224,9 @@ export interface Conductor {
 	startedAt: number
 	cwd: string
 }
-export type FeedKind = 'msg' | 'plan' | 'dispatch' | 'result' | 'error'
+// "업무가 멈추든... 서로가 답장을 주는거야" — notifyConductor가 report/blocked/stalled 세 상태 전부
+// 이 kind로 피드에 남긴다(§ server/orchestrator.cjs notifyConductor).
+export type FeedKind = 'msg' | 'plan' | 'dispatch' | 'result' | 'error' | 'blocked' | 'stalled'
 export interface FeedEntry {
 	ts: number
 	from: string
@@ -278,6 +291,10 @@ export interface GitStatusEntry {
 	ahead: number
 	behind: number
 	pr: { number: number; state: 'open' | 'merged' | 'closed'; draft: boolean; ci: string | null; url: string } | null
+	// byPath 엔트리에만 실려온다 — "PR뱃지도 자동으로 안잡혀" 참고. 워크트리 안에서 에이전트가 직접
+	// git checkout -b로 브랜치를 바꾸면 DB에 기록된 브랜치명이 즉시 낡아버린다(§ StoreBranches는
+	// 워크트리 생성 시점 스냅샷). 실제로 지금 그 워크트리가 체크아웃돼 있는 브랜치를 그대로 실어준다.
+	branch?: string | null
 }
 export interface CockpitSummary {
 	devCount: number
@@ -289,8 +306,17 @@ export interface CockpitSummary {
 	ciFail: number
 	mainBranch: string | null
 }
+// "가장 하단에 켜져있는 로컬서버 바로 클릭 가능한 버튼이 있으면 좋겠어" — 서버는 이미 계산해서
+// 돌려주고 있었는데(devServers) 프론트가 summary.devCount만 쓰고 개별 목록은 안 쓰고 있었다.
+export interface DevServerEntry {
+	port: number
+	pid: number
+	cwd: string
+	kind: string
+	ticket: string | null
+}
 export function getCockpit() {
-	return api.get<{ ok: boolean; byBranch: Record<string, GitStatusEntry>; summary: CockpitSummary }>('/api/cockpit')
+	return api.get<{ ok: boolean; byBranch: Record<string, GitStatusEntry>; byPath: Record<string, GitStatusEntry>; summary: CockpitSummary; devServers: DevServerEntry[] }>('/api/cockpit')
 }
 
 export function getHealth() {

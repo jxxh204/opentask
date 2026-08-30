@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore, CONTROL_NODE_ID } from '../../store/useTabsStore'
 import { askControl } from '../../api/control'
+import type { Repo, Folder } from '../../store/types'
 import RepoSelect from './RepoSelect'
 import styles from './TeamRulesPane.module.css'
 
@@ -54,6 +55,40 @@ const RULE_SLOTS: { key: 'rule_general' | 'rule_task_writing' | 'rule_branch' | 
 	},
 ]
 
+// "이것도 저장이 되게해줘" — 전역 팀 규칙 탭(폴더 맥락 없이 열렸을 때)의 레포 선택도 순수 로컬
+// state라 탭을 닫았다 다시 열면(또는 앱 재시작하면) 항상 첫 번째 레포로 돌아갔다. §repoFilters와
+// 같은 localStorage 관례. 폴더 탭의 "+"로 열렸을 땐(initialRepoId 있음) 그 폴더의 레포로 스코프하는
+// 게 항상 우선이라 여기 저장값을 초기값으로 쓰지 않는다 — 아래 useState 초기화에서 분기.
+const LAST_REPO_KEY = 'openrm.teamRules.lastRepoId'
+
+function loadLastRepoId(): string | null {
+	try {
+		return localStorage.getItem(LAST_REPO_KEY)
+	} catch {
+		return null
+	}
+}
+
+function saveLastRepoId(id: string) {
+	try {
+		localStorage.setItem(LAST_REPO_KEY, id)
+	} catch {
+		/* private mode / no storage — fine, just won't persist */
+	}
+}
+
+type Draft = { rule_general: string; rule_task_writing: string; rule_branch: string; rule_predev: string; rule_task: string }
+
+function sourceOf(repo: Repo | null, folder: Folder | undefined): Draft {
+	return {
+		rule_general: repo?.rule_general ?? '',
+		rule_task_writing: repo?.rule_task_writing ?? '',
+		rule_branch: repo?.rule_branch ?? '',
+		rule_predev: repo?.rule_predev ?? '',
+		rule_task: folder?.rule_task ?? '',
+	}
+}
+
 // initialRepoId — 폴더 탭의 "+"로 열렸을 때(§ TabWorkspace) 그 폴더가 실제 쓰는 레포로 미리
 // 스코프한다. 설정 모달을 거쳐 전역 탭(TEAM_RULES_NODE_ID)으로 열렸을 땐 undefined — 첫 레포로 폴백.
 // folderId — 있을 때만(=폴더 탭의 "+"로 열렸을 때) "이 태스크만의 규칙" 칸을 보여준다. 전역 탭엔
@@ -64,13 +99,78 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 	const updateRepo = useSessionsStore((s) => s.updateRepo)
 	const setFolderTaskRule = useSessionsStore((s) => s.setFolderTaskRule)
 	const folder = useSessionsStore((s) => (folderId ? s.folders.find((f) => f.id === folderId) : undefined))
-	const [repoId, setRepoId] = useState<string | null>(null)
-	const activeRepoId = repoId ?? initialRepoId ?? repos[0]?.id ?? null
+	const [repoId, setRepoId] = useState<string | null>(() => (folderId ? null : loadLastRepoId()))
+	// repoId가 저장된 값을 가리키는데 그 레포가 삭제됐으면(repos엔 없음) 조용히 빈 화면이 되는 대신
+	// initialRepoId/첫 레포로 폴백한다.
+	const activeRepoId = repoId && repos.some((r) => r.id === repoId) ? repoId : (initialRepoId ?? repos[0]?.id ?? null)
 	const repo = repos.find((r) => r.id === activeRepoId) ?? null
 
-	function commit(patchKey: (typeof RULE_SLOTS)[number]['patchKey'], value: string) {
-		if (!repo) return
-		updateRepo(repo.id, { [patchKey]: value.trim() || null })
+	function handleRepoChange(id: string | null) {
+		if (!id) return
+		setRepoId(id)
+		saveLastRepoId(id)
+	}
+
+	// "저장하기 버튼이 있어야할듯" — 전엔 textarea가 blur될 때마다 조용히 자동저장돼서 "저장됐다"는
+	// 확신이 없었다. 이제 draft는 로컬 state로만 갖고 있다가 버튼을 눌러야 커밋된다. 다만 무작정
+	// uncontrolled → controlled로만 바꾸면 "비서에게 물어보기"로 다른 경로(curl)를 통해 채워진 값이나
+	// 다른 탭에서 바꾼 값이 이 패널엔 영영 안 보이게 된다 — 그래서 소스(repo/folder)가 바뀔 때마다
+	// "사용자가 아직 손대지 않은 칸"만 최신값으로 동기화하고, 이미 편집 중인 칸은 저장 전까지 건드리지
+	// 않는다(마지막으로 동기화한 소스값과 비교해 "아직 안 건드림"을 판정).
+	const [draft, setDraft] = useState<Draft>(() => sourceOf(repo, folder))
+	const lastSourceRef = useRef<Draft>(sourceOf(repo, folder))
+	const lastRepoIdRef = useRef<string | null>(repo?.id ?? null)
+
+	useEffect(() => {
+		const nextSource = sourceOf(repo, folder)
+		const prevSource = lastSourceRef.current
+		const switched = (repo?.id ?? null) !== lastRepoIdRef.current
+		setDraft((d) => {
+			if (switched) return nextSource
+			const merged = { ...d }
+			;(Object.keys(nextSource) as (keyof Draft)[]).forEach((k) => {
+				if (d[k] === prevSource[k]) merged[k] = nextSource[k]
+			})
+			return merged
+		})
+		lastSourceRef.current = nextSource
+		lastRepoIdRef.current = repo?.id ?? null
+	}, [repo, folder])
+
+	const dirty = RULE_SLOTS.some((slot) => draft[slot.key] !== (repo?.[slot.key] ?? '')) || (!!folder && draft.rule_task !== (folder.rule_task ?? ''))
+	const [saving, setSaving] = useState(false)
+
+	async function handleSave() {
+		if (!dirty || saving) return
+		setSaving(true)
+		try {
+			const jobs: Promise<unknown>[] = []
+			// 서버는 저장할 때 trim한 값을 저장한다(store/repos.cjs, folders.cjs) — draft는 사용자가
+			// 타이핑한 원문(trim 전)을 그대로 들고 있으므로, 앞뒤 공백만 있던 경우 저장 후에도
+			// draft !== repo[key]가 계속 참이 돼 "저장" 버튼이 안 꺼지는 문제가 있었다. 실제로 보낸
+			// (trim된) 값으로 draft를 맞춰준다.
+			const normalized: Draft = { ...draft }
+			if (repo) {
+				const patch: Partial<Record<(typeof RULE_SLOTS)[number]['patchKey'], string | null>> = {}
+				for (const slot of RULE_SLOTS) {
+					if (draft[slot.key] !== (repo[slot.key] ?? '')) {
+						const trimmed = draft[slot.key].trim()
+						patch[slot.patchKey] = trimmed || null
+						normalized[slot.key] = trimmed
+					}
+				}
+				if (Object.keys(patch).length > 0) jobs.push(updateRepo(repo.id, patch))
+			}
+			if (folder && draft.rule_task !== (folder.rule_task ?? '')) {
+				const trimmed = draft.rule_task.trim()
+				jobs.push(setFolderTaskRule(folder.id, trimmed || null))
+				normalized.rule_task = trimmed
+			}
+			await Promise.all(jobs)
+			setDraft(normalized)
+		} finally {
+			setSaving(false)
+		}
 	}
 
 	const [asking, setAsking] = useState<string | null>(null)
@@ -110,7 +210,12 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 
 	return (
 		<div className={styles.wrap}>
-			<div className={styles.title}>팀 규칙</div>
+			<div className={styles.titleRow}>
+				<div className={styles.title}>팀 규칙</div>
+				<button type="button" className={styles.saveBtn} disabled={!dirty || saving} onClick={handleSave}>
+					{saving ? '저장 중…' : '저장'}
+				</button>
+			</div>
 			<div className={styles.hint}>브랜치 네이밍, 사전 문서 작성 같은 팀마다 다른 개발 관행을 자연어로 적어둔다. 레포별로 따로 저장되고, 네 칸을 전부 비워두면 지금과 완전히 동일하게 동작한다.</div>
 
 			{/* "이건 태스크의 유니크한 규칙이야" — 아래 레포 공통 규칙과 달리 지금 이 메인 태스크
@@ -127,13 +232,10 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 					</div>
 					<p className={styles.slotHint}>같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.</p>
 					<textarea
-						key={folder.id + (folder.rule_task ?? '')}
 						className={styles.slotInput}
-						defaultValue={folder.rule_task ?? ''}
+						value={draft.rule_task}
 						placeholder="예: 이 작업은 A/B 테스트 플래그로 감싸서 배포한다."
-						onBlur={(e) => {
-							if (e.target.value !== (folder.rule_task ?? '')) setFolderTaskRule(folder.id, e.target.value.trim() || null)
-						}}
+						onChange={(e) => setDraft((d) => ({ ...d, rule_task: e.target.value }))}
 					/>
 				</div>
 			)}
@@ -144,7 +246,7 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 			{repo && (
 				<>
 					<div className={styles.repoSelectRow}>
-						<RepoSelect repos={repos} valueId={repo.id} onChange={(id) => id && setRepoId(id)} allowNone={false} />
+						<RepoSelect repos={repos} valueId={repo.id} onChange={handleRepoChange} allowNone={false} />
 					</div>
 
 					<div className={styles.slots}>
@@ -160,13 +262,10 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 								</div>
 								<p className={styles.slotHint}>{slot.hint}</p>
 								<textarea
-									key={repo.id + slot.key + (repo[slot.key] ?? '')}
 									className={styles.slotInput}
-									defaultValue={repo[slot.key] ?? ''}
+									value={draft[slot.key]}
 									placeholder={slot.placeholder}
-									onBlur={(e) => {
-										if (e.target.value !== (repo[slot.key] ?? '')) commit(slot.patchKey, e.target.value)
-									}}
+									onChange={(e) => setDraft((d) => ({ ...d, [slot.key]: e.target.value }))}
 								/>
 							</div>
 						))}

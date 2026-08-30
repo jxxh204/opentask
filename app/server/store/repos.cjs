@@ -22,6 +22,20 @@ function deriveOwnerAvatar(repoPath) {
 	}
 }
 
+// origin 리모트에서 "owner/repo" 슬러그를 뽑는다 — prs.cjs가 Setup 페이지의 별도 githubRepo 설정 없이도
+// 이미 등록된 레포마다 `gh pr list -R owner/repo`를 돌릴 수 있게(§ store/settings.cjs prRepos 폴백).
+function deriveSlug(repoPath) {
+	try {
+		const url = execFileSync('git', ['-C', repoPath, 'remote', 'get-url', 'origin'], { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
+			.toString()
+			.trim()
+		const m = url.match(/^(?:git@[^:]+:|https?:\/\/[^/]+\/)([^/]+)\/(.+?)(?:\.git)?$/)
+		return m ? `${m[1]}/${m[2]}` : null
+	} catch (_) {
+		return null
+	}
+}
+
 function list() {
 	return db.prepare('SELECT * FROM repos ORDER BY order_idx ASC, created_at ASC').all()
 }
@@ -81,4 +95,4 @@ function remove(id) {
 	return { ok: true }
 }
 
-module.exports = { list, get, create, update, remove, deriveOwnerAvatar }
+module.exports = { list, get, create, update, remove, deriveOwnerAvatar, deriveSlug }

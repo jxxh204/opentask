@@ -84,6 +84,18 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 		}
 	}
 
+	// "서브태스크의 클로드 세션에 접속하는 루트가 적어" — 이 패널은 상태(진행 중/세션 종료됨)만 보여줄 뿐
+	// 실제 세션(SubtaskSessionPane)으로 가는 길이 없었다. 유일한 경로는 "다이어그램" 탭에서 서브태스크
+	// 박스를 직접 찾아 눌러야 했는데(§ TaskManagerBoard), 정작 서브태스크를 처음 살펴보는 자리인 이
+	// 패널(사이드바 subChain 클릭)엔 그 링크가 없었다. openSubtaskTab은 TaskManagerBoard와 동일 — 메인
+	// 태스크(폴더) 탭 목록에 세션 탭을 추가/포커스하고, setActiveNode로 그 폴더 워크스페이스로 전환한다.
+	function openSession() {
+		if (!parentFolderId || !subtaskId || !parentTaskId || !subtask) return
+		useTabsStore.getState().openSubtaskTab(parentFolderId, subtaskId, parentTaskId, subtask.name)
+		useTabsStore.getState().setActiveNode(parentFolderId, 'orchestrator')
+		onClose()
+	}
+
 	async function stopSession() {
 		if (!subtaskId) return
 		setBusy(true)
@@ -180,12 +192,24 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 								{work?.alive ? (
 									<>
 										<span className={sessionBadgeClass('alive')}>진행 중</span>
+										{parentFolderId && (
+											<button type="button" className={styles.metaClear} onClick={openSession}>
+												세션 보기
+											</button>
+										)}
 										<button type="button" className={styles.metaClear} disabled={busy} onClick={stopSession}>
 											{busy ? '종료 중…' : '세션 종료'}
 										</button>
 									</>
 								) : work?.started ? (
-									<span className={sessionBadgeClass('done')}>세션 종료됨</span>
+									<>
+										<span className={sessionBadgeClass('done')}>세션 종료됨</span>
+										{parentFolderId && (
+											<button type="button" className={styles.metaClear} onClick={openSession}>
+												세션 보기
+											</button>
+										)}
+									</>
 								) : (
 									<span className={sessionBadgeClass('idle')}>대기</span>
 								)}

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useReviewStore } from '../../store/useReviewStore'
-import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID, wtNodeId } from '../../store/useTabsStore'
-import { listRepoWorktrees, adoptWorktree } from '../../api/worktrees'
-import type { RealWorktree } from '../../api/worktrees'
+import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID } from '../../store/useTabsStore'
+import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
 import StatusDot from '../common/StatusDot'
@@ -130,16 +129,6 @@ const SEARCH_ICON = (
 		<path d="M21 21l-4.3-4.3" />
 	</svg>
 )
-// 워크트리 목록의 연결/연결 해제 토글 하나에 같이 쓴다 — 추적됨(바이올렛)/미추적(회색) 색으로만
-// 상태를 구분하고 아이콘 모양은 하나로 통일(간결함 우선).
-const PLUG_ICON = (
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-		<path d="M9 3v5M15 3v5" />
-		<path d="M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0V8z" />
-		<path d="M12 17v3.5" />
-	</svg>
-)
-
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
 	if (min < 1) return '방금'
@@ -188,14 +177,18 @@ export default function SessionShell() {
 	const refreshAllOrchestrations = useSessionsStore((s) => s.refreshAllOrchestrations)
 	const refreshAllSubtaskWork = useSessionsStore((s) => s.refreshAllSubtaskWork)
 	const cockpitSummary = useSessionsStore((s) => s.cockpitSummary)
+	const devServers = useSessionsStore((s) => s.devServers)
 	const apiAddress = useSessionsStore((s) => s.apiAddress)
-	// "이거 조금만 더 눈에 띄게 해주고 복사 기능도 해줘" — 클릭하면 클립보드에 복사, 1.2초간 "복사됨" 표시.
-	const [addressCopied, setAddressCopied] = useState(false)
-	function copyApiAddress() {
-		if (!apiAddress) return
-		navigator.clipboard?.writeText(apiAddress).catch(() => {})
-		setAddressCopied(true)
-		setTimeout(() => setAddressCopied(false), 1200)
+	// "가장 하단에 켜져있는 로컬서버 바로 클릭 가능한 버튼이나 뭔가 있으면 좋겠어" — 에이전트가
+	// 원격으로 브라우저 탭을 열어주는 경로는 없다(webview는 렌더러 안에만 존재 — §BrowserPane.tsx
+	// 주석). 대신 지금 보고 있는 태스크의 "브라우저" 탭을 사람이 직접 그 dev 서버로 연다 — 터미널
+	// 링크 클릭과 똑같은 useBrowserNavStore 경로(§XTerm.tsx)라 새 배관이 필요 없다.
+	function openDevServer() {
+		const nodeId = useTabsStore.getState().activeNodeId
+		const dev = devServers[0]
+		if (!nodeId || nodeId.startsWith('__') || !dev) return
+		useTabsStore.getState().openOrFocusTab(nodeId, 'browser')
+		useBrowserNavStore.getState().request(nodeId, `http://localhost:${dev.port}`)
 	}
 
 	// "각 레포별로 볼 수 있는 체크박스가 있으면 좋겠어. 예외처리를 한다던가" — 예전엔 라디오 방식(전체 or
@@ -213,17 +206,22 @@ export default function SessionShell() {
 	const [settingsOpen, setSettingsOpen] = useState(false)
 	const [reposModalOpen, setReposModalOpen] = useState(false)
 	const [addRepoOpen, setAddRepoOpen] = useState(false)
-	const [worktrees, setWorktrees] = useState<RealWorktree[] | null>(null)
-	const [worktreesError, setWorktreesError] = useState<string | null>(null)
-	const [worktreeBusy, setWorktreeBusy] = useState<string | null>(null)
 	const [colorPickerFor, setColorPickerFor] = useState<string | null>(null)
 	const multiRepo = repos.length > 1
 	const rootRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
 		loadArchive()
+	}, [loadArchive])
+
+	// "ip address가 달라" — 예전엔 마운트 시 딱 한 번만 불러서, 앱을 켜둔 채 Wi-Fi가 바뀌거나(DHCP
+	// 재임대 등) 잠깐 끊겼다 잡히면 상태바의 LAN IP가 영영 옛 값에 멈춰 있었다. gitStatus 등과 같은
+	// 15초 주기로 다시 불러 실제 지금 IP를 따라가게 한다.
+	useEffect(() => {
 		loadHealth()
-	}, [loadArchive, loadHealth])
+		const id = setInterval(loadHealth, 15000)
+		return () => clearInterval(id)
+	}, [loadHealth])
 
 	// /api/cockpit는 서버에서 15초 fresh 캐시(stale-while-revalidate)라 이 정도 폴링은 부담 없음.
 	useEffect(() => {
@@ -308,40 +306,6 @@ export default function SessionShell() {
 	const checkedRepos = repoFilters ? repos.filter((r) => repoFilters.has(r.id)) : repos
 	const activeRepo = checkedRepos.length === 1 ? checkedRepos[0] : undefined
 	const activeRepoLabel = !repoFilters ? '전체 레포' : checkedRepos.length === 0 ? '레포 없음' : checkedRepos.length === 1 ? checkedRepos[0].name : `${checkedRepos.length}개 레포`
-	// "전체" 또는 여러 개가 체크된 상태일 땐 워크트리 목록이 어느 레포 것인지 모호해서 첫 번째 레포로
-	// 대체 — 체크박스로 정확히 하나만 남기면 바로 그 레포로 바뀐다.
-	const activeRepoId = checkedRepos.length === 1 ? checkedRepos[0].id : repos[0]?.id || null
-	// 브랜치명 → 이미 추적 중인 태스크. inbox 태스크는 폴더가 없어 실제 워크트리가 없으므로 제외.
-	const trackedByBranch = new Map<string, { taskId: string; taskName: string }>()
-	for (const f of folders) for (const t of f.tasks) for (const b of t.branches) trackedByBranch.set(b.name, { taskId: t.id, taskName: t.name })
-	// 사이드바 "워크트리" 섹션엔 아직 태스크로 안 들어온 것만 — 이미 태스크로 등록된 워크트리는
-	// 태스크 트리 안에서만 보인다(중복 표시 방지).
-	const untrackedWorktrees = (worktrees ?? []).filter((w) => !w.isMain && !trackedByBranch.has(w.branch))
-	// worktrees===null인 동안이 곧 로딩 중 — list()가 워크트리마다 status/log/rev-list를 돌려서
-	// (worktrees.cjs) 워크트리가 많은 레포는 눈에 띄게 느리다. 스켈레톤으로 그 시간을 표시.
-	const wtLoading = !!activeRepoId && worktrees === null && !worktreesError
-
-	// 레포를 바꾸면(activeRepoId 변경) 그 레포 것으로 다시 불러온다. 사이드바에 상시 노출되므로
-	// 드롭다운 열림 여부와 무관하게 불러온다.
-	// cancelled 가드 필수 — 레포를 빠르게 전환하면 이전 레포(워크트리 많아 느림)의 응답이 지금
-	// 레포보다 늦게 도착해, 화면엔 새 레포가 떠 있는데 엉뚱한 레포의 워크트리 목록이 덮어씌워질 수
-	// 있다("연결"을 누르면 지금 레포id + 다른 레포의 브랜치가 잘못 짝지어져 저장되는 사고로 실제 발생).
-	useEffect(() => {
-		if (!activeRepoId) return
-		let cancelled = false
-		setWorktrees(null)
-		setWorktreesError(null)
-		listRepoWorktrees(activeRepoId)
-			.then((d) => {
-				if (!cancelled) setWorktrees(d.worktrees)
-			})
-			.catch((e) => {
-				if (!cancelled) setWorktreesError(e instanceof Error ? e.message : String(e))
-			})
-		return () => {
-			cancelled = true
-		}
-	}, [activeRepoId])
 
 	const q = sidebarQuery.trim().toLowerCase()
 	const displayInbox = q ? visibleInbox.filter((t) => t.name.toLowerCase().includes(q)) : visibleInbox
@@ -366,35 +330,6 @@ export default function SessionShell() {
 			const isOpen = openFolders[f.id] !== false
 			if (treeCollapsed ? !isOpen : isOpen) toggleFolder(f.id)
 		})
-	}
-
-	function openTrackedTask(taskId: string) {
-		useTabsStore.getState().setActiveNode(taskId, 'terminal')
-		setRepoPickerOpen(false)
-	}
-
-	function openAdHocTerminal(path: string) {
-		const nodeId = wtNodeId(path)
-		const s = useTabsStore.getState()
-		if (!s.tabsByNode[nodeId]?.length) s.openTab(nodeId, 'terminal')
-		s.setActiveNode(nodeId, 'terminal')
-		setRepoPickerOpen(false)
-	}
-
-	// 새 워크트리를 만들지 않고(이미 있으니) 그 브랜치를 가리키는 Folder/Task/Branch 레코드만 생성.
-	async function connectWorktree(branch: string) {
-		if (!activeRepoId) return
-		setWorktreeBusy(branch)
-		try {
-			const r = await adoptWorktree(activeRepoId, branch)
-			if ('ok' in r && r.ok === false) throw new Error(r.error)
-			await useSessionsStore.getState().loadBoard()
-			if ('taskId' in r) openTrackedTask(r.taskId)
-		} catch (e) {
-			setWorktreesError(e instanceof Error ? e.message : String(e))
-		} finally {
-			setWorktreeBusy(null)
-		}
 	}
 
 	return (
@@ -625,46 +560,6 @@ export default function SessionShell() {
 						</div>
 					)}
 
-					{!archiveView && (wtLoading || untrackedWorktrees.length > 0 || worktreesError) && (
-						<div className={styles.sidebarWtSection}>
-							<div className={styles.sidebarWtDivider} />
-							<div className={styles.sidebarWtHeader}>
-								<span>워크트리</span>
-								{!wtLoading && <span className={styles.sidebarWtCount}>{untrackedWorktrees.length}</span>}
-							</div>
-							{worktreesError && <div className={styles.wtHint}>{worktreesError}</div>}
-							<div className={`scroll-y ${styles.sidebarWtList}`}>
-								{wtLoading &&
-									[0, 1, 2].map((i) => (
-										<div key={i} className={styles.wtSkeletonRow}>
-											<span className={styles.wtSkeletonBar} style={{ width: `${64 - i * 10}%` }} />
-										</div>
-									))}
-								{!wtLoading &&
-									untrackedWorktrees.map((w) => {
-										const busy = worktreeBusy === w.branch
-										return (
-											<div key={w.path} className={styles.wtRow}>
-												<span className={styles.wtRowMain} onClick={() => openAdHocTerminal(w.path)}>
-													<span className={styles.wtRowLabel}>{w.branch}</span>
-												</span>
-												<span
-													className={styles.wtRowAction}
-													onClick={(e) => {
-														e.stopPropagation()
-														if (!busy) connectWorktree(w.branch)
-													}}
-													title="연결"
-												>
-													{PLUG_ICON}
-												</span>
-											</div>
-										)
-									})}
-							</div>
-						</div>
-					)}
-
 					<div className={`m ${styles.foot}`}>
 						<span className={styles.livedot} />
 						<span>
@@ -739,7 +634,11 @@ export default function SessionShell() {
 					<span>연결됨</span>
 				</span>
 				<span className={styles.sbSep} />
-				<span className={styles.sbItem}>
+				<span
+					className={`${styles.sbItem} ${devServers.length ? styles.sbItemLink : ''}`}
+					onClick={devServers.length ? openDevServer : undefined}
+					title={devServers.length ? `localhost:${devServers[0].port} — 지금 태스크의 "브라우저" 탭에서 엽니다` : undefined}
+				>
 					<b>{cockpitSummary?.devCount ?? 0}</b>&nbsp;dev
 				</span>
 				<span className={styles.sbItem}>
@@ -754,13 +653,12 @@ export default function SessionShell() {
 				</span>
 				<span className={styles.sbSpacer} />
 				{apiAddress && (
-					<span
-						className={`${styles.apiAddress} ${addressCopied ? styles.apiAddressCopied : ''}`}
-						onClick={copyApiAddress}
-						title="클릭하면 복사됩니다 — 모바일 기기에서 같은 Wi-Fi로 접속할 때 씁니다"
-					>
-						{addressCopied ? '복사됨 ✓' : apiAddress}
-					</span>
+					// "로컬서버 포트 열려있는거 버튼으로 만들어서 클릭하면 브라우저로 열리게" — target="_blank"는
+					// electron/main.cjs의 setWindowOpenHandler가 가로채 shell.openExternal로 넘긴다(§ PR 링크와
+					// 같은 경로) — 앱 안 webview가 아니라 실제 시스템 기본 브라우저가 뜬다.
+					<a href={`http://${apiAddress}`} target="_blank" rel="noreferrer" className={styles.apiAddress} title="클릭하면 브라우저에서 엽니다">
+						{apiAddress}
+					</a>
 				)}
 			</div>
 
@@ -770,7 +668,7 @@ export default function SessionShell() {
 			<NoteDetailPanel noteId={detailNoteId} onClose={closeNoteDetail} />
 			<SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 			<Modal open={reposModalOpen} onClose={() => setReposModalOpen(false)}>
-				<RepoTable />
+				<RepoTable onAddRepo={() => setAddRepoOpen(true)} />
 			</Modal>
 			<AddRepoModal open={addRepoOpen} onClose={() => setAddRepoOpen(false)} onManage={() => setReposModalOpen(true)} />
 			<NewTaskModal open={newTaskModalOpen} onClose={() => setNewTaskModalOpen(false)} />

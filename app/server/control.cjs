@@ -22,18 +22,25 @@ function isLive(live, name) {
 // 참고)이지만 대상 MCP 서버가 다르다(mcpControl.cjs, 폴더 스코프 없음). Term.create가 내부에서 다시
 // 부르는 trustFolder(cwd, undefined)는 "이미 신뢰됨 + mcpFolderId 없음" 조합이면 아무것도 안 건드리고
 // 즉시 리턴하므로(term.cjs 참고), 여기서 먼저 등록해두면 그 뒤 Term.create 호출에도 안전하게 남는다.
+//
+// ~/.claude.json의 등록 키는 cwd 그대로가 아니라 Term.gitRoot(cwd) — claude CLI가 프로젝트를 식별하는
+// 기준이 실제로는 git 리포지토리 최상위이기 때문이다(term.cjs의 gitRoot 주석 참고). CONTROL_CWD가
+// OpenTask 앱 자신의 루트(openrm/app)인데, 이 앱은 모노레포의 하위 디렉토리라 git root는 한 단계 위
+// (openrm)다 — cwd 그대로 키를 쓰면 CLI가 그 등록을 영원히 못 찾는다(`claude mcp list`로 직접 확인된
+// 버그: opentask-control이 설정엔 있는데 세션엔 전혀 안 잡힘).
 function registerControlMcp(cwd) {
 	try {
+		const key = Term.gitRoot(cwd)
 		const cfg = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
 		cfg.projects = cfg.projects || {}
-		const existing = cfg.projects[cwd] || {}
+		const existing = cfg.projects[key] || {}
 		const mcpServers = { ...(existing.mcpServers || {}) }
 		mcpServers['opentask-control'] = {
 			command: process.execPath,
 			args: [path.join(__dirname, 'mcpControl.cjs')],
 			env: { OPENTASK_CONTROL: '1', OPENTASK_PORT: String(process.env.OPENRM_PORT || 8770) },
 		}
-		cfg.projects[cwd] = {
+		cfg.projects[key] = {
 			allowedTools: [],
 			mcpContextUris: [],
 			enabledMcpjsonServers: [],
@@ -81,12 +88,18 @@ async function getState() {
 	return { running: true, ...state }
 }
 
+// "비서 세션이 자꾸 초기화돼" — term.cjs 세션은 이 서버 프로세스의 자식이라 서버 재시작마다(코드
+// 수정 후 재기동 등) 죽는다(§ term.cjs 상단 주석). state는 메모리 변수라 재시작 후엔 항상 null이라,
+// 예전엔 매번 seed와 함께 완전히 새 claude를 켜서 지금까지의 대화가 통째로 날아갔다. orchestrator.cjs의
+// 지휘자 세션과 같은 복원 경로(claude --continue + continueFallbackSeed)를 그대로 따른다 — CONTROL_CWD가
+// 비서 전용 고정 디렉토리라 --continue가 정확히 이 비서의 마지막 대화를 이어받고, 이어받을 대화가
+// 없을 때만(최초 시작 등, term.cjs watchContinueFallback) 이 seed로 새로 시작한다.
 async function start(extra) {
 	const live = await Term.list().catch(() => [])
 	if (state && isLive(live, state.session)) return { ok: true, already: true, ...state }
 	registerControlMcp(CONTROL_CWD)
 	const model = Settings.modelFor('control')
-	const t = await Term.create({ cwd: CONTROL_CWD, command: 'claude', label: 'control', seed: controlSeed(extra), model })
+	const t = await Term.create({ cwd: CONTROL_CWD, command: 'claude --continue', label: 'control', model, continueFallbackSeed: controlSeed(extra) })
 	if (!t.ok) return { ok: false, error: t.error }
 	const modelLabel = Settings.modelLabelFor('control')
 	state = { session: t.name, model, modelLabel, startedAt: Date.now(), cwd: CONTROL_CWD }

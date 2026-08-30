@@ -15,7 +15,7 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFile } = require('child_process')
+const { execFile, execFileSync } = require('child_process')
 const pty = require('node-pty')
 const { Terminal } = require('@xterm/headless')
 const { SerializeAddon } = require('@xterm/addon-serialize')
@@ -29,15 +29,32 @@ const Settings = require('./settings.cjs')
 // 동일하게 미리 신뢰 등록해 다이얼로그 자체가 안 뜨게 한다. 실패해도 세션 생성은 막지 않음(다이얼로그가
 // 뜨면 뜨는 대로 진행 — best-effort).
 const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.homedir(), '.claude.json')
+// ~/.claude.json의 projects[] 키는 겉보기엔 "우리가 넘긴 cwd 그대로"처럼 보이지만, 실측 결과 claude
+// CLI가 실제로 프로젝트를 식별하는 기준은 그 cwd가 속한 git 리포지토리의 최상위(toplevel)다. cwd가
+// git root 자체면(대부분의 워크트리가 그렇다 — `git worktree add`가 만드는 디렉토리는 그 자체가
+// toplevel) 차이가 없지만, OpenTask 자신처럼 모노레포의 하위 디렉토리(openrm/app, git root는 한 단계
+// 위 openrm)를 cwd로 넘기면 CLI는 그 상위 git root 키에서 설정을 찾고, 우리가 하위 디렉토리 키에
+// 써둔 mcpServers/hasTrustDialogAccepted는 통째로 무시한다 — `claude mcp list`로 직접 재현·확인함
+// (§"비서가 opentask-control MCP를 쓰는걸 어려워해" — opentask-control이 설정 파일엔 있는데 세션엔
+// 전혀 안 잡히던 원인). 그래서 등록 전에 항상 git root로 먼저 정규화한다.
+function gitRoot(cwd) {
+  try {
+    const out = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+    return out || cwd
+  } catch (_) {
+    return cwd
+  }
+}
 // mcpFolderId가 있으면 이 세션은 지휘자다 — mcpDispatch.cjs(§12 "지휘 방식 개선")를 이 cwd의
 // mcpServers에 등록해 curl-in-prompt 대신 구조화된 MCP 툴(dispatch_subtask/log_event/set_subtask_kind)을
 // 쓸 수 있게 한다. 사람 개입 없이 자동 — trustFolder()가 이미 하고 있던 "신뢰 다이얼로그 미리 우회"와
 // 같은 자리, 같은 방식.
 function trustFolder(cwd, mcpFolderId) {
   try {
+    const key = gitRoot(cwd)
     const cfg = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
     cfg.projects = cfg.projects || {}
-    const existing = cfg.projects[cwd] || {}
+    const existing = cfg.projects[key] || {}
     const alreadyTrusted = !!existing.hasTrustDialogAccepted
     // 신뢰 다이얼로그는 이미 처리됐고 MCP 등록도 필요 없으면 더 손댈 게 없다 — 파일 쓰기 생략.
     if (alreadyTrusted && !mcpFolderId) return
@@ -49,7 +66,7 @@ function trustFolder(cwd, mcpFolderId) {
         env: { OPENTASK_FOLDER_ID: mcpFolderId, OPENTASK_PORT: String(process.env.OPENRM_PORT || 8770) },
       }
     }
-    cfg.projects[cwd] = {
+    cfg.projects[key] = {
       allowedTools: [],
       mcpContextUris: [],
       enabledMcpjsonServers: [],
@@ -117,6 +134,10 @@ function forgetSession(name) {
 // name -> { proc: node-pty IPty, term: 헤드리스 xterm(화면 상태), serializeAddon, cwd, command, label,
 //           model, kind, createdAt, wsClients: Set<WebSocket>, exited }
 const sessions = new Map()
+// "업무가 멈추든" — status()가 working:true를 관측할 때마다 갱신되는 "마지막으로 실제 작업 중이었던
+// 시각". status() 자체은 매번 화면을 다시 긁는 상태없는 함수라 "얼마나 오래 조용했는지"를 기억 못 했다 —
+// stalled(침묵형 막힘) 감지의 유일한 전제조건이라 여기 최소한으로 추가한다(§ orchestrator.cjs checkStalledSubtasks).
+const lastWorkingAt = new Map()
 
 function slug(s) {
   return (
@@ -128,6 +149,35 @@ function slug(s) {
   )
 }
 
+// OpenTask 자신이 Claude Code 세션(개발할 때의 나 자신) 안에서 실행되고 있으면 이 서버 프로세스가
+// CLAUDECODE/CLAUDE_CODE_SESSION_ID/CLAUDE_CODE_CHILD_SESSION 등 "이 프로세스는 어느 세션의 자식인가"를
+// 나타내는 식별 변수를 통째로 물려받는다. 이걸 그대로 pty 자식에 다시 물려주면, 거기서 띄우는
+// 지휘자/서브태스크/비서용 claude 프로세스가 "나는 (나 자신인) 다른 세션의 자식 세션이다"라고 착각한다.
+// 확인된 증상 두 가지: (1) 대화 기록이 "중첩 세션이니 안 남긴다"로 조용히 꺼짐(→
+// CLAUDE_CODE_FORCE_SESSION_PERSISTENCE로 개별 대응했었음), (2) 프로젝트 레벨 MCP 서버(opentask-control 등,
+// ~/.claude.json에 정상 등록돼 있어도)가 로드되지 않아 비서가 MCP 툴을 아예 못 봄(ToolSearch가 빈 결과).
+// 둘 다 같은 뿌리라 변수 하나씩 땜질하는 대신, 세션 정체성을 나타내는 변수 전체를 pty 자식 env에서 지운다.
+const CLAUDE_IDENTITY_ENV_KEYS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_BRIDGE_SESSION_ID',
+  'CLAUDE_PID',
+  'CLAUDE_EFFORT',
+  'AI_AGENT',
+  'ORCA_WORKTREE_ID',
+  'ORCA_WORKSPACE_ID',
+]
+function spawnEnv() {
+  const env = { ...process.env, LANG: process.env.LANG || 'en_US.UTF-8', LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8' }
+  for (const k of CLAUDE_IDENTITY_ENV_KEYS) delete env[k]
+  return env
+}
+
 // 실제 pty+헤드리스 터미널을 name으로 스폰해 레지스트리에 등록한다. create()/ensureNamed() 공용 내부 함수.
 function spawnEntry(name, cwd, { cols = 200, rows = 50 } = {}) {
   const shell = process.env.SHELL || '/bin/zsh'
@@ -137,12 +187,7 @@ function spawnEntry(name, cwd, { cols = 200, rows = 50 } = {}) {
     rows,
     cwd,
     // -e LANG 대신 env로 넘김(tmux 전용 플래그였음) — 셸/claude가 UTF-8로 동작 → 한글 안 깨짐.
-    // CLAUDE_CODE_FORCE_SESSION_PERSISTENCE — OpenTask 자신이 Claude Code 세션(개발할 때의 나 자신)
-    // 안에서 실행되고 있으면 이 서버가 CLAUDE_CODE_CHILD_SESSION=1을 그대로 물려받고, 여기서 스폰하는
-    // 지휘자/서브태스크/비서 세션도 그 env를 이어받아 "중첩 세션이니 대화 기록을 안 남긴다"로 조용히
-    // 꺼진다("Transcript saving is off" 경고). claude --continue 복원도, 이번 비서 대화형 UI(§
-    // transcript.cjs)도 전부 그 기록 파일에 의존하므로 절대 꺼지면 안 된다 — 항상 강제로 켠다.
-    env: { ...process.env, LANG: process.env.LANG || 'en_US.UTF-8', LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8', CLAUDE_CODE_FORCE_SESSION_PERSISTENCE: '1' },
+    env: spawnEnv(),
   })
   const term = new Terminal({ cols, rows, allowProposedApi: true })
   const serializeAddon = new SerializeAddon()
@@ -469,7 +514,13 @@ async function status(name) {
     .slice(-2)
     .join(' · ')
     .slice(0, 160)
-  return { exists: true, working, waiting, needsAuth, isClaude, tail }
+  // "응답없음" 판정(§orchestrator.cjs checkStalledSubtasks)의 기준선. working일 때만 갱신하면 서버가
+  // 막 재시작된 직후엔 이 세션에 대한 기록이 아예 없어(인메모리 Map이라 재시작하면 비워짐) 호출부가
+  // session.started_at까지 거슬러 올라가 폴백하는데, 몇 시간 전에 시작한 멀쩡한 세션도 그 순간 잠깐
+  // idle이면 즉시 "몇 시간째 응답없음"으로 오탐한다. working 여부와 무관하게 "이 세션을 처음 관측한
+  // 시각"을 기준선으로 한 번은 찍어둬 — 재시작 후 첫 관측부터 정상적으로 새 유예 기간이 시작되게 한다.
+  if (working || !lastWorkingAt.has(name)) lastWorkingAt.set(name, Date.now())
+  return { exists: true, working, waiting, needsAuth, isClaude, tail, lastWorkingAt: lastWorkingAt.get(name) || null }
 }
 
 // 빈 포트 찾기 (3000~3099 중 LISTEN 안 된 첫 포트)
@@ -644,6 +695,7 @@ module.exports = {
   PREFIX,
   checkAvailable,
   trustFolder,
+  gitRoot,
   // WS 브리지(index.cjs) 전용 — 세션 레지스트리에 직접 접근.
   ensureNamed,
   attachWs,

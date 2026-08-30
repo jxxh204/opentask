@@ -82,7 +82,9 @@ function mapPr(p, repoName, wtMap) {
 		title: p.title,
 		branch: p.headRefName,
 		base: p.baseRefName,
-		state: p.state,
+		// gh CLI는 state를 대문자(OPEN/CLOSED/MERGED)로 준다 — 프론트(GitStatusEntry.pr.state,
+		// TaskRow의 PR_LABEL/isDone 비교)는 전부 소문자를 기대해서 여기서 한 번만 맞춘다.
+		state: String(p.state || '').toLowerCase(),
 		draft: !!p.isDraft,
 		review: p.reviewDecision || null,
 		ci: ciSummary(p.statusCheckRollup),

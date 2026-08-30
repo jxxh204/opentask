@@ -183,6 +183,73 @@
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: hidden;
+	position: relative;
+}
+
+/* "태스크를 반으로 나누면 탭도 반으로 나뉘어야해. vscode처럼" — group 두 개(각자 탭바+body를 통째로
+   가진 독립 에디터 그룹, VSCode의 split editor와 같은 모델)를 좌우로 나란히 둔다. 이전엔 오른쪽에
+   탭 하나만 고정해 보여주는 "미리보기 창"이었는데, 이번엔 오른쪽도 탭을 여러 개 갖고 자유롭게
+   전환·추가할 수 있는 진짜 두 번째 그룹이다. */
+.groupsWrap {
+	display: flex;
+	height: 100%;
+	width: 100%;
+}
+.group {
+	flex: 1 1 0;
+	min-width: 0;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.splitDivider {
+	flex: none;
+	width: 1px;
+	background: var(--line);
+}
+
+/* "탭 드래그앤드롭이 자연스럽지 않아" — 드래그 중 반대쪽 탭바 위로 올리면 그 탭바 전체가 옅게
+   물들어 "여기 놓으면 이 그룹으로 옮겨간다"는 걸 즉시 보여준다(§ dragEnterZone/dragLeaveZone의
+   카운터 패턴이 실제 드롭 대상 위에서만 안정적으로 켜지게 해준다 — 이전엔 이런 피드백 자체가 없어
+   드롭이 됐는지 아닌지 드래그 도중엔 전혀 알 수 없었다). */
+.tabbarDragOver {
+	background: var(--vtint);
+	box-shadow: inset 0 0 0 1.5px var(--violet);
+}
+
+/* 탭바에서 드래그 중이고, 아직 분할 전(왼쪽 그룹 하나뿐)일 때만 나타나는 오른쪽 가장자리 드롭존 —
+   여기 놓으면 두 번째 그룹이 새로 생긴다. 분할된 뒤에는 그룹 탭바끼리 직접 드래그해 옮기므로
+   (tabbarDragOver) 이 존은 다시 안 나온다. */
+.splitDropZone {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 26%;
+	min-width: 160px;
+	background: var(--card2);
+	border-left: 2px dashed var(--line2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 5;
+	pointer-events: auto;
+	opacity: 0.85;
+}
+.splitDropZoneActive {
+	background: var(--vtint);
+	border-left-color: var(--violet);
+}
+.splitDropHint {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--t3);
+	text-align: center;
+	padding: 0 12px;
+}
+.splitDropZoneActive .splitDropHint {
+	color: var(--violet);
 }
 
 .termWrap {

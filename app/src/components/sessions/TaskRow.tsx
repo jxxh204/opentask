@@ -3,6 +3,7 @@ import type { Task } from '../../store/types'
 import type { OrchestrationSession } from '../../api/sessions'
 import { removeTask } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useTabsStore } from '../../store/useTabsStore'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
 import TaskColorDot from './TaskColorDot'
@@ -14,7 +15,7 @@ const CLOCK = (
 		<path d="M12 7v5l3.5 2" />
 	</svg>
 )
-const CHECK = (
+export const CHECK = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
 		<path d="M5 13l4 4L19 7" />
 	</svg>
@@ -31,6 +32,14 @@ const QUESTION = (
 		<path d="M12 17h.01" />
 	</svg>
 )
+// "업무가 멈추든... 서로가 답장을 주는거야" — 서브태스크가 스스로 report-blocked로 보고한 "도움
+// 필요" 상태 전용 아이콘. QUESTION(입력 대기)·LOCK(인증)과는 다른 신호라 느낌표로 구분한다.
+export const HELP = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M12 7.5v6" />
+		<path d="M12 17h.01" />
+	</svg>
+)
 
 function timeAgo(ts: number) {
 	const min = Math.floor((Date.now() - ts) / 60000)
@@ -41,7 +50,7 @@ function timeAgo(ts: number) {
 	return `${Math.floor(hr / 24)}d`
 }
 
-const PR_LABEL = { open: 'PR open', merged: 'PR merged', closed: 'PR closed' } as const
+export const PR_LABEL = { open: 'PR open', merged: 'PR merged', closed: 'PR closed' } as const
 
 // 프로토타입의 subtask-row 그대로 — 상태 원(circle) + 제목 + 뱃지가 1행, 브랜치 줄(⎇)이 2행,
 // 담당 에이전트(모델) 칩이 3행, 서브에이전트 토글이 그 아래. PR 상태/ahead-behind/서브에이전트는
@@ -78,11 +87,15 @@ export default function TaskRow({
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 	const quickStartBusy = useSessionsStore((s) => s.quickStartBusy === task.id)
 	const gitStatus = useSessionsStore((s) => s.gitStatus)
+	const gitStatusByPath = useSessionsStore((s) => s.gitStatusByPath)
 	const renameTask = useSessionsStore((s) => s.renameTask)
 	const updateTaskColor = useSessionsStore((s) => s.updateTaskColor)
 	const setTaskDone = useSessionsStore((s) => s.setTaskDone)
 	// term.cjs가 tmux 화면을 스크레이프해 매번 새로 계산하는 값(저장된 상태 아님) — 세션명으로 조인.
 	const termStatus = useSessionsStore((s) => (session ? s.termStatus[session.tmuxSession] : undefined))
+	// "클로드세션 동작 여부에 따라서... 서브태스크도" — subChainDot이 alive/done 2단계뿐이라 서브태스크
+	// 세션이 인증·질문 대기 중이어도 안 보였다. 서브태스크별 세션명으로 같은 termStatus 맵을 다시 조인.
+	const termStatusMap = useSessionsStore((s) => s.termStatus)
 
 	const [menuOpen, setMenuOpen] = useState(false)
 	const [renaming, setRenaming] = useState(false)
@@ -92,7 +105,10 @@ export default function TaskRow({
 	const nb = task.branches.length
 	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 태스크 트리와 같은 원칙으로
 	// 이 목록에서 걸러낸다(§ SessionShell.tsx visibleInbox/visibleFolders, 캘린더에는 그대로 남음).
-	const visibleSubtasks = task.subtasks.filter((st) => !st.completed_at)
+	// "circle 조건을 살펴봐야겠어. 나와야할땐 안나오고" — 완료 처리됐어도 그 서브태스크의 세션이
+	// 아직 살아있으면(사람이 먼저 완료를 누르고 에이전트는 계속 일하는 경우) 숨기지 않는다 — 안 그러면
+	// 실제로 진행 중인 서브태스크가 체인에서 통째로 사라져 "진행중 표기가 안 보인다"로 보인다.
+	const visibleSubtasks = task.subtasks.filter((st) => !st.completed_at || subtaskWork?.find((w) => w.id === st.id)?.alive)
 	const primaryBranch = task.branches[0]
 	const git = primaryBranch ? gitStatus[primaryBranch.name] : undefined
 	const openReviewCount = task.reviews.filter((r) => r.state === 'open').length
@@ -204,7 +220,15 @@ export default function TaskRow({
 							</>
 						)}
 						{git?.pr && (
-							<span className={`m ${styles.pill} ${git.pr.draft ? styles.pillPrDraft : styles.pillPr}`}>{git.pr.draft ? 'PR draft' : PR_LABEL[git.pr.state]}</span>
+							<a
+								href={git.pr.url}
+								target="_blank"
+								rel="noreferrer"
+								className={`m ${styles.pill} ${git.pr.draft ? styles.pillPrDraft : styles.pillPr}`}
+								onClick={(e) => e.stopPropagation()}
+							>
+								{git.pr.draft ? 'PR draft' : PR_LABEL[git.pr.state]}
+							</a>
 						)}
 						{hasReviews && (
 							<span
@@ -315,60 +339,122 @@ export default function TaskRow({
 							}}
 						>
 							<div className={styles.subChainRail} />
-							{visibleSubtasks.map((st) => (
-								<div
-									key={st.id}
-									className={styles.subChainNode}
-									draggable
-									style={{ opacity: dragSubtaskId === st.id ? 0.4 : 1 }}
-									onDragStart={(e) => {
-										e.stopPropagation()
-										e.dataTransfer.effectAllowed = 'move'
-										e.dataTransfer.setData('text/plain', st.id)
-										setDragSubtask(st.id, task.id)
-									}}
-									onDragEnd={(e) => {
-										e.stopPropagation()
-										setDragSubtask(null, null)
-										setOverSubtask(null)
-									}}
-								>
-									<span
-										className={`${styles.subChainDot} ${
-											subtaskWork?.find((w) => w.id === st.id)?.alive
-												? styles.subChainDotAlive
-												: subtaskWork?.find((w) => w.id === st.id)?.started
-													? styles.subChainDotDone
-													: ''
-										}`}
-									/>
+							{visibleSubtasks.map((st) => {
+								const work = subtaskWork?.find((w) => w.id === st.id)
+								// "PR뱃지도 자동으로 안잡혀" — subtaskWork.branch(DB 스냅샷)는 에이전트가 자기
+								// 워크트리 안에서 git checkout -b로 브랜치를 바꾸는 순간 낡는다. 경로는 안 바뀌므로
+								// gitStatusByPath로 먼저 조회하고, 표시할 브랜치명도 실제 지금 값(subGit.branch)을
+								// 우선한다 — 없으면(경로 데이터가 아직 없을 때) DB 스냅샷으로 폴백.
+								const subGit = work?.worktreePath ? gitStatusByPath[work.worktreePath] : work?.branch ? gitStatus[work.branch] : undefined
+								const subBranch = subGit?.branch ?? work?.branch
+								const subTermStatus = work?.tmuxSession ? termStatusMap[work.tmuxSession] : undefined
+								const subNeedsAuth = !!subTermStatus?.needsAuth
+								const subNeedsInput = !subNeedsAuth && !!subTermStatus?.waiting
+								return (
 									<div
-										className={`${styles.subChainCard} ${overSubtaskId === st.id && dragSubtaskId !== st.id ? styles.subChainCardDropTarget : ''}`}
-										onClick={(e) => {
+										key={st.id}
+										className={styles.subChainNode}
+										draggable
+										style={{ opacity: dragSubtaskId === st.id ? 0.4 : 1 }}
+										onDragStart={(e) => {
 											e.stopPropagation()
-											useSessionsStore.getState().openSubtaskDetail(st.id, task.id)
+											e.dataTransfer.effectAllowed = 'move'
+											e.dataTransfer.setData('text/plain', st.id)
+											setDragSubtask(st.id, task.id)
 										}}
-										onDragOver={(e) => {
-											if (dragSubtaskTaskId !== task.id || dragSubtaskId === st.id) return
-											e.preventDefault()
+										onDragEnd={(e) => {
 											e.stopPropagation()
-											if (overSubtaskId !== st.id) setOverSubtask(st.id)
-										}}
-										onDragLeave={(e) => {
-											e.stopPropagation()
-											if (overSubtaskId === st.id) setOverSubtask(null)
-										}}
-										onDrop={(e) => {
-											if (dragSubtaskTaskId !== task.id || !dragSubtaskId) return
-											e.preventDefault()
-											e.stopPropagation()
-											reorderSubtasks(task.id, dragSubtaskId, st.id)
+											setDragSubtask(null, null)
+											setOverSubtask(null)
 										}}
 									>
-										<span className={styles.subChainName}>{st.name}</span>
+										<span
+											className={`${styles.subChainDot} ${
+												work?.blocked || subNeedsAuth || subNeedsInput
+													? styles.subChainDotAlert
+													: work?.stalled
+														? styles.subChainDotStalled
+														: work?.alive
+															? styles.subChainDotAlive
+															: work?.done
+																? styles.subChainDotComplete
+																: work?.started
+																	? styles.subChainDotDone
+																	: ''
+											}`}
+											title={
+												work?.blocked
+													? `도움 요청: ${work.blockedReason}`
+													: subNeedsAuth
+														? '인증이 필요합니다'
+														: subNeedsInput
+															? '입력이 필요합니다'
+															: work?.stalled
+																? '한동안 응답이 없습니다 — 확인해보세요'
+																: work?.done
+																	? '완료'
+																	: undefined
+											}
+										>
+											{work?.blocked ? HELP : work?.done && !subNeedsAuth && !subNeedsInput && !work?.alive ? CHECK : null}
+										</span>
+										<div
+											className={`${styles.subChainCard} ${overSubtaskId === st.id && dragSubtaskId !== st.id ? styles.subChainCardDropTarget : ''}`}
+											onClick={(e) => {
+												e.stopPropagation()
+												// "스피너가 있는 태스크는 클릭 시 클로드세션탭이 열렸으면해" — 진행 중(alive)인
+												// 서브태스크는 상세 모달 대신 바로 그 세션 탭으로 들어간다. task.folder_id가
+												// 없으면(아직 일감함) 승격 전이라 세션 자체가 없으니 기존 상세 모달로.
+												if (work?.alive && task.folder_id) {
+													useTabsStore.getState().openSubtaskTab(task.folder_id, st.id, task.id, st.name)
+													useTabsStore.getState().setActiveNode(task.folder_id, 'orchestrator')
+												} else {
+													useSessionsStore.getState().openSubtaskDetail(st.id, task.id)
+												}
+											}}
+											onDragOver={(e) => {
+												if (dragSubtaskTaskId !== task.id || dragSubtaskId === st.id) return
+												e.preventDefault()
+												e.stopPropagation()
+												if (overSubtaskId !== st.id) setOverSubtask(st.id)
+											}}
+											onDragLeave={(e) => {
+												e.stopPropagation()
+												if (overSubtaskId === st.id) setOverSubtask(null)
+											}}
+											onDrop={(e) => {
+												if (dragSubtaskTaskId !== task.id || !dragSubtaskId) return
+												e.preventDefault()
+												e.stopPropagation()
+												reorderSubtasks(task.id, dragSubtaskId, st.id)
+											}}
+										>
+											<div className={styles.subChainTop}>
+												<span className={styles.subChainName}>{st.name}</span>
+												{subGit?.pr && (
+													<a
+														href={subGit.pr.url}
+														target="_blank"
+														rel="noreferrer"
+														className={`m ${styles.subChainPill} ${subGit.pr.draft ? styles.pillPrDraft : styles.pillPr}`}
+														onClick={(e) => e.stopPropagation()}
+													>
+														{subGit.pr.draft ? 'PR draft' : PR_LABEL[subGit.pr.state]}
+													</a>
+												)}
+											</div>
+											{subBranch && (
+												<div className={`m ${styles.subChainWt}`}>
+													<span className={styles.wtIcon}>⎇</span>
+													{subBranch}
+													{!!subGit?.ahead && <span className={styles.deltaAhead}> ↑{subGit.ahead}</span>}
+													{!!subGit?.behind && <span className={styles.deltaBehind}> ↓{subGit.behind}</span>}
+												</div>
+											)}
+										</div>
 									</div>
-								</div>
-							))}
+								)
+							})}
 						</div>
 					)}
 					{nb > 0 && <BranchChain branches={task.branches} kind={task.kind} groupBase={folderBase} />}

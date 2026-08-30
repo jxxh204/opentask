@@ -19,6 +19,7 @@ const Term = require('./term.cjs')
 const Worktrees = require('./worktrees.cjs')
 const Actuator = require('./actuator.cjs')
 const Settings = require('./settings.cjs')
+const Notify = require('./notify.cjs')
 const C = require('./collector.cjs')
 const StoreFolders = require('./store/folders.cjs')
 const StoreTasks = require('./store/tasks.cjs')
@@ -179,7 +180,18 @@ async function launchSubtask(task, subtask) {
 	// 팀 규칙은 초두 효과를 노려 작업 설명보다 먼저 두고(뒤에 review 컨텍스트까지 붙으면 길어져 묻히기
 	// 쉽다), 끝에 짧게 한 번 더 되짚는다(최신 효과) — conductorSeed와 같은 3중 반복 원칙.
 	const taskLine = `이 서브태스크를 진행해줘: "${subtask.name}"(태스크 "${task.name}"의 일부). ${subtask.desc || ''}`.trim()
-	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '')
+	// "메인 태스크와 서브 태스크가 서로 대화하지 않아... 둘다 계속 멈춰" — 예전엔 여기서 끝나면 사람이
+	// 상세 패널의 "진행" 버튼을 눌러줘야만 다음 서브태스크가 시작됐다(§ advanceSubtaskWork 예전 유일한
+	// 호출부). 판단이 필요 없는 정상 완료는 서버가 바로 다음 단계를 시작하도록, 이 curl 하나로 스스로
+	// 체인을 넘기게 한다 — 마지막 단계여도 같은 curl로 안전하게 "완료"만 기록된다(advanceSubtaskWork
+	// 참고).
+	const port = process.env.OPENRM_PORT || 8770
+	const advanceLine = `■ 이 서브태스크를 실제로 다 마쳤으면(테스트 통과·리뷰 반영 등 확인까지 끝난 상태) 사람이나 태스크 매니저를 기다리지 말고 바로 이 curl로 다음 단계를 직접 시작해라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/advance (마지막 단계면 다음 세션 없이 완료만 기록된다 — 안전하게 항상 이 curl을 써라)`
+	// "메인 태스크와 서브 태스크가 서로 대화를 안 하거든... 업무가 멈추든" — 완료(advanceLine)와 대칭되는
+	// "막힘" 보고 경로. 혼자 못 푸는 결정(정책 판단, 크리덴셜, 애매한 요구사항 등)을 만나면 조용히 멈추는
+	// 대신 이 curl로 바로 지휘자를 깨운다 — 세션 자체는 안 죽는다, 응답 기다리며 계속 살아있어도 된다.
+	const blockedLine = `■ 혼자 판단 못 할 결정이나 막힘(정책·크리덴셜·애매한 요구사항 등)을 만나면 조용히 멈추지 말고 바로 이 curl로 보고해라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/report-blocked -H 'Content-Type: application/json' -d '{"reason":"<막힌 이유를 한두 문장으로>"}' (세션은 안 죽는다 — 응답 기다리며 계속 작업 가능하면 이어서 해도 된다)`
+	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '') + `\n\n${advanceLine}\n\n${blockedLine}`
 	const model = Settings.modelFor('dev')
 	const t = await Term.create({ cwd: wt.path, command: 'claude', label: subtask.name, seed, model })
 	if (!t.ok) return { ok: false, error: t.error }
@@ -235,8 +247,13 @@ async function startSubtaskWork(taskId) {
 	return launchSubtask(task, next)
 }
 
-// 지금 진행 중인 서브태스크를 끝난 걸로 기록하고(끝났다는 판단은 사람이 함 — 자동 완료 감지는 범위
-// 밖) 다음 서브태스크의 워크트리+세션을 새로 만든다("순차로 진행하게해줘").
+// 지금 진행 중인 서브태스크를 끝난 걸로 기록하고 다음 서브태스크의 워크트리+세션을 새로 만든다
+// ("순차로 진행하게해줘"). 아래 주석대로 지금은 서브태스크 자신이 호출한다 — "사람/지휘자가 판단해야
+// 한다"는 옛 설명은 지워졌다(더 밑 conductorSeed도 같이 고쳤다 — 지휘자 seed에 남아있던 낡은 문구).
+// "메인 태스크와 서브 태스크가 서로 대화하지 않아... 둘다 계속 멈춰" — 이 함수는 전부터 있었지만
+// 사람이 상세 패널에서 버튼을 눌러야만 호출됐다. 이제 launchSubtask의 seed가 서브태스크 자신에게
+// "끝나면 이 curl로 직접 다음 단계로 넘겨라"를 지시하므로(§ launchSubtask), 실제로는 그 서브태스크
+// 세션 자신이 이 함수를 호출한다 — 판단(지휘자 승인 등) 없이 서버가 바로 다음 단계를 시작한다.
 async function advanceSubtaskWork(taskId) {
 	const task = StoreTasks.get(taskId)
 	if (!task) return { ok: false, error: 'task not found' }
@@ -246,11 +263,77 @@ async function advanceSubtaskWork(taskId) {
 		return !!active
 	})
 	if (liveIdx === -1) return { ok: false, error: '진행 중인 서브태스크가 없습니다 — 먼저 시작하세요.' }
-	const current = StoreSubtaskSessions.getActiveForSubtask(subtasks[liveIdx].id)
-	StoreSubtaskSessions.markEnded(current.id)
+	const current = subtasks[liveIdx]
+	const currentSession = StoreSubtaskSessions.getActiveForSubtask(current.id)
+	StoreSubtaskSessions.markEnded(currentSession.id)
 	const next = subtasks[liveIdx + 1]
+	// "서로 대화를 안 하거든" — pushFeed(로그 기록)만으론 지휘자가 대화 로그를 스스로 보러 가지 않는
+	// 한 절대 못 알아챈다. notifyConductor로 지휘자 pty에 직접 타이핑해 능동적으로 통보한다(사람→지휘자
+	// conductorTell, 지휘자→서브태스크 conductorSay와 대칭되는 서브태스크→지휘자 다리).
+	if (task.folder_id) {
+		const s = ensureState(task.folder_id)
+		delete s.blocked[current.id] // 막혀있다가 결국 스스로 풀고 완료한 경우 — 표시 해제.
+		delete s.stalled[current.id]
+		const text = next ? `"${current.name}" 완료 → 다음 단계 "${next.name}" 자동 시작` : `"${current.name}" 완료 — 마지막 단계였습니다.`
+		await notifyConductor(task.folder_id, current.id, text, 'result')
+		// 전체 체인이 다 끝났을 때만 OS 알림(중간 홉마다 울리면 시끄러움 — 사용자 확인).
+		if (!next) Notify.notifyEscalation(`🏁 "${task.name}" 체인 완료`, `"${current.name}"까지 모든 단계가 끝났습니다.`)
+	}
 	if (!next) return { ok: true, done: true }
 	return launchSubtask(task, next)
+}
+
+// "업무가 멈추든 업무가 어떻든간에 서로가 답장을 주는거야" — advanceSubtaskWork(완료)와 대칭되는
+// "막힘" 보고. 세션은 안 죽인다(끝난 게 아니라 도움이 필요한 것뿐 — advance처럼 markEnded/launchSubtask
+// 안 함). 완료와 달리 사람도 바로 알아야 하는 사안이라 OS 알림은 10초 tick을 기다리지 않고 즉시 쏜다.
+async function reportSubtaskBlocked(taskId, reason) {
+	const task = StoreTasks.get(taskId)
+	if (!task) return { ok: false, error: 'task not found' }
+	if (!task.folder_id) return { ok: false, error: '메인 태스크에 아직 연결되지 않았습니다.' }
+	const subtasks = StoreSubtasks.listByTask(taskId)
+	const liveIdx = subtasks.findIndex((st) => !!StoreSubtaskSessions.getActiveForSubtask(st.id))
+	if (liveIdx === -1) return { ok: false, error: '진행 중인 서브태스크가 없습니다.' }
+	const current = subtasks[liveIdx]
+	const s = ensureState(task.folder_id)
+	const cleanReason = String(reason || '').trim().slice(0, 500) || '(사유 없음)'
+	s.blocked[current.id] = cleanReason
+	await notifyConductor(task.folder_id, current.id, `"${current.name}" 막힘 — ${cleanReason}`, 'blocked')
+	Notify.notifyEscalation(`🆘 "${current.name}" 도움 요청`, cleanReason)
+	return { ok: true, subtaskId: current.id }
+}
+
+// "업무가 어떻든간에" — 명시적 보고(report-blocked) 없이 그냥 조용해지는 경우(컨텍스트 한도, 크래시,
+// 보고를 잊음)를 잡는 안전망. blocked(확정 신호)와 달리 이건 추정이라 s.stalled에 따로 저장하고
+// UI도 일부러 다른 색(amber)을 쓴다 — 둘을 섞으면 진짜 확정 신호의 긴급도가 희석된다.
+const STALLED_THRESHOLD_MS = 15 * 60 * 1000
+async function checkStalledSubtasks() {
+	const now = Date.now()
+	const live = await Term.list().catch(() => [])
+	for (const folder of StoreFolders.list()) {
+		const tasks = StoreTasks.listByFolder(folder.id)
+		for (const task of tasks) {
+			for (const st of StoreSubtasks.listByTask(task.id)) {
+				const session = StoreSubtaskSessions.getActiveForSubtask(st.id)
+				const s = ensureState(folder.id)
+				if (!session || !isLive(live, session.tmux_session)) {
+					delete s.stalled[st.id]
+					continue
+				}
+				if (s.blocked[st.id]) continue // 이미 명시적으로 막힘 보고됨 — 중복 알림 방지
+				const status = await Term.status(session.tmux_session).catch(() => null)
+				if (!status || status.working || status.waiting || status.needsAuth) {
+					delete s.stalled[st.id] // 정상으로 돌아옴 — 다음에 또 조용해지면 재알림 허용
+					continue
+				}
+				const last = status.lastWorkingAt || session.started_at
+				if (now - last < STALLED_THRESHOLD_MS || s.stalled[st.id]) continue
+				s.stalled[st.id] = true
+				const mins = Math.round((now - last) / 60000)
+				await notifyConductor(folder.id, st.id, `"${st.name}" ${mins}분째 응답 없음 — 확인해봐라(막힌 게 아니라면 무시해도 됨).`, 'stalled')
+				Notify.notifyEscalation(`💤 "${st.name}" 응답 없음`, `${mins}분째 조용합니다.`)
+			}
+		}
+	}
 }
 
 // "서브태스크 클로드 세션은 어떻게 킬지 고민이야" — 다음으로 넘기지 않고 지금 서브태스크 세션만
@@ -261,6 +344,18 @@ async function stopSubtaskSession(subtaskId) {
 	if (!active) return { ok: false, error: '진행 중인 세션이 없습니다.' }
 	await Term.kill(active.tmux_session).catch(() => {})
 	StoreSubtaskSessions.markEnded(active.id)
+	// blocked/stalled로 빨간 도움요청 점이 뜬 서브태스크를 advanceSubtaskWork를 거치지 않고 여기로
+	// 바로 끄면(§ reportSubtaskBlocked/checkStalledSubtasks) 세션은 죽었는데 표시만 그대로 남아
+	// 계속 "도움 요청"으로 보인다 — 세션이 끝난 이상 더는 유효한 신호가 아니니 같이 지운다.
+	const st = StoreSubtasks.get(subtaskId)
+	const task = st ? StoreTasks.get(st.task_id) : null
+	if (task && task.folder_id) {
+		const s = states.get(task.folder_id)
+		if (s) {
+			delete s.blocked[subtaskId]
+			delete s.stalled[subtaskId]
+		}
+	}
 	return { ok: true }
 }
 
@@ -273,6 +368,12 @@ async function stopSubtaskSession(subtaskId) {
 async function getSubtaskWorkState(taskId) {
 	const subtasks = StoreSubtasks.listByTask(taskId)
 	let live = await Term.list().catch(() => [])
+	// "업무가 멈추든" — reportSubtaskBlocked가 폴더 state에 심어둔 표시를 이미 폴링되는 이 응답에
+	// 얹는다(새 폴링 엔드포인트 불필요). 아직 폴더에 안 들어간 태스크면 blocked 볼 게 없으니 빈 맵.
+	const task = StoreTasks.get(taskId)
+	const folderState = task && task.folder_id ? states.get(task.folder_id) : null
+	const blockedMap = folderState?.blocked || {}
+	const stalledMap = folderState?.stalled || {}
 	const result = []
 	for (const st of subtasks) {
 		const session = StoreSubtaskSessions.latestForSubtask(st.id)
@@ -286,6 +387,13 @@ async function getSubtaskWorkState(taskId) {
 			name: st.name,
 			started: !!session,
 			alive: !!session && !session.ended_at && isLive(live, session.tmux_session),
+			// "서브태스크가 완료되면 초록색 동그라미에 체크표시로" — ended_at은 advanceSubtaskWork가 이
+			// 서브태스크를 명시적으로 다음 단계로 넘길 때만 찍힌다(§ 위 주석 "세션이 바뀌면 안 돼") — 그냥
+			// 세션이 죽은 것(재시작 등, ended_at 없음)과 실제로 끝나서 다음으로 넘어간 것을 구분하는 진짜 신호.
+			done: !!(session && session.ended_at),
+			blocked: !!blockedMap[st.id],
+			blockedReason: blockedMap[st.id] || null,
+			stalled: !!stalledMap[st.id],
 			tmuxSession: session ? session.tmux_session : null,
 			worktreePath: session ? session.worktree_path : null,
 			branch: branch ? branch.name : null,
@@ -303,7 +411,10 @@ const states = new Map()
 const starting = new Set()
 
 function blank() {
-	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, feed: [] }
+	// blocked: subtaskId → reason(§ reportSubtaskBlocked). stalled: subtaskId → true(§ checkStalledSubtasks).
+	// 둘 다 같은 원칙(인메모리, 폴더당 하나, DB 영속화 불필요 — 재시작하면 그 서브태스크가 다시
+	// 물어보거나 다시 감지되면 됨).
+	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, feed: [], blocked: {}, stalled: {} }
 }
 function getState(folderId) {
 	return states.get(folderId) || blank()
@@ -342,6 +453,11 @@ async function start(folderId) {
 		const tasks = StoreTasks.listByFolder(folderId) // order_idx ASC = 웨이브 순서
 		if (!tasks.length) return { ok: false, error: '폴더에 태스크가 없습니다.' }
 		const s = ensureState(folderId)
+		// "로딩이 돌길래 알아서 동작하고 있는줄 알았는데... 태스크 매니저를 접속해보니 이제야 클로드
+		// 세션이 켜지고있어" — 지휘자(태스크 매니저)는 이 탭을 처음 열 때만 지연 시작하던 별도 세션이라,
+		// 서브태스크 코딩 세션(스피너의 실체)은 이미 돌고 있는데 정작 지휘자는 콜드 스타트로 체감됐다.
+		// 아래 서브태스크 기동과 동시에(대기 없이 병렬로) 같이 켜서, 탭을 열 때는 이미 돌고 있게 한다.
+		const conductorStarting = startConductor(folderId).catch((e) => ({ ok: false, error: String((e && e.message) || e) }))
 		const live = await Term.list().catch(() => [])
 		for (const task of tasks) {
 			// 이전 start에서 만든 세션이 아직 살아있으면 재사용(중복 생성 금지)
@@ -384,6 +500,7 @@ async function start(folderId) {
 		s.running = s.sessions.length > 0
 		s.currentWaveIndex = 0
 		pushLog(s, `오케스트레이션 시작 — ${s.sessions.length}개 세션 (총 ${tasks.length}개 태스크)`, 'violet')
+		await conductorStarting
 		return { ok: true, ...getState(folderId) }
 	} finally {
 		starting.delete(folderId)
@@ -465,9 +582,13 @@ ${list}
 2. 서브태스크가 하나도 없거나 전부 아직 시작 전이면 start_subtask_work({taskId})로 첫 서브태스크의
    워크트리+세션을 띄운다(서브태스크가 없으면 AI 검토의 workUnits로, 그것도 없으면 태스크 자신으로
    자동 생성됨).
-3. 지금 진행 중인 서브태스크와 직접 대화해(dispatch_subtask) 실제로 작업이 끝났는지 확인한 뒤에만
-   advance_subtask_work({taskId})로 다음 서브태스크로 넘겨라 — 자동 완료 감지는 없다, 네가 판단해야 한다.
-4. 모든 서브태스크가 끝나면(advance_subtask_work가 done:true) ${operator}에게 완료를 보고해.
+3. 서브태스크가 실제로 다 끝나면 그 서브태스크 세션 자신이 advance_subtask_work를 호출해 스스로
+   다음 단계로 넘기고, 그 결과가 네 이 화면(pty)에 직접 타이핑돼 들어온다 — 네가 advance_subtask_work를
+   먼저 호출해 판단할 필요는 없다(과거엔 그래야 했지만 지금은 아니다). 통보가 의심스럽거나 한참
+   조용하면 get_subtask_chain/dispatch_subtask로 직접 확인해라.
+   막힌 서브태스크가 있으면(도움요청 통보가 오거나 조용해서 확인해보니 막혀있으면) dispatch_subtask로
+   맥락을 주거나 ${operator}에게 물어봐서 풀어줘라.
+4. 모든 서브태스크가 끝나면(마지막 단계 완료 통보가 옴) ${operator}에게 완료를 보고해.
 
 ■ 서브에게 말 걸기·기록은 반드시 OpenRM API/MCP 경유(관측·대화 로그 기록용) — tmux로 직접 하지 마.
 MCP 툴 dispatch_subtask/log_event/set_subtask_kind가 있으면(도구 목록 확인) 그걸 우선 써. 없거나
@@ -481,8 +602,10 @@ MCP 툴 dispatch_subtask/log_event/set_subtask_kind가 있으면(도구 목록 �
 
 ■ 앱 내부 브라우저 — MCP 툴 browser_open/browser_read/browser_click/browser_type/browser_close가 있으면
 (도구 목록 확인) 자유롭게 써서 웹을 직접 확인해라. 링크를 열어 내용을 읽거나(예: 배포 로그, 외부 문서),
-폼을 채우거나, 스크린샷 없이 텍스트만으로 페이지를 파악하고 싶을 때 쓴다. ${operator}가 이 폴더의
-"브라우저" 탭을 열면 네가 지금 보고 있는 화면이 그대로 보인다 — 숨겨진 headless 작업이 아니다.
+폼을 채우거나, 스크린샷 없이 텍스트만으로 페이지를 파악하고 싶을 때 쓴다. 이건 너만 보는 별도의
+headless 세션이다 — ${operator}가 이 폴더의 "브라우저" 탭을 열어도 네 화면이 자동으로 보이지 않는다
+(그쪽은 사람이 직접 조작하는 별개의 브라우저). ${operator}에게 뭔가 보여주고 싶으면 "브라우저 탭에
+띄워놨어" 같은 말은 하지 말고, browser_read로 읽은 내용을 네가 직접 요약해서 말로 보고해라.
 
 ■ 원칙: 태스크 목표를 이해하고, 서브태스크별 진행 상황을 확인하고, 결과를 검증·종합해서 ${operator}에게
 보고해. 지금 상황을 파악해 계획을 ${operator}에게 보고해줘.${reminder ? `\n\n■ ${reminder}` : ''}`
@@ -585,6 +708,11 @@ async function restoreAllOnBoot() {
 		for (const task of tasks) {
 			await restoreSubtasksIfSnapshotted(task).catch(() => {})
 		}
+		// "메인 태스크 진행중 표기가 안나와" — restoreSubtasksIfSnapshotted가 syncFolderSession으로
+		// s.sessions는 채워주지만, running 자체는 start()/stop()에서만 손대는 별도 플래그라 여기선
+		// 한 번도 안 켜졌다. 서버 재시작(코드 배포 등)마다 이미 돌던 메인 태스크의 스피너가 꺼진 채로
+		// 보이던 원인 — start()와 같은 기준(세션이 하나라도 있으면 running)으로 여기서도 맞춰준다.
+		ensureState(folder.id).running = ensureState(folder.id).sessions.length > 0
 	}
 	return { ok: true, folders: folders.length, restoredConductors: restoredCount }
 }
@@ -653,6 +781,21 @@ async function conductorTell(folderId, text) {
 	return d.ok ? { ok: true } : { ok: false, error: d.error }
 }
 
+// "메인 태스크와 서브 태스크가 서로 대화를 안 하거든" — 세 다리 중(사람→지휘자=conductorTell,
+// 지휘자→서브태스크=conductorSay) 서브태스크→지휘자만 없었다. conductorTell과 완전히 같은
+// 메커니즘(지휘자 pty에 실제로 타이핑)을 서브태스크/시스템 보고용으로 재사용 — 완료/막힘/침묵형
+// 막힘 세 가지 보고 상태가 전부 이 함수 하나를 거친다.
+async function notifyConductor(folderId, fromLabel, text, kind) {
+	const s = states.get(folderId)
+	if (!s || !s.conductor) return { ok: false, error: '태스크 매니저 세션이 없습니다.' }
+	const live = await Term.list().catch(() => [])
+	const match = live.find((x) => x.name === s.conductor.session || Term.baseName(x.name) === Term.baseName(s.conductor.session))
+	if (!match) return { ok: false, error: '태스크 매니저 세션이 죽었습니다.' }
+	const d = await Actuator.dispatch({ session: match.name, message: text, dryRun: false }).catch((e) => ({ ok: false, error: String((e && e.message) || e) }))
+	pushFeed(s, { from: fromLabel, to: 'orch', text, kind })
+	return d.ok ? { ok: true } : { ok: false, error: d.error }
+}
+
 // 지휘자(또는 사람) → 대화 피드에 이벤트 기록만 (실제 전송 없음, 지휘자의 "결과 기록"/"계획 공유" 용도).
 function conductorEvent(folderId, { from, to, text, kind }) {
 	const s = ensureState(folderId)
@@ -697,6 +840,8 @@ module.exports = {
 	conductorSetKind,
 	startSubtaskWork,
 	advanceSubtaskWork,
+	reportSubtaskBlocked,
+	checkStalledSubtasks,
 	stopSubtaskSession,
 	getSubtaskWorkState,
 	restoreAllOnBoot,

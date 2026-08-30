@@ -5,12 +5,38 @@
 	max-width: 640px;
 }
 
+.titleRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 6px;
+}
 .title {
 	font-size: 17px;
 	font-weight: 800;
 	letter-spacing: -0.02em;
 	color: var(--ink);
-	margin-bottom: 6px;
+}
+/* "저장하기 버튼이 있어야할듯" — 전엔 blur 자동저장이라 신호가 없었다. ServerPane .saveBtn과 같은
+   primary 톤(violet 채움)으로 통일 — 이 패널 안 유일한 확정 액션이라 ghost인 .askBtn과 구분돼야 한다. */
+.saveBtn {
+	margin-left: auto;
+	height: 28px;
+	padding: 0 14px;
+	border-radius: 7px;
+	background: var(--violet);
+	border: none;
+	color: #fff;
+	font-size: 11.5px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.saveBtn:hover {
+	opacity: 0.9;
+}
+.saveBtn:disabled {
+	opacity: 0.4;
+	cursor: default;
 }
 .hint {
 	font-size: 12px;

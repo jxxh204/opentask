@@ -71,4 +71,11 @@ export const TAB_ICON: Partial<Record<TabKind, React.ReactNode>> = {
 			<path d="M8.3 10.3l1 1 2-2M13 10.5h3.5M8.3 15.3l1 1 2-2M13 15.5h3.5" />
 		</svg>
 	),
+	// "아이콘 없는거 넣어줘" — 비서(ControlPane)는 대화형이라(§ ControlPane.tsx) 나머지와 같은 모노크롬
+	// 말풍선 아이콘.
+	control: (
+		<svg {...S} width="14" height="14">
+			<path d="M4 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3.5v-3.5H6a2 2 0 0 1-2-2z" />
+		</svg>
+	),
 }

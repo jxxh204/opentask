@@ -7,7 +7,7 @@ import type { DotColor } from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
 import styles from './OrchestratorPane.module.css'
 
-const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류' }
+const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류', blocked: '도움요청', stalled: '응답없음' }
 const DECISION_LABEL: Record<DecisionKind, string> = { repo_assign: '② 레포 분류', repo_verify_hold: '② 레포 재확인', kind_judge: '⑤ kind 판단', review_verdict: '⑧ 리뷰 판정' }
 
 function timeAgo(ts: number) {

@@ -182,16 +182,18 @@
 	background: var(--btint);
 	color: var(--blue);
 }
+/* "링크도 있어야해" — PR 뱃지가 <a href={pr.url}>로 바뀌면서 실제 클릭 가능해졌다(§ TaskRow/FolderCard
+   subChainPill) — default 커서를 그대로 두면 클릭 가능해 보이지 않는다. */
 .pillPr {
 	background: var(--btint);
 	color: var(--blue);
-	cursor: default;
+	text-decoration: none;
 }
 .pillPrDraft {
 	background: var(--card2);
 	color: var(--t2);
 	border: 1px solid var(--line2);
-	cursor: default;
+	text-decoration: none;
 }
 
 .quickStart {
@@ -287,25 +289,76 @@
 	position: relative;
 	margin-bottom: 4px;
 }
+/* "동그라미 조금만 크기 키울수없을까" — 8px → 10px. 레일(왼쪽 4px 기준)에 계속 맞춰 중심을 유지하도록
+   top도 같이 다시 계산(세로 중심 12px 그대로 유지: 12 - 10/2 = 7px). */
 .subChainDot {
 	position: absolute;
 	left: -18px;
-	top: 8px;
-	width: 8px;
-	height: 8px;
+	top: 7px;
+	width: 10px;
+	height: 10px;
 	border-radius: 50%;
 	background: var(--card);
 	border: 1.5px solid var(--t3);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.subChainDot svg {
+	width: 7px;
+	height: 7px;
 }
 /* "진행중 표기도 안돼" — 서브태스크 세션 생사(§ TaskDetailContent의 subtaskWorkBadge와 같은 신호,
-   여기선 칩이 아니라 이 점 하나로 표현). 진행 중=초록, 세션 종료(=advance 없이 그냥 죽음)=앰버. */
+   여기선 칩이 아니라 이 점 하나로 표현). 진행 중=초록, 세션 종료(=advance 없이 그냥 죽음)=앰버.
+   "서브태스크자체에 스피너가 붙으면 좋겠어" — 진행 중은 정적인 초록 채움 대신, statusDot의 .spinner와
+   같은 언어(테두리 회전)로 실제로 돌고 있다는 느낌을 준다.
+   "스피너안에서 줄이 보이면 이상해" — background를 transparent로 뒀더니 뒤의 subChainRail 세로선이
+   원 안으로 비쳐서 비대칭으로 깨져 보였다. .subChainDot의 기본 background(var(--card), 불투명)를
+   그대로 두면(여기서 다시 안 건드림) 다른 상태(idle/done)와 똑같이 레일을 가린다. */
 .subChainDotAlive {
-	border-color: var(--green);
-	background: var(--gtint);
+	border-color: var(--line2);
+	border-top-color: var(--green);
+	animation: subChainSpin 0.7s linear infinite;
+}
+@keyframes subChainSpin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 .subChainDotDone {
 	border-color: var(--amber);
 	background: var(--atint);
+}
+/* "서브태스크가 완료되면 초록색 동그라미에 체크표시로" — done(=advanceSubtaskWork로 명시적으로 다음
+   단계에 넘어감, § getSubtaskWorkState)만 이 색+체크. 그냥 세션이 죽은 것(subChainDotDone, 앰버)과는
+   확실히 다른 신호라 아이콘까지 넣어 구분한다. */
+.subChainDotComplete {
+	border-color: var(--green);
+	background: var(--green);
+	color: var(--card);
+}
+/* "클로드세션 동작 여부에 따라서... 서브태스크도 여러 상태가 보여야해" — 인증·질문 대기는 정상 진행과
+   성격이 달라(§12) 놓치기 쉬운 상태라 별도 색+펄스로 구분(.needsAuth/.needsInput과 같은 팔레트). */
+.subChainDotAlert {
+	border-color: var(--red);
+	background: var(--rtint);
+	animation: subChainAlert 1.4s ease-in-out infinite;
+}
+@keyframes subChainAlert {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
+/* "업무가 어떻든간에" — stalled(추정된 침묵)는 blocked/needsAuth/needsInput(확정 신호, 빨강)와
+   의도적으로 다른 색. 같은 펄스 언어를 재사용하되 팔레트만 amber로 — 섞으면 확정 신호가 묻힌다. */
+.subChainDotStalled {
+	border-color: var(--amber);
+	background: var(--atint);
+	animation: subChainAlert 1.4s ease-in-out infinite;
 }
 .subChainCard {
 	padding: 5px 9px;
@@ -321,10 +374,38 @@
 	background: var(--vtint);
 	box-shadow: inset 0 0 0 1.5px var(--violet);
 }
+.subChainTop {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
 .subChainName {
 	font-size: 10.5px;
 	font-weight: 500;
 	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+	min-width: 0;
+}
+/* "PR 상황이 보이지 않고 있어. 워크트리 이름도" — 서브태스크 체인 카드는 이름만 보여줬는데, TaskRow의
+   wtLine/pill과 같은 실데이터(gitStatus[branch])를 서브태스크 단위로도 조인해 보여준다. */
+.subChainPill {
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 1px 6px;
+	border-radius: var(--radius-chip);
+	flex: none;
+}
+.subChainWt {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 2px;
+	font-size: 9.5px;
+	color: var(--t3);
+	opacity: 0.75;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

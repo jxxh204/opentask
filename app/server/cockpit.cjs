@@ -9,6 +9,7 @@ const Prs = require('./prs.cjs')
 const Cmux = require('./cmux.cjs')
 const Ticket = require('./ticket.cjs')
 const Term = require('./term.cjs') // 에이전트(tmux) 세션이 도는 워크트리도 active로 잡기 위함 (term은 cockpit 미참조 → 순환 없음)
+const StoreRepos = require('./store/repos.cjs')
 
 // "방금 만진 곳" 감지에서 제외할 자동생성 노이즈 (아이콘 배럴·생성물·스냅샷)
 const IGNORE_TOUCH = /(^|\/)(svgr\.[tj]sx?|.*\.generated\..*|.*\.snap)$/
@@ -31,8 +32,20 @@ function touchedFromStatus(status, root) {
   return { touchedMs, touchedFile }
 }
 
-// 워크트리/프로젝트가 사는 루트 (REPO의 상위) — dev 서버를 이 하위로 한정해 postgres/redis 등 인프라 잡음 제외
-const PROJ_ROOT = path.dirname(C.REPO)
+// "PR 상황이 여전히 안 보여" — 이 파일 전체가 C.REPO(AppConfig.rootPath, 사실상 데모/단일 레포 폴백) 하나만
+// 스캔했다. 실제 태스크 워크트리는 store/repos.cjs에 등록된 레포마다(예: gongbiz-crm-b2b-web) 따로 있는데
+// C.REPO는 그중 아무 상관 없는 레포를 가리킬 수 있어(§ resolveRepo 폴백 순서) byBranch가 늘 텅 비었다.
+// 등록된 레포가 있으면 그 전부를, 없으면(기존 단일-레포 세팅) C.REPO 하나만 스캔한다.
+function repoPaths() {
+	const repos = StoreRepos.list()
+	return repos.length ? repos.map((r) => r.path) : [C.REPO]
+}
+
+// 워크트리/프로젝트가 사는 루트들 — dev 서버를 이 하위로 한정해 postgres/redis 등 인프라 잡음 제외.
+// 매번 새로 계산(§ collector.cjs resolveRepo와 동일 이유 — 레포 등록/해제가 재시작 없이 반영돼야 함).
+function projRoots() {
+	return [...new Set(repoPaths().map((p) => path.dirname(p)))]
+}
 
 const BASE = process.env.OPENRM_BASE_BRANCH || 'origin/main'
 const ticketOf = Ticket.ticketOf
@@ -83,7 +96,7 @@ async function devServers() {
     if (/StreamDeck|Elgato|ControlCe|chrome-devtools-mcp/i.test(cmd)) continue
     const cwdOut = await lsof(['-a', '-p', pid, '-d', 'cwd', '-Fn'])
     const cwd = (cwdOut.split('\n').find((l) => l.startsWith('n')) || '').slice(1)
-    if (!cwd || !cwd.startsWith(PROJ_ROOT)) continue // 프로젝트 외부(인프라/시스템) 제외
+    if (!cwd || !projRoots().some((root) => cwd.startsWith(root))) continue // 프로젝트 외부(인프라/시스템) 제외
     for (const port of byPid[pid])
       servers.push({ port, pid: Number(pid), cwd, kind: classify(cmd), ticket: ticketOf(cwd) })
   }
@@ -108,16 +121,19 @@ async function portLabels() {
 
 // ── 작업 스트림: 워크트리 + git상태 + PR/CI + devServer 조인 ──
 async function streams() {
-  const raw = await git(['worktree', 'list', '--porcelain'], C.REPO)
+  const paths = repoPaths()
+  const rawPerRepo = await mapLimit(paths, 4, (p) => git(['worktree', 'list', '--porcelain'], p))
   const wts = []
-  let cur = null
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('worktree ')) {
-      cur = { path: line.slice(9).trim() }
-      wts.push(cur)
-    } else if (cur && line.startsWith('branch ')) cur.branch = line.slice(7).trim().replace('refs/heads/', '')
-    else if (cur && line.startsWith('HEAD ')) cur.head = line.slice(5).trim().slice(0, 9)
-    else if (cur && line.startsWith('detached')) cur.detached = true
+  for (const raw of rawPerRepo) {
+    let cur = null
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('worktree ')) {
+        cur = { path: line.slice(9).trim() }
+        wts.push(cur)
+      } else if (cur && line.startsWith('branch ')) cur.branch = line.slice(7).trim().replace('refs/heads/', '')
+      else if (cur && line.startsWith('HEAD ')) cur.head = line.slice(5).trim().slice(0, 9)
+      else if (cur && line.startsWith('detached')) cur.detached = true
+    }
   }
 
   // dev 서버 + PR 동시 수집
@@ -147,7 +163,7 @@ async function streams() {
       name: w.path.split('/').pop(),
       branch: w.branch || (w.detached ? '(detached)' : ''),
       ticket: ticketOf(w.branch) || ticketOf(w.path),
-      isMain: w.path === C.REPO,
+      isMain: paths.includes(w.path),
       dirty,
       ahead: Number(ahead.trim()) || 0,
       behind: Number(behind.trim()) || 0,
@@ -209,6 +225,12 @@ async function buildCockpit() {
   // 실데이터로 붙이는 용도(TaskRow) — streams() 전체를 매번 다시 돌리는 대신 이 캐시된 결과를 재사용.
   const byBranch = {}
   for (const s of all) if (s.branch) byBranch[s.branch] = { dirty: s.dirty, ahead: s.ahead, behind: s.behind, pr: s.pr }
+  // "PR뱃지도 자동으로 안잡혀" — 서브태스크 세션이 자기 워크트리 안에서 직접 git checkout -b로 브랜치를
+  // 바꾸면 StoreBranches에 기록된 브랜치명이 그 순간 낡아버려 byBranch 조회가 영영 빗나간다. 워크트리
+  // 경로는 에이전트가 브랜치를 갈아타도 안 바뀌므로 경로 기준으로도 같은 데이터를 실어 — 프론트가
+  // subtaskWork.worktreePath로 조회하면 브랜치명이 뭐로 바뀌든 항상 지금 실제 상태를 찾는다.
+  const pathStatus = {}
+  for (const s of all) pathStatus[s.path] = { dirty: s.dirty, ahead: s.ahead, behind: s.behind, pr: s.pr, branch: s.branch || null }
 
   const data = {
     ok: true,
@@ -227,6 +249,7 @@ async function buildCockpit() {
     devServers: devs,
     active,
     byBranch,
+    byPath: pathStatus,
     streamsTotal: all.length,
     prError,
     builtAt: new Date().toISOString(),
