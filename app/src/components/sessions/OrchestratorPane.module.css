@@ -137,81 +137,50 @@
 	padding-left: 8px;
 }
 
-/* 지휘자의 대화 로그 — 일반 터미널 라인이 아니라 다중 에이전트 대화(from → to). "평문 나열이라 안
-   읽힘" 피드백으로 흐르는 목록 대신, BranchChain의 시그널 레일과 같은 타임라인 지오메트리(절대위치
-   레일+원형 노드)로 순서를 눈으로 따라가게 하고 항목마다 자기 카드를 준다. 레일 색은 BranchChain의
-   진행형 그라데이션과 구분하기 위해(그건 브랜치 진행 전용 신호) 중립 라인 컬러로 고정. */
-.feedTimeline {
-	position: relative;
-	padding-left: 20px;
+/* "서로 대화하는것처럼 연출... 가독성이 떨어져" — from→to 화살표 나열은 안 읽힌다는 피드백으로
+   메신저 스타일 좌우 말풍선으로 교체(§ ControlPane.module.css의 turnRow/bubble과 같은 언어 — 사람
+   턴만 오른쪽 정렬 pill인 그 관례를 여기선 "서브태스크=오른쪽, 지휘자=왼쪽"으로 재해석). */
+.chatLog {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
-.feedRail {
-	position: absolute;
-	left: 4px;
-	top: 6px;
-	bottom: 6px;
-	width: 2px;
-	background: var(--line2);
+.chatRow {
+	display: flex;
 }
-.feedEntry {
-	position: relative;
-	margin-bottom: 8px;
+.chatRowLeft {
+	justify-content: flex-start;
 }
-.feedEntry:last-child {
-	margin-bottom: 0;
+.chatRowRight {
+	justify-content: flex-end;
 }
-.feedNode {
-	position: absolute;
-	left: -20px;
-	top: 13px;
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	background: var(--card);
-	border: 2px solid var(--t3);
+.chatBubble {
+	max-width: 82%;
+	border-radius: 14px;
+	padding: 8px 12px;
 }
-.node_plan,
-.node_dispatch {
-	border-color: var(--violet);
-}
-.node_result {
-	border-color: var(--blue);
-}
-.node_error,
-.node_blocked {
-	border-color: var(--red);
-}
-/* kind_stalled(칩)과 짝 — 이게 없으면 e.kind==='stalled'/'blocked'일 때 styles[`node_${e.kind}`]가
-   undefined가 돼 기본 회색 테두리(§ 위 .feedNode)로만 보이고 도움요청/응답없음 타임라인 노드가
-   구분되지 않는다. */
-.node_stalled {
-	border-color: var(--amber);
-}
-.feedCard {
+.chatBubbleLeft {
 	background: var(--card2);
 	border: 1px solid var(--line);
-	border-radius: var(--radius-card);
-	padding: 9px 11px;
+	border-bottom-left-radius: 4px;
 }
-.feedMeta {
+.chatBubbleRight {
+	background: var(--vtint);
+	border: 1px solid var(--line2);
+	border-bottom-right-radius: 4px;
+}
+.chatMeta {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	font-size: 10.5px;
 	margin-bottom: 4px;
 }
-.feedFrom {
+.chatSpeaker {
 	font-weight: 700;
-	color: var(--violet);
+	color: var(--ink);
 }
-.feedArrow {
-	color: var(--t3);
-}
-.feedTo {
-	font-weight: 700;
-	color: var(--t2);
-}
-.feedKind {
+.chatKind {
 	margin-left: auto;
 	font-size: 9.5px;
 	font-weight: 700;
@@ -243,13 +212,15 @@
 	background: var(--atint);
 	color: var(--amber);
 }
-.feedTime {
+.chatTime {
 	font-size: 9.5px;
 	color: var(--t3);
 	flex: none;
 }
-.feedText {
+.chatText {
 	font-size: 12.5px;
 	color: var(--ink);
 	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
 }

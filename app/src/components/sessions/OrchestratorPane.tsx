@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore'
 import type { FeedKind, Decision, DecisionKind } from '../../api/sessions'
 import { getDecisions } from '../../api/sessions'
@@ -30,9 +30,33 @@ function timeAgo(ts: number) {
 // 대화가 여기서 바로 오간다 — 별도 "메시지 전송" 인풋은 없다(터미널에 직접 타이핑하면 됨).
 // "대화 로그"는 그와 별개로 지휘자가 스스로 기록한 지시/보고/계획 흐름을 구조화된 트리로 보여준다
 // (raw 터미널 스크롤엔 없는, 지휘자→서브태스크 다중 세션 간 오간 요약 — orch.feed).
+// "메인 태스크와 서브태스크의 대화로그로 보고싶고 서브태스크 이름은 태스크이름으로" — 서브태스크가
+// 보고할 때 실려오는 from/to는 사람이 못 읽는 원시 ID다(§ orchestrator.cjs notifyConductor가
+// current.id/st.id를 그대로 넘김). 이 ID가 어느 서브태스크 것인지 찾아 그 부모 태스크 이름으로
+// 되돌린다 — 세부 단계(개발/QA/배포)별로 다른 이름 대신 "메인 태스크" 하나로 묶어 2인 대화처럼
+// 보이게 하려는 의도적 단순화(사용자 요청).
+function buildTaskNameById(tasks: { id: string; name: string; subtasks: { id: string }[] }[]) {
+	const map: Record<string, string> = {}
+	for (const task of tasks) {
+		map[task.id] = task.name
+		for (const st of task.subtasks) map[st.id] = task.name
+	}
+	return map
+}
+
 export default function OrchestratorPane({ folderId }: { folderId: string }) {
 	const t = useT()
 	const orch = useSessionsStore((s) => getOrchestration(s, folderId))
+	const folder = useSessionsStore((s) => s.folders.find((f) => f.id === folderId))
+	const taskNameById = useMemo(() => buildTaskNameById(folder?.tasks ?? []), [folder])
+	// 발화자 판정: from이 지휘자 자신(orch/conductor)이면 왼쪽, 태스크/서브태스크 ID로 풀리면
+	// 오른쪽(그 태스크 이름표), 그 외(오퍼레이터가 직접 보낸 메시지 등)는 왼쪽에 이름만 다르게.
+	function speakerFor(id: string): { label: string; side: 'left' | 'right' } {
+		if (id === 'orch' || id === 'conductor') return { label: t('지휘자'), side: 'left' }
+		const taskName = taskNameById[id]
+		if (taskName) return { label: taskName, side: 'right' }
+		return { label: id, side: 'left' } // 오퍼레이터 이름·미확인 ID 등 — 이름 그대로 왼쪽에 표시
+	}
 	const busy = useSessionsStore((s) => !!s.orchBusy[folderId])
 	const refresh = useSessionsStore((s) => s.refreshOrchestration)
 	const advance = useSessionsStore((s) => s.advanceOrchestration)
@@ -122,33 +146,33 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 					</div>
 				)}
 
-				{/* "대화 로그가 그냥 평문 나열이라 안 읽힘" — 지휘자↔서브태스크·오퍼레이터 사이 실제 오간
-				    대화라 이 패널에서 가장 자주, 가장 먼저 읽는 정보다. BranchChain의 시그널 레일과 같은
-				    타임라인 지오메트리를 빌려 순서를 눈으로 따라갈 수 있게 하고, 각 항목을 흐르는 평문이
-				    아니라 자기 카드로 담아 종류(kind)별 색이 레일 노드+칩 두 군데서 동시에 신호한다. */}
+				{/* "서로 대화하는것처럼 연출... 메인 태스크와 서브태스크와의 대화로그로 보고싶어" — from→to
+				    화살표+원시 ID 나열은 안 읽힌다는 피드백을 받고 실제 메신저처럼 좌우 말풍선으로
+				    바꿨다: 지휘자(메인 태스크)는 왼쪽, 서브태스크는(§ speakerFor — 부모 태스크 이름으로
+				    표시) 오른쪽. 종류(kind) 배지는 말풍선 안 메타줄에 그대로 유지해 도움요청/응답없음
+				    같은 신호는 계속 놓치지 않게 한다. */}
 				{orch.conductor && (
 					<>
 						<div className={styles.logLabel}>{t('대화 로그')}</div>
 						{orch.feed.length === 0 ? (
 							<div className={styles.logEmpty}>{t('아직 대화 없음')}</div>
 						) : (
-							<div className={styles.feedTimeline}>
-								<div className={styles.feedRail} />
-								{orch.feed.map((e, i) => (
-									<div key={i} className={styles.feedEntry}>
-										<span className={`${styles.feedNode} ${styles[`node_${e.kind}`]}`} />
-										<div className={styles.feedCard}>
-											<div className={`m ${styles.feedMeta}`}>
-												<span className={styles.feedFrom}>{e.from}</span>
-												<span className={styles.feedArrow}>→</span>
-												<span className={styles.feedTo}>{e.to}</span>
-												<span className={`${styles.feedKind} ${styles[`kind_${e.kind}`]}`}>{t(KIND_LABEL[e.kind] || '메시지')}</span>
-												<span className={styles.feedTime}>{timeAgo(e.ts)}</span>
+							<div className={styles.chatLog}>
+								{orch.feed.map((e, i) => {
+									const speaker = speakerFor(e.from)
+									return (
+										<div key={i} className={`${styles.chatRow} ${speaker.side === 'right' ? styles.chatRowRight : styles.chatRowLeft}`}>
+											<div className={`${styles.chatBubble} ${speaker.side === 'right' ? styles.chatBubbleRight : styles.chatBubbleLeft}`}>
+												<div className={`m ${styles.chatMeta}`}>
+													<span className={styles.chatSpeaker}>{speaker.label}</span>
+													<span className={`${styles.chatKind} ${styles[`kind_${e.kind}`]}`}>{t(KIND_LABEL[e.kind] || '메시지')}</span>
+													<span className={styles.chatTime}>{timeAgo(e.ts)}</span>
+												</div>
+												<div className={styles.chatText}>{e.text}</div>
 											</div>
-											<div className={styles.feedText}>{e.text}</div>
 										</div>
-									</div>
-								))}
+									)
+								})}
 							</div>
 						)}
 					</>
