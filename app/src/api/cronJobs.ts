@@ -3,15 +3,19 @@ import { api } from './client'
 export type CronScheduleType = 'interval' | 'daily' | 'weekly'
 export type CronSchedule = { minutes: number } | { hour: number; minute: number } | { dow: number; hour: number; minute: number }
 
+export type CronActionType = 'create_task' | 'run_instruction'
+export type CronAction = { name: string; desc?: string; repoId?: string | null } | { instruction: string }
+
 export interface CronJob {
 	id: string
 	name: string
 	schedule_type: CronScheduleType
 	schedule: CronSchedule
-	action_type: 'create_task'
-	action: { name: string; desc?: string; repoId?: string | null }
+	action_type: CronActionType
+	action: CronAction
 	enabled: 0 | 1
 	last_run_at: number | null
+	last_result: string | null
 	next_run_at: number | null
 	created_at: number
 	updated_at: number
@@ -20,16 +24,10 @@ export interface CronJob {
 export function listCronJobs() {
 	return api.get<CronJob[]>('/api/cron-jobs')
 }
-export function createCronJob(input: {
-	name: string
-	scheduleType: CronScheduleType
-	schedule: CronSchedule
-	action: { name: string; desc?: string; repoId?: string | null }
-	enabled?: boolean
-}) {
+export function createCronJob(input: { name: string; scheduleType: CronScheduleType; schedule: CronSchedule; actionType?: CronActionType; action: CronAction; enabled?: boolean }) {
 	return api.post<CronJob | { ok: false; error: string }>('/api/cron-jobs', input)
 }
-export function updateCronJob(id: string, patch: Partial<{ name: string; scheduleType: CronScheduleType; schedule: CronSchedule; enabled: boolean }>) {
+export function updateCronJob(id: string, patch: Partial<{ name: string; scheduleType: CronScheduleType; schedule: CronSchedule; actionType: CronActionType; action: CronAction; enabled: boolean }>) {
 	return api.patch<CronJob>(`/api/cron-jobs/${id}`, patch)
 }
 export function removeCronJob(id: string) {

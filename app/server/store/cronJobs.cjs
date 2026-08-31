@@ -62,6 +62,9 @@ function update(id, patch) {
 	const name = patch.name ?? cur.name
 	const scheduleType = patch.scheduleType ?? cur.schedule_type
 	const schedule = patch.schedule ? JSON.stringify(patch.schedule) : cur.schedule_json
+	// actionType 자체는 그대로 두고 action_json만 바꾸는 흔한 케이스(예: run_instruction 문구만 수정)를
+	// 지원하려면 actionType 패치가 없어도 됨 — patch.action만 있어도 반영.
+	const actionType = patch.actionType ?? cur.action_type
 	const action = patch.action ? JSON.stringify(patch.action) : cur.action_json
 	const enabled = 'enabled' in patch ? (patch.enabled ? 1 : 0) : cur.enabled
 	// 스케줄이나 on/off가 바뀌면 다음 실행 시각을 다시 계산 — 꺼졌으면 null(스케줄러가 건너뜀).
@@ -70,10 +73,11 @@ function update(id, patch) {
 	let nextRun = cur.next_run_at
 	if (!enabled) nextRun = null
 	else if (scheduleChanged || (enabledChanged && !cur.enabled)) nextRun = computeNextRun(scheduleType, JSON.parse(schedule), Date.now())
-	db.prepare('UPDATE cron_jobs SET name=?, schedule_type=?, schedule_json=?, action_json=?, enabled=?, next_run_at=?, updated_at=? WHERE id=?').run(
+	db.prepare('UPDATE cron_jobs SET name=?, schedule_type=?, schedule_json=?, action_type=?, action_json=?, enabled=?, next_run_at=?, updated_at=? WHERE id=?').run(
 		name,
 		scheduleType,
 		schedule,
+		actionType,
 		action,
 		enabled,
 		nextRun,
@@ -89,12 +93,13 @@ function remove(id) {
 }
 
 // 실행 직후 스케줄러가 호출 — last_run_at 갱신 + 다음 실행 시각 재계산.
-function markRan(id) {
+// result(선택) — run_instruction처럼 "뭘 했는지"가 매번 달라지는 액션의 결과 요약(§v26 last_result).
+function markRan(id, result) {
 	const cur = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id)
 	if (!cur) return null
 	const now = Date.now()
 	const next = computeNextRun(cur.schedule_type, JSON.parse(cur.schedule_json), now)
-	db.prepare('UPDATE cron_jobs SET last_run_at=?, next_run_at=?, updated_at=? WHERE id=?').run(now, next, now, id)
+	db.prepare('UPDATE cron_jobs SET last_run_at=?, last_result=?, next_run_at=?, updated_at=? WHERE id=?').run(now, result != null ? String(result).slice(0, 4000) : null, next, now, id)
 	return get(id)
 }
 

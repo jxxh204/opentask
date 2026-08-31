@@ -202,6 +202,14 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.jobResult {
+	font-size: 10.5px;
+	color: var(--t2);
+	margin-top: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .jobStats {
 	flex: none;
 	display: flex;

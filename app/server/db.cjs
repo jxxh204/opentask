@@ -405,6 +405,38 @@ const MIGRATIONS = [
 	(db) => {
 		db.exec(`ALTER TABLE subtask_sessions ADD COLUMN report_html TEXT;`)
 	},
+	// v26 — "크론잡이 너무 정형화되어있어. 어떤 크론잡이든 만들 수 있는 자유도를 주고싶어." 지금까진
+	// action_type이 create_task 하나뿐이라(§v8 CHECK 제약) 크론잡이 "정해진 시각에 태스크 하나 생성"만
+	// 할 수 있었다. run_instruction을 추가해 사람이 미리 써둔 자연어 지시(예: "이번 주 완료 안 된
+	// 서브태스크를 다음 주로 재스케줄해줘")를 그 시각에 opentask-control MCP 툴로 그대로 실행하게
+	// 한다 — "AI는 범위를 스스로 만들지 않는다"(§scheduler.cjs) 원칙은 그대로 유지: 무엇을 할지는
+	// 사람이 미리 문장으로 다 정해두고, 트리거 시점의 AI는 그 문장을 실행하는 손일 뿐이다(사람이 그
+	// 순간 비서에게 직접 타이핑하는 것과 동등 — 즉흥적 판단이 아니라 이미 정해진 지시의 지연 실행).
+	// SQLite는 CHECK 제약을 ALTER로 못 고쳐서(§v8) 테이블을 다시 만든다. last_result는 run_instruction
+	// 결과를 사람이 나중에 훑어볼 수 있게(§v25 report_html과 같은 이유 — "뭐가 됐는지 확인 못 함").
+	(db) => {
+		db.exec(`
+			CREATE TABLE cron_jobs_new (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				schedule_type TEXT NOT NULL CHECK (schedule_type IN ('interval', 'daily', 'weekly')),
+				schedule_json TEXT NOT NULL,
+				action_type TEXT NOT NULL DEFAULT 'create_task' CHECK (action_type IN ('create_task', 'run_instruction')),
+				action_json TEXT NOT NULL,
+				enabled INTEGER NOT NULL DEFAULT 1,
+				last_run_at INTEGER,
+				last_result TEXT,
+				next_run_at INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			INSERT INTO cron_jobs_new (id, name, schedule_type, schedule_json, action_type, action_json, enabled, last_run_at, next_run_at, created_at, updated_at)
+				SELECT id, name, schedule_type, schedule_json, action_type, action_json, enabled, last_run_at, next_run_at, created_at, updated_at FROM cron_jobs;
+			DROP TABLE cron_jobs;
+			ALTER TABLE cron_jobs_new RENAME TO cron_jobs;
+			CREATE INDEX idx_cron_jobs_next_run ON cron_jobs(enabled, next_run_at);
+		`)
+	},
 ]
 
 function migrate() {

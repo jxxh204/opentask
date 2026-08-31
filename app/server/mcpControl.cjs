@@ -239,18 +239,29 @@ server.registerTool(
 	'create_cron_job',
 	{
 		title: '크론잡 생성',
-		description: '새 자동화(정해진 시각에 태스크 자동 생성)를 만든다. scheduleType: interval(분 단위)/daily/weekly. scheduleJson/actionJson은 각각 그 형식에 맞는 JSON 문자열.',
+		description:
+			'새 자동화를 만든다. scheduleType: interval(분 단위)/daily/weekly. actionType: "create_task"(정해진 태스크를 그대로 생성 — actionJson: {"name":"9시 배포","desc":"","repoId":null})' +
+			' 또는 "run_instruction"(사람이 미리 써둔 자연어 지시를 그 시각에 그대로 실행 — actionJson: {"instruction":"이번 주 완료 안 된 서브태스크를 다음 주로 재스케줄해줘"}, 매번 이 문장 그대로 실행되고' +
+			' AI가 즉흥적으로 범위를 넓히지 않는다). scheduleJson/actionJson은 각각 그 형식에 맞는 JSON 문자열 — 이 함수 안에서 파싱해 서버로 보낸다.',
 		inputSchema: {
 			name: z.string(),
 			scheduleType: z.enum(['interval', 'daily', 'weekly']),
 			scheduleJson: z.string().describe('예: {"hour":9,"minute":0} 또는 {"minutes":30}'),
-			actionJson: z.string().describe('예: {"name":"9시 배포","desc":""}'),
+			actionType: z.enum(['create_task', 'run_instruction']).optional().describe('미지정 시 create_task'),
+			actionJson: z.string().describe('actionType에 맞는 JSON 문자열 — 위 설명 참고'),
 		},
 	},
-	async (args) => {
+	async ({ name, scheduleType, scheduleJson, actionType, actionJson }) => {
 		const guard = requireControl()
 		if (guard) return guard
-		return ok(await apiPost('/api/cron-jobs', args))
+		let schedule, action
+		try {
+			schedule = JSON.parse(scheduleJson)
+			action = JSON.parse(actionJson)
+		} catch (e) {
+			return ok({ ok: false, error: 'scheduleJson/actionJson 파싱 실패: ' + (e && e.message) })
+		}
+		return ok(await apiPost('/api/cron-jobs', { name, scheduleType, schedule, actionType, action }))
 	},
 )
 
@@ -258,12 +269,26 @@ server.registerTool(
 	'update_cron_job',
 	{
 		title: '크론잡 수정',
-		description: '기존 크론잡을 수정하거나 켜기/끄기(enabled)한다.',
-		inputSchema: { id: z.string(), name: z.string().optional(), enabled: z.boolean().optional(), scheduleJson: z.string().optional(), actionJson: z.string().optional() },
+		description: '기존 크론잡을 수정하거나 켜기/끄기(enabled)한다. scheduleJson/actionJson은 JSON 문자열 — 이 함수 안에서 파싱해 서버로 보낸다(actionJson을 바꾸면 actionType도 같이 넘겨야 함).',
+		inputSchema: {
+			id: z.string(),
+			name: z.string().optional(),
+			enabled: z.boolean().optional(),
+			scheduleType: z.enum(['interval', 'daily', 'weekly']).optional(),
+			scheduleJson: z.string().optional(),
+			actionType: z.enum(['create_task', 'run_instruction']).optional(),
+			actionJson: z.string().optional(),
+		},
 	},
-	async ({ id, ...patch }) => {
+	async ({ id, scheduleJson, actionJson, ...patch }) => {
 		const guard = requireControl()
 		if (guard) return guard
+		try {
+			if (scheduleJson !== undefined) patch.schedule = JSON.parse(scheduleJson)
+			if (actionJson !== undefined) patch.action = JSON.parse(actionJson)
+		} catch (e) {
+			return ok({ ok: false, error: 'scheduleJson/actionJson 파싱 실패: ' + (e && e.message) })
+		}
 		return ok(await apiPatch(`/api/cron-jobs/${id}`, patch))
 	},
 )
