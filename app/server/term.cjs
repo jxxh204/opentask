@@ -187,7 +187,19 @@ const CLAUDE_IDENTITY_ENV_KEYS = [
   'ORCA_WORKSPACE_ID',
 ]
 function spawnEnv() {
-  const env = { ...process.env, LANG: process.env.LANG || 'en_US.UTF-8', LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8' }
+  const env = {
+    ...process.env,
+    LANG: process.env.LANG || 'en_US.UTF-8',
+    LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8',
+    // "너무 오래걸리네" / "캘린더 갔다오면 초기화돼" — create()가 스폰 직후 곧바로 명령을 pty에 써넣는데,
+    // 이 순간 oh-my-zsh의 "Would you like to update? [Y/n]" 대화형 프롬프트가 로그인 셸 초기화 중
+    // 떠 있으면 그 입력을 가로채 앞글자를 먹어버린다(실측: "claude --continue"가 "laude --continue"로
+    // 잘려 "command not found"로 조용히 실패, 아무 에러 표시 없이 그냥 빈 셸에 멈춰있다 — Term.list()는
+    // 셸 프로세스 자체는 살아있다고 보고해 겉으로는 "실행 중"으로 보인다). 오버마인드뿐 아니라 이 함수를
+    // 거치는 모든 pty(지휘자·서브태스크·즉석 세션)가 같은 경합에 노출돼 있었다 — 업데이트 프롬프트 자체를
+    // 꺼서 경합의 원인을 없앤다(oh-my-zsh 공식 변수).
+    DISABLE_UPDATE_PROMPT: 'true',
+  }
   for (const k of CLAUDE_IDENTITY_ENV_KEYS) delete env[k]
   return env
 }
@@ -400,6 +412,11 @@ async function create({ cwd, command, label, seed, model, mcpFolderId, continueF
   entry.kind = kindOf(command)
 
   if (cmd && String(cmd).trim()) {
+    // 갓 스폰한 로그인 셸이 아직 입력을 받을 준비가 되기 전에 들어온 첫 바이트를 먹어버릴 때가
+    // 있다(시스템 부하가 클 때 재현 확인 — "claude"가 "laude"로 잘려 들어가 "command not found"가
+    // 남) — 실제 명령 앞에 빈 개행을 하나 흘려보내 그 유실을 흡수한다. 셸이 이미 준비돼 있었어도
+    // 빈 줄 하나가 프롬프트를 한 번 더 그릴 뿐 부작용은 없다.
+    entry.proc.write('\r')
     entry.proc.write(String(cmd) + '\r')
     if (/\bclaude\b/.test(String(cmd))) watchContinueFallback(name, cmd, continueFallbackSeed).catch(() => {})
   }
