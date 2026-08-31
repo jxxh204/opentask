@@ -55,8 +55,23 @@
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
-						<h3 style="margin:0; font-size:19px;">0.1.7</h3>
+						<h3 style="margin:0; font-size:19px;">0.1.8</h3>
 						<span class="chip chip-green">Latest</span>
+						<span style="color:var(--t3); font-size:13px;">2026-09-01</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>The Overmind's icon (sidebar, tab, chat avatar, header) is now the real reference artwork — a brain in a glass dome with a circuit badge</li>
+						<li>The Overmind chat shows small live preview cards for tasks, subtasks, cron jobs, and blocked periods in the side margin as it touches them</li>
+						<li>The Task Manager's conductor↔subtask conversation log is now left/right chat bubbles instead of raw <code>from → to</code> arrows with subtask IDs</li>
+						<li>Silent-stall detection dropped from 15 minutes to 3, and now also covers the conductor session and the Overmind itself, not just subtasks</li>
+						<li><strong>Fixed the app icon not filling its canvas</strong> at Dock size</li>
+						<li><strong>Fixed dev mode making the downloaded app appear broken</strong> — running the app in developer mode shared the same session lock as the packaged app, so opening the real downloaded app while dev mode was running would silently do nothing instead of showing a window</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.7</h3>
 						<span style="color:var(--t3); font-size:13px;">2026-08-31</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
