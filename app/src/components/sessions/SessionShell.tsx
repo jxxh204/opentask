@@ -60,14 +60,14 @@ const CALENDAR_ICON = (
 )
 // "+ 새 레포 추가"가 텍스트 "+"만 있어서 뭘 하는 액션인지 한눈에 안 들어왔다 — 폴더+플러스 아이콘으로
 // (Orca 사이드바의 "새 프로젝트" 아이콘 참고).
-// 관제(§control.cjs) — PRODUCT.md의 자기소개("관제탑")를 그대로 시각화. 안테나 기둥 + 신호 아치 두
-// 겹으로 "여러 곳을 한 번에 내려다보며 지시"하는 느낌(크론잡/캘린더 아이콘과 겹치지 않는 모양).
+// 오버마인드(§control.cjs, 구 "관제") — 안테나 기둥이던 옛 아이콘("관제탑" 컨셉)을 "모든 걸 조종하는
+// 뇌" 컨셉에 맞춰 뇌 형상으로 교체(§ tabIcons.tsx control 아이콘과 동일 형상 — 사이드바·탭에서 같은
+// 실루엣으로 보이게).
 const CONTROL_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-		<path d="M12 3v6" />
-		<circle cx="12" cy="11" r="2" />
-		<path d="M12 13v8M8.5 21h7" />
-		<path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.7a9 9 0 0 1 13 0" />
+		<path d="M12 3.2c-1.7 0-3 1.3-3 3v.3C7.3 6.9 6 8.3 6 10.1c0 .9.3 1.7.9 2.3-.6.6-.9 1.4-.9 2.3 0 1.5 1 2.8 2.4 3.2.2 1.6 1.6 2.9 3.3 2.9h.4" />
+		<path d="M12 3.2c1.7 0 3 1.3 3 3v.3c1.7.3 3 1.7 3 3.5 0 .9-.3 1.7-.9 2.3.6.6.9 1.4.9 2.3 0 1.5-1 2.8-2.4 3.2-.2 1.6-1.6 2.9-3.3 2.9h-.4" />
+		<path d="M12 3.2v17.6M9 9.6h.01M15 9.6h.01M9 14.4h.01M15 14.4h.01" />
 	</svg>
 )
 const FOLDER_ADD_ICON = (
@@ -378,7 +378,7 @@ export default function SessionShell() {
 							}}
 						>
 							<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
-							<span style={{ flex: 1, textAlign: 'left' }}>{t('비서')}</span>
+							<span style={{ flex: 1, textAlign: 'left' }}>{t('오버마인드')}</span>
 							{controlTermStatus?.exists && (
 								<StatusDot
 									color={controlTermStatus.needsAuth ? 'red' : controlTermStatus.waiting ? 'amber' : 'green'}

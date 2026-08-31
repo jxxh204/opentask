@@ -37,7 +37,7 @@ const dict: Record<string, string> = {
 	'날짜 없음': 'No date',
 	크론잡: 'Cron Jobs',
 	캘린더: 'Calendar',
-	비서: 'Assistant',
+	오버마인드: 'Overmind',
 	검색: 'Search',
 	'레포 관리': 'Manage repos',
 	'새 레포 추가': 'Add new repo',

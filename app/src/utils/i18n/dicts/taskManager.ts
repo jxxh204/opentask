@@ -43,7 +43,7 @@ const dict: Record<string, string> = {
 	크론잡: 'Cron Jobs',
 	'모델 배정': 'Model Policy',
 	캘린더: 'Calendar',
-	비서: 'Assistant',
+	오버마인드: 'Overmind',
 	'팀 규칙': 'Team Rules',
 
 	// OrchestratorPane.tsx — KIND_LABEL/DECISION_LABEL 값 + 나머지 UI 문자열

@@ -30,7 +30,7 @@ const dict: Record<string, string> = {
 	'불러오는 중…': 'Loading…',
 	'설계·아키텍처': 'Design & architecture',
 	'태스크 매니저(서브태스크 체인 조율)': 'Task Manager (subtask chain orchestration)',
-	'비서(캘린더·크론잡·설정)': 'Assistant (calendar, cron jobs, settings)',
+	'오버마인드(캘린더·크론잡·설정)': 'Overmind (calendar, cron jobs, settings)',
 	'▶진행 제품 코딩': '▶ Active product coding',
 	'PR 코드 리뷰': 'PR code review',
 	'리뷰대로 코드 개선': 'Code fixes per review',
@@ -57,9 +57,9 @@ const dict: Record<string, string> = {
 	'태스크 매니저가 자동으로 지휘': 'The Task Manager conducts automatically',
 	'별도 시작 버튼이 없습니다 — 서브태스크가 생기면 곧바로 순차 웨이브로 지휘를 시작하고, 라이브 터미널과 계획·지시·보고 로그를 함께 보여줍니다.':
 		"There's no separate start button — as soon as a subtask appears, it starts directing work in sequential waves, showing the live terminal alongside plan/instruction/report logs.",
-	'비서에게 말해보세요': 'Talk to the Assistant',
-	'사이드바 "비서"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
-		'Open "Assistant" in the sidebar and the conversation starts right away, no button needed. Try something like "block off next Tue–Thu as a QA period" — it\'s a top-level agent that controls the whole app in natural language, not just a single task, including the calendar, cron jobs, and settings.',
+	'오버마인드에게 말해보세요': 'Talk to the Overmind',
+	'사이드바 "오버마인드"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
+		'Open "Overmind" in the sidebar and the conversation starts right away, no button needed. Try something like "block off next Tue–Thu as a QA period" — it\'s a top-level agent that controls the whole app in natural language, not just a single task, including the calendar, cron jobs, and settings.',
 	'캘린더 · 크론잡': 'Calendar · Cron jobs',
 	'캘린더로 일정을 잡고 드래그로 재조정하세요. 크론잡으로 반복 업무를 예약하면 정해진 시각에 실제로 새 태스크가 만들어집니다.':
 		'Schedule with the calendar and drag to reschedule. Set up recurring work with cron jobs and a real new task gets created right on schedule.',

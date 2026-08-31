@@ -42,7 +42,7 @@ async function apiDelete(path) {
 }
 function requireControl() {
 	if (IS_CONTROL) return null
-	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 비서 세션 전용입니다.' }], isError: true }
+	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 오버마인드 세션 전용입니다.' }], isError: true }
 }
 function ok(data) {
 	return { content: [{ type: 'text', text: JSON.stringify(data) }], isError: data && data.ok === false }

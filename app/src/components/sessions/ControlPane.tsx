@@ -239,7 +239,7 @@ export default function ControlPane() {
 		<div className={styles.wrap}>
 			<div className={styles.head}>
 				<StatusDot color={state?.running ? 'green' : 'muted'} pulse={!!state?.running} />
-				<span className={styles.state}>{t('비서')}</span>
+				<span className={styles.state}>{t('오버마인드')}</span>
 				{state?.modelLabel && <span className={`m ${styles.meta}`}>{state.modelLabel}</span>}
 				<div style={{ flex: 1 }} />
 				<button className={styles.btn} disabled={busy} onClick={restart}>
@@ -252,7 +252,7 @@ export default function ControlPane() {
 						{turns.length === 0 && !pendingUser && (
 							<div className={styles.empty}>
 								<span className={styles.emptyDot} />
-								{t('비서에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.')}
+								{t('오버마인드에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.')}
 							</div>
 						)}
 						{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai 웹 챗 기준(구도만, 색·토큰은
@@ -308,7 +308,7 @@ export default function ControlPane() {
 								ref={textareaRef}
 								className={styles.textarea}
 								value={draft}
-								placeholder={t('비서에게 메시지… (이미지 붙여넣기 가능)')}
+								placeholder={t('오버마인드에게 메시지… (이미지 붙여넣기 가능)')}
 								onChange={(e) => setDraft(e.target.value)}
 								onPaste={handlePaste}
 								onKeyDown={(e) => {
@@ -331,7 +331,7 @@ export default function ControlPane() {
 					</div>
 				</>
 			) : (
-				<div className={styles.starting}>{error ?? t('비서 세션 시작 중…')}</div>
+				<div className={styles.starting}>{error ?? t('오버마인드 세션 시작 중…')}</div>
 			)}
 		</div>
 	)

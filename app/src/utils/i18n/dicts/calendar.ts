@@ -41,8 +41,8 @@ const dict: Record<string, string> = {
 	'실행할 지시': 'Instruction',
 	'실행할 지시를 입력하세요.': 'Enter the instruction to run.',
 	'예: 이번 주 완료되지 않은 서브태스크를 전부 다음 주로 재스케줄해줘': 'e.g. Reschedule every subtask not completed this week to next week',
-	'이 시각이 되면 이 문장을 비서에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.':
-		"When this fires, it runs exactly as if you'd typed this sentence to the Assistant yourself — the same sentence every time, with no improvised scope from the AI.",
+	'이 시각이 되면 이 문장을 오버마인드에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.':
+		"When this fires, it runs exactly as if you'd typed this sentence to the Overmind yourself — the same sentence every time, with no improvised scope from the AI.",
 	'만드는 중…': 'Creating…',
 	'자동화 만들기': 'Create automation',
 	크론잡: 'Cron Jobs',

@@ -246,8 +246,8 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 					<div className={styles.slotHead}>
 						<span className={styles.slotIcon}>🎯</span>
 						<span className={styles.slotTitle}>{tp('이 태스크만의 규칙 — "{name}"', { name: folder.name })}</span>
-						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title={t('비서에게 물어보면서 채우기')}>
-							{asking === 'task' ? t('비서 여는 중…') : t('✦ 비서에게 물어보기')}
+						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title={t('오버마인드에게 물어보면서 채우기')}>
+							{asking === 'task' ? t('오버마인드 여는 중…') : t('✦ 오버마인드에게 물어보기')}
 						</button>
 					</div>
 					<p className={styles.slotHint}>{t('같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.')}</p>
@@ -277,8 +277,8 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 									<span className={styles.slotIcon}>{slot.icon}</span>
 									<span className={styles.slotTitle}>{t(slot.title)}</span>
 									<span className={styles.slotWhere}>{t(slot.where)}</span>
-									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title={t('비서에게 물어보면서 채우기')}>
-										{asking === slot.key ? t('비서 여는 중…') : t('✦ 비서에게 물어보기')}
+									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title={t('오버마인드에게 물어보면서 채우기')}>
+										{asking === slot.key ? t('오버마인드 여는 중…') : t('✦ 오버마인드에게 물어보기')}
 									</button>
 								</div>
 								<p className={styles.slotHint}>{t(slot.hint)}</p>

@@ -23,7 +23,7 @@ export const TAB_LABEL: Record<TabKind, string> = {
 	cronjobs: '크론잡',
 	modelPolicy: '모델 배정',
 	calendar: '캘린더',
-	control: '비서',
+	control: '오버마인드',
 	teamRules: '팀 규칙',
 }
 
