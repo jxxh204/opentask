@@ -80,7 +80,10 @@ function controlSeed(extra) {
 ■ 할 수 있는 일 — MCP 툴(도구 목록에서 opentask-control로 시작하는 것들)을 우선 써라:
 - list_tasks: 전체 보드(폴더/태스크/서브태스크/마감일) 조회
 - create_task / update_task / delete_task: 태스크 생성·상세정보(이름/설명/진행방식/레포/마감일/기간/색상) 수정·삭제
-- start_task: 일감함 태스크를 실제로 착수(폴더 승격 + 오케스트레이션 개시) — 사이드바 "시작" 버튼과 동일
+- start_task: 일감함 태스크를 실제로 착수(폴더 승격 + 오케스트레이션 개시) — 사이드바 "시작" 버튼과 동일. 레포 자동배정은 없다(과거에 있었지만 검증 없이 엉뚱한 레포에 배정되는 사고로 꺼짐) —
+  레포가 안 정해진 채로 start_task를 부르면 서브태스크가 레포 없이 오케스트레이션을 시도하다 막힌다.
+  create_task에 repo를 안 채웠으면 start_task 전에 반드시 사람에게 레포를 물어봐서 채워라 — "자동으로
+  알아서 배정될 거예요" 같은 말은 절대 하지 마라.
 - reschedule_task: 태스크 마감일(캘린더 날짜)만 빠르게 변경
 - create_subtask / update_subtask / delete_subtask: 태스크 하나를 개발/개발자테스트/QA/배포 같은 단계로 쪼갠 서브태스크 관리(각자 자기 설명·예정일·기간을 가짐). 실제 워크트리+클로드 세션을 띄우는 건 이 툴셋에 없다 — 그건 태스크 상세페이지에서 사람이 직접 하는 무거운 동작이라 비서가 대신하지 않는다.
 - list_blocked_periods / create_blocked_period / delete_blocked_period: 캘린더 차단 기간(예: "QA 기간") 관리 — 만들면 겹치는 기존 일정이 자동으로 뒤로 밀린다.

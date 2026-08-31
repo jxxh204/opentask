@@ -139,6 +139,14 @@ async function launchSubtask(task, subtask) {
 	// "서브태스크도 레포를 별도로 줄 수 있어야하지만. 기본적으로는 메인태스크와 동일하게" — 서브태스크
 	// 자신에 repo_id가 있으면 그걸 우선, 없으면(기본값) 폴더/태스크 레포를 그대로 물려받는다.
 	const repo = StoreRepos.get(resolveRepoId({ subtask, folder, task }))
+	// "레포 지정 안 하고 태스크 만들었더니 진짜 프로젝트 폴더에 워크트리가 생겼어" — repo가 안 잡히면
+	// Worktrees.ensure()가 repoPath를 undefined로 받아 collector.cjs의 C.REPO(이 앱 자신의 소스 경로)로
+	// 조용히 폴백했다. 그 폴백의 부모 디렉토리가 우연히도 "이 앱을 소스에서 개발 중인 사람의 실제
+	// 프로젝트 체크아웃"이라, 레포 없이 시작된 서브태스크가 실제 레포에 브랜치/워크트리를 만들고 에이전트가
+	// 진짜 파일(README.md 등)을 고쳐버리는 사고가 실제로 재현됐다. 여기서 미리 막아 다음 서브태스크에도
+	// 동일하게 적용한다(§ collector.cjs C.REPO 주석의 "데모 폴백"은 읽기 전용 화면엔 여전히 유효하지만,
+	// 실제로 쓰기 작업을 하는 워크트리 생성에는 절대 써선 안 된다).
+	if (!repo) return { ok: false, error: '이 태스크에 레포가 지정되지 않았습니다 — 먼저 레포를 선택하세요.' }
 	// 워크트리 목록에서 "연결"로 태스크에 이미 입양된 브랜치가 있으면(사람이 기존 워크트리를 이 태스크에
 	// 붙여둔 경우) 첫 서브태스크는 새 워크트리를 또 만들지 않고 그 워크트리를 그대로 이어받는다.
 	const adoptedBranch = idx === 0 ? StoreBranches.listByTask(task.id).find((b) => !b.subtask_id) : null

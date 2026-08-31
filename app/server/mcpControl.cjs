@@ -79,7 +79,7 @@ server.registerTool(
 	'create_task',
 	{
 		title: '태스크 생성',
-		description: '새 태스크를 만든다(일감함/inbox에 들어감 — 아직 오케스트레이션 시작 전). 바로 시작까지 하려면 이어서 start_task를 불러라. 레포를 안 정하면 서버가 자동 분류를 시도한다.',
+		description: '새 태스크를 만든다(일감함/inbox에 들어감 — 아직 오케스트레이션 시작 전). 바로 시작까지 하려면 이어서 start_task를 불러라. 레포 자동 분류는 없다(과거에 검증 없는 LLM 추론으로 엉뚱한 레포에 배정되는 사고가 있어 꺼짐) — repoId를 안 넘기면 start_task 이후 서브태스크가 레포 없이 오케스트레이션을 시도하다 막힌다. 사람이 어느 레포인지 모르면 반드시 먼저 물어봐라.',
 		inputSchema: {
 			name: z.string(),
 			desc: z.string().optional(),
