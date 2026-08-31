@@ -25,6 +25,9 @@ colors:
   rail-bezel: "#08080a"
   panel-bezel: "#0d0d10"
 typography:
+  scale:
+    label-sm: "9.5px"
+    pane-title: "17px"
   headline:
     fontFamily: "Pretendard, 'Pretendard Variable', -apple-system, 'Apple SD Gothic Neo', system-ui, sans-serif"
     fontSize: "20px"
@@ -51,10 +54,10 @@ typography:
     fontWeight: 500
     lineHeight: 1.4
 rounded:
-  chip: "8px"
-  control: "9px"
-  card: "14px"
-  modal: "16px"
+  chip: "6px"
+  control: "4px"
+  card: "6px"
+  modal: "8px"
   pill: "999px"
   circle: "50%"
 spacing:
@@ -178,9 +181,10 @@ OpenTask는 대시보드가 아니라 콘솔이다. 이 은유는 다크 전용 
 
 ### Hierarchy
 - **Headline** (weight 800, 20–21px, line-height ~1.2): 페이지 최상단 제목 — 아키텍처/GitHub/모니터/설정 페이지의 H1.
+- **Pane Title** (weight 800, 17px, `typography.scale.pane-title`): Sessions 탭 워크스페이스 패널(크론잡/팀 규칙 등)의 패널 헤더 — Headline보다 한 단계 아래지만 일반 Title보다 강조되는 탭 패널 전용 단계.
 - **Title** (weight 700–800, 13–16px, line-height ~1.3): 패널/섹션/모달 제목, 카드 이름 입력 필드.
 - **Body** (weight 500–600, 11–12.5px, line-height ~1.4): 시스템 전반의 기본 UI 텍스트 — 행 이름, 버튼, 힌트, 대부분의 인터페이스 문구.
-- **Label** (weight 700, 9.5–10.5px): 메타 정보 — 타임스탬프, 파일 경로, 배지, 카운터.
+- **Label** (weight 700, 9.5–10.5px, `typography.scale.label-sm`가 하한 9.5px): 메타 정보 — 타임스탬프, 파일 경로, 배지, 카운터. 배지·부가 메타처럼 한 단계 더 낮춰야 하는 자리는 9.5px, 일반 라벨은 10.5px.
 - **Mono** (JetBrains Mono, ~10.5–12px, `.m` 클래스): 브랜치명, 커밋 해시, 포트 번호, 로그성 타임스탬프.
 
 ### Named Rules
@@ -210,7 +214,7 @@ OpenTask는 대시보드가 아니라 콘솔이다. 이 은유는 다크 전용 
 
 ## Shapes
 
-라운드는 두 층으로 나뉜다: 대부분의 표면·컨트롤은 억제된 범위(6~16px) 안에서만 움직이고, **주소창·세션/녹화 버튼·디바이스 토글·설정 토글 같은 브라우저-크롬 스타일 인터랙티브 컨트롤**만 예외적으로 완전한 필(999px)을 쓴다. 데이터를 나타내는 요소(칩·배지·태그·카운터)는 이 예외에서 제외된다 — '칩'이라는 이름이 붙은 요소는 실제로도 6~9px의 소프트 코너를 벗어나지 않는다. 완전한 원형(50%)은 상태 점·아바타·상태 아이콘(FolderCard/TaskRow, 아래 Components 참고)에 허용된다.
+라운드는 두 층으로 나뉜다: 대부분의 표면·컨트롤은 억제된 범위(4~8px, `rounded.control` 4px/`rounded.chip`·`rounded.card` 6px/`rounded.modal` 8px) 안에서만 움직이고, **주소창·세션/녹화 버튼·디바이스 토글·설정 토글 같은 브라우저-크롬 스타일 인터랙티브 컨트롤**만 예외적으로 완전한 필(999px)을 쓴다. 데이터를 나타내는 요소(칩·배지·태그·카운터)는 이 예외에서 제외된다 — '칩'이라는 이름이 붙은 요소는 실제로도 6~9px의 소프트 코너를 벗어나지 않는다. 완전한 원형(50%)은 상태 점·아바타·상태 아이콘(FolderCard/TaskRow, 아래 Components 참고)에 허용된다.
 
 보더는 두 단계로 나뉜다: `var(--line)`은 레일/헤더/푸터 같은 구조적 경계에, `var(--line2)`은 카드·입력·버튼의 기본 테두리에 쓰인다. 점선(`1px dashed var(--line2)`)은 기본적으로 "여기를 클릭해 추가하라"는 전용 신호다 — RepoTable/EnvVarTable의 추가 버튼, SessionsPage의 폴더 추가 버튼, ConnectorCard의 빈 슬롯이 이 규칙을 따른다. **유일한 예외**: FolderCard의 taskBody 들여쓰기(`border-left: 1px dashed var(--line)`)는 "추가" 신호가 아니라 순수한 들여쓰기 마커다 — 트리 구조의 자식 항목을 시각적으로 안쪽으로 밀어 넣는 용도로 명시적으로 규칙 밖에 둔다.
 
