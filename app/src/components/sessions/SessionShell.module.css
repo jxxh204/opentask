@@ -435,6 +435,27 @@
 	background: var(--card-hover);
 	color: var(--ink);
 }
+/* "혼자 섬뜩? 강렬한 리더의 인상" — 표본함 속 뇌(§ CONTROL_ICON) 안쪽 채움만 은은하게 명멸시켜
+   정지된 그림이 아니라 지금도 사고 중인 존재처럼 보이게 한다. StatusDot의 pulseDot과 같은 절제된
+   opacity 전환 언어(색·투명도만, craft-floor 모션 규칙)를 따르되 더 느리게(4.2s) — 계속 눈에 밟히면
+   "강렬"이 아니라 "산만"해진다. */
+@keyframes controlIconPulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
+.controlIconPulse {
+	animation: controlIconPulse 4.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.controlIconPulse {
+		animation: none;
+	}
+}
 .navLinkIcon {
 	width: 15px;
 	height: 15px;
