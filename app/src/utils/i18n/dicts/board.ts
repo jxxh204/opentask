@@ -9,6 +9,12 @@ const dict: Record<string, string> = {
 	'버전 {version} 릴리스 노트/다운로드 열기': 'Open release notes/download for version {version}',
 	'🔔 새 버전 v{version}': '🔔 New version v{version}',
 
+	// SessionShell.tsx — 오버마인드 침묵형 막힘 표시(§ control.cjs checkStalled)
+	'오버마인드가 한동안 응답이 없습니다 — 확인해보세요': "Overmind hasn't responded for a while — please check",
+
+	// FolderCard.tsx — 지휘자 침묵형 막힘 표시(§ orchestrator.cjs checkStalledSubtasks conductorStalled)
+	'지휘자가 한동안 응답이 없습니다 — 확인해보세요': "The conductor hasn't responded for a while — please check",
+
 	// BranchChain.tsx
 	'스택 PR': 'Stacked PR',
 	'병렬 분기': 'Parallel branch',

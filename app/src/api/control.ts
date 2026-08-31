@@ -5,6 +5,10 @@ export interface ControlState {
 	session: string | null
 	cwd: string
 	modelLabel: string | null
+	stalled?: boolean
+	// "계속 유지(백그라운드 실행 & 하나의 세션)" — tmux가 있으면 서버 재시작에도 실제로 안 죽는다
+	// (§ server/control.cjs getState). tmux가 없는 맥에선 항상 false — 폴백 경로 그대로.
+	persistent?: boolean
 }
 
 // "관제" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)를 대화로 조작하는 최상위

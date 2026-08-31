@@ -186,6 +186,25 @@ const CLAUDE_IDENTITY_ENV_KEYS = [
   'ORCA_WORKTREE_ID',
   'ORCA_WORKSPACE_ID',
 ]
+// "계속 유지(백그라운드 실행 & 하나의 세션)" — 오버마인드 전용, tmux가 있으면 control.cjs가 pty에
+// 타이핑해 넣는 명령을 `claude --continue` 대신 `tmux new-session -A ...`로 바꿔, 서버가 재시작돼도
+// (§ 파일 상단 "⚠️ 트레이드오프" 주석) 실제 claude 프로세스는 tmux 데몬 밑에서 안 죽는다. tmux는
+// npm 패키지가 아니라 시스템 바이너리라(패키징된 앱을 받는 다른 팀원 맥엔 없을 수 있음) 있을 때만
+// 쓰고 없으면 지금 경로(오늘 고친 DISABLE_UPDATE_PROMPT 복원)로 그대로 폴백 — 모듈 로드 시 1회만
+// 확인하고 캐시(존재 여부가 프로세스 도중 바뀔 일은 없음, ensureOwnGitRoot와 같은 캐시 패턴).
+let _hasTmux = null
+function hasTmux() {
+  if (_hasTmux === null) {
+    try {
+      execFileSync('tmux', ['-V'], { stdio: 'ignore' })
+      _hasTmux = true
+    } catch (_) {
+      _hasTmux = false
+    }
+  }
+  return _hasTmux
+}
+
 function spawnEnv() {
   const env = {
     ...process.env,
@@ -765,6 +784,7 @@ module.exports = {
   trustFolder,
   gitRoot,
   ensureOwnGitRoot,
+  hasTmux,
   // WS 브리지(index.cjs) 전용 — 세션 레지스트리에 직접 접근.
   ensureNamed,
   attachWs,

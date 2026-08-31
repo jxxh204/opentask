@@ -320,16 +320,38 @@ async function reportSubtaskBlocked(taskId, reason) {
 // "업무가 어떻든간에" — 명시적 보고(report-blocked) 없이 그냥 조용해지는 경우(컨텍스트 한도, 크래시,
 // 보고를 잊음)를 잡는 안전망. blocked(확정 신호)와 달리 이건 추정이라 s.stalled에 따로 저장하고
 // UI도 일부러 다른 색(amber)을 쓴다 — 둘을 섞으면 진짜 확정 신호의 긴급도가 희석된다.
-const STALLED_THRESHOLD_MS = 15 * 60 * 1000
+// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 원래 15분은 사람이 궁금해하는
+// 시점보다 한참 늦게 울렸다. 3분으로 낮춤(오탐은 배지 하나일 뿐 — report-blocked 같은 확정 신호와
+// 안 섞이므로 부담 적음).
+const STALLED_THRESHOLD_MS = 3 * 60 * 1000
 async function checkStalledSubtasks() {
 	const now = Date.now()
 	const live = await Term.list().catch(() => [])
 	for (const folder of StoreFolders.list()) {
+		const s = ensureState(folder.id)
+		// 지휘자(컨덕터) 세션 자체도 같은 침묵형 막힘의 대상이다 — 서브태스크만 보면 "지휘자가
+		// 다음 웨이브를 안 띄우고 조용해진" 경우를 놓친다. 서브태스크와 달리 folder당 하나뿐이라
+		// 맵이 아니라 단일 불리언(conductorStalled)로 둔다.
+		if (s.conductor && isLive(live, s.conductor.session)) {
+			const cStatus = await Term.status(s.conductor.session).catch(() => null)
+			if (!cStatus || cStatus.working || cStatus.waiting || cStatus.needsAuth) {
+				s.conductorStalled = false
+			} else {
+				const last = cStatus.lastWorkingAt || s.conductor.startedAt
+				if (now - last >= STALLED_THRESHOLD_MS && !s.conductorStalled) {
+					s.conductorStalled = true
+					const mins = Math.round((now - last) / 60000)
+					pushFeed(s, { from: 'conductor', to: 'human', text: `지휘자 ${mins}분째 응답 없음 — 확인해봐라(막힌 게 아니라면 무시해도 됨).`, kind: 'stalled' })
+					Notify.notifyEscalation(`💤 "${folder.name}" 지휘자 응답 없음`, `${mins}분째 조용합니다.`)
+				}
+			}
+		} else {
+			s.conductorStalled = false
+		}
 		const tasks = StoreTasks.listByFolder(folder.id)
 		for (const task of tasks) {
 			for (const st of StoreSubtasks.listByTask(task.id)) {
 				const session = StoreSubtaskSessions.getActiveForSubtask(st.id)
-				const s = ensureState(folder.id)
 				if (!session || !isLive(live, session.tmux_session)) {
 					delete s.stalled[st.id]
 					continue
@@ -432,7 +454,7 @@ function blank() {
 	// blocked: subtaskId → reason(§ reportSubtaskBlocked). stalled: subtaskId → true(§ checkStalledSubtasks).
 	// 둘 다 같은 원칙(인메모리, 폴더당 하나, DB 영속화 불필요 — 재시작하면 그 서브태스크가 다시
 	// 물어보거나 다시 감지되면 됨).
-	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, feed: [], blocked: {}, stalled: {} }
+	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, conductorStalled: false, feed: [], blocked: {}, stalled: {} }
 }
 function getState(folderId) {
 	return states.get(folderId) || blank()

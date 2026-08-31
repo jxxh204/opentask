@@ -6,8 +6,10 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
 const Term = require('./term.cjs')
 const Settings = require('./settings.cjs')
+const Notify = require('./notify.cjs')
 
 const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.homedir(), '.claude.json')
 // "비서 껏다키면 이전에 명령한것 지워져" — CONTROL_CWD가 앱 루트 자체였던 시절엔, 이 코드베이스에서
@@ -100,14 +102,45 @@ MCP 툴이 안 보이거나 호출이 실패하면 curl로 폴백: curl -s http:
 ■ 원칙: 요청을 이해하고, 뭘 할지 먼저 ${operator}에게 확인받은 뒤 실행해. 완료하면 뭘 했는지 요약해서 보고해.${extra ? `\n\n■ 지금 바로 이걸 도와줘:\n${extra}` : ''}`
 }
 
+// tmux가 있으면 오버마인드용 세션 이름을 포트별로 고정 — 여러 인스턴스(포트 다른 실행/데모)가 같은
+// tmux 세션을 두고 다투지 않게 CONTROL_CWD와 같은 포트-스코프 규칙을 그대로 따른다.
+const TMUX_SESSION = `opentask-control-${process.env.OPENRM_PORT || 8770}`
+
 async function getState() {
-	if (!state) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null }
+	if (!state) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux() }
 	const live = await Term.list().catch(() => [])
 	if (!isLive(live, state.session)) {
 		state = null
-		return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null }
+		return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux() }
 	}
-	return { running: true, ...state }
+	return { running: true, stalled: !!controlStalled, persistent: Term.hasTmux(), ...state }
+}
+
+// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — orchestrator.cjs checkStalledSubtasks의
+// 지휘자·서브태스크용 안전망과 같은 개념을 오버마인드에도 그대로 적용한다. 오버마인드는 폴더 하나에
+// 묶이지 않는 전역 세션이라 맵이 아니라 모듈 전역 불리언 하나로 충분하다.
+const STALLED_THRESHOLD_MS = 3 * 60 * 1000
+let controlStalled = false
+async function checkStalled() {
+	if (!state) {
+		controlStalled = false
+		return
+	}
+	const live = await Term.list().catch(() => [])
+	if (!isLive(live, state.session)) {
+		controlStalled = false
+		return
+	}
+	const status = await Term.status(state.session).catch(() => null)
+	if (!status || status.working || status.waiting || status.needsAuth) {
+		controlStalled = false
+		return
+	}
+	const last = status.lastWorkingAt || state.startedAt
+	if (Date.now() - last < STALLED_THRESHOLD_MS || controlStalled) return
+	controlStalled = true
+	const mins = Math.round((Date.now() - last) / 60000)
+	Notify.notifyEscalation('💤 오버마인드 응답 없음', `${mins}분째 조용합니다.`)
 }
 
 // "비서 세션이 자꾸 초기화돼" — term.cjs 세션은 이 서버 프로세스의 자식이라 서버 재시작마다(코드
@@ -121,7 +154,15 @@ async function start(extra) {
 	if (state && isLive(live, state.session)) return { ok: true, already: true, ...state }
 	registerControlMcp(CONTROL_CWD)
 	const model = Settings.modelFor('control')
-	const t = await Term.create({ cwd: CONTROL_CWD, command: 'claude --continue', label: 'control', model, continueFallbackSeed: controlSeed(extra) })
+	// tmux 있으면 claude를 직접 타이핑해 넣는 대신 `tmux new-session -A`(있으면 붙고, 없으면 만듦)로
+	// 감싼다 — 서버가 재시작돼도 tmux 데몬 밑의 claude 프로세스는 안 죽으니 다음 start() 호출이
+	// 즉시 그 세션에 재부착된다("계속 유지" 요청). watchContinueFallback은 화면을 그대로 패스스루로
+	// 보므로 최초 생성 때는 지금처럼 동작하고, 재부착 때는 이미 붙어있는 화면이라 두 감지 조건 다
+	// 안 걸려 60초 뒤 조용히 끝난다(무해함).
+	const command = Term.hasTmux()
+		? `tmux new-session -A -s ${TMUX_SESSION} -c "${CONTROL_CWD}" "claude --continue"`
+		: 'claude --continue'
+	const t = await Term.create({ cwd: CONTROL_CWD, command, label: 'control', model, continueFallbackSeed: controlSeed(extra) })
 	if (!t.ok) return { ok: false, error: t.error }
 	const modelLabel = Settings.modelLabelFor('control')
 	state = { session: t.name, model, modelLabel, startedAt: Date.now(), cwd: CONTROL_CWD }
@@ -131,6 +172,13 @@ async function start(extra) {
 async function stop() {
 	if (!state) return { ok: true }
 	await Term.kill(state.session).catch(() => {})
+	// "정지"는 뷰어만 끊는 게 아니라 진짜 정지 — tmux 모드면 데몬 쪽 세션도 같이 죽인다(안 그러면
+	// tmux 세션이 백그라운드에 영영 남아 다음 start()가 죽은 게 아니라 그 낡은 세션에 재부착됨).
+	if (Term.hasTmux()) {
+		try {
+			execFileSync('tmux', ['kill-session', '-t', TMUX_SESSION], { stdio: 'ignore' })
+		} catch (_) {}
+	}
 	state = null
 	return { ok: true }
 }
@@ -157,4 +205,4 @@ async function ask(text) {
 	return await start(text)
 }
 
-module.exports = { getState, start, stop, ask, interrupt, CONTROL_CWD }
+module.exports = { getState, start, stop, ask, interrupt, checkStalled, CONTROL_CWD }

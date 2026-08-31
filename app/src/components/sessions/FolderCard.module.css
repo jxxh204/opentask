@@ -232,6 +232,14 @@
 		opacity: 0.55;
 	}
 }
+/* "멈춘상황을 어떻게 인지할 수 있을까" — .waiting(정적 amber)과 같은 팔레트를 쓰되 펄스를 더해
+   지휘자가 침묵형으로 막혔음(§ orchestrator.cjs checkStalledSubtasks conductorStalled)을 구분한다.
+   확정 신호(needsAuth/needsInput, 빨강)보다는 낮고 평상시 대기(정적 amber)보다는 눈에 띄어야 한다. */
+.stalled {
+	background: var(--atint);
+	color: var(--amber);
+	animation: folderAlert 1.4s ease-in-out infinite;
+}
 .spinner {
 	width: 10px;
 	height: 10px;

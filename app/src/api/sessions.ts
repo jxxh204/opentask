@@ -244,6 +244,7 @@ export interface OrchestrationState {
 	sessions: OrchestrationSession[]
 	log: OrchestrationLogEntry[]
 	conductor: Conductor | null
+	conductorStalled: boolean
 	feed: FeedEntry[]
 }
 

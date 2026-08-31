@@ -31,6 +31,7 @@ export interface TermStatus {
 	needsResume?: boolean
 	isClaude?: boolean
 	tail?: string
+	lastWorkingAt?: number | null
 }
 export interface TermLiveSession {
 	name: string

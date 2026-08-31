@@ -9,7 +9,7 @@ import type { TermStatus } from '../api/term'
 import { useReviewStore } from './useReviewStore'
 import { useTabsStore } from './useTabsStore'
 
-const EMPTY_ORCHESTRATION: OrchestrationState = { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, feed: [] }
+const EMPTY_ORCHESTRATION: OrchestrationState = { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, conductorStalled: false, feed: [] }
 
 // "체크한 거 유지되게 해줘 계속 초기화되는데" — repoFilters가 순수 인메모리 상태라 창을 새로고침·재시작할
 // 때마다 null(전체 선택)로 돌아갔다. null은 "필터 없음"을 뜻하는 유효 상태라 빈 배열과 구분해서 저장한다.

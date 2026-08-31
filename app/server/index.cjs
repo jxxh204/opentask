@@ -2345,6 +2345,7 @@ function startServer(opts = {}) {
       loop(C.pollPorts, 10000)
       loop(C.pollPRs, 30000)
       loop(Orchestrator.checkStalledSubtasks, 60000) // "업무가 어떻든간에" — 침묵형 막힘 안전망(§ orchestrator.cjs)
+      loop(Control.checkStalled, 60000) // 오버마인드용 같은 안전망(§ control.cjs checkStalled)
       Monitor.start() // PR·이슈 모니터 자동 시작 (cmux "10분 모니터링" 세션 대체)
       console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
       Aws.startExpiryWatch() // AWS MFA 세션 만료 감시 — 인증 풀리면 맥 알림 (읽기전용 STS 호출만, aws.cjs 참고)
@@ -2358,6 +2359,13 @@ function startServer(opts = {}) {
       Orchestrator.restoreAllOnBoot()
         .then((r) => console.log(`   🔁  세션 복원: 태스크 매니저 ${r.restoredConductors}건 (폴더 ${r.folders}개 확인)\n`))
         .catch((e) => console.log(`   ⚠️  세션 복원 실패: ${String((e && e.message) || e)}\n`))
+      // "계속 유지(백그라운드 실행 & 하나의 세션)" — 사람이 탭을 열거나 말을 걸어야만 켜지던 걸 부팅과
+      // 동시에 미리 켜둔다. tmux가 있으면(§control.cjs start()) 이 호출이 기존 세션에 순간 재부착,
+      // 없으면 오늘 고친 DISABLE_UPDATE_PROMPT 콜드스타트 경로를 그대로 탄다. 부팅을 막지 않는
+      // fire-and-forget.
+      Control.start()
+        .then(() => console.log('   🧠  오버마인드: 백그라운드 세션 준비\n'))
+        .catch((e) => console.log(`   ⚠️  오버마인드 준비 실패: ${String((e && e.message) || e)}\n`))
       resolve({ port, host, server })
     })
   })

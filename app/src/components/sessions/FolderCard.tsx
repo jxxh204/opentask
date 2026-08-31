@@ -160,6 +160,10 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	const needsAuth = !!conductorTermStatus?.needsAuth
 	const needsResume = !needsAuth && !!conductorTermStatus?.needsResume
 	const needsInput = !needsAuth && !needsResume && !!conductorTermStatus?.waiting
+	// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 지휘자가 명시적 대기(needsInput류)
+	// 없이 그냥 조용해진 경우(§ orchestrator.cjs checkStalledSubtasks의 conductorStalled). 백엔드가
+	// 확정 판단하지만, 폴링 주기(60초) 지연 없이 곧바로 반영되도록 프론트도 같은 조건을 한 번 더 본다.
+	const conductorStalled = !needsAuth && !needsResume && !needsInput && !!orch.conductorStalled
 	// "서브태스크가 돌아도 메인태스크 스피너가 도는것같기도하고" — orch.running은 웨이브 오케스트레이션이
 	// 한 번이라도 시작됐는지만 볼 뿐(start()에서 세션이 하나라도 있으면 켜지고, stop() 전까진 절대 안
 	// 꺼짐) 지금 실제로 뭔가 돌고 있는지와 무관했다. subChainDot과 같은 실데이터(subtaskWork[].alive)를
@@ -306,7 +310,17 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					</svg>
 				)}
 				<span
-					className={`${styles.statusIcon} ${needsAuth ? styles.needsAuth : needsResume || needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting}`}
+					className={`${styles.statusIcon} ${
+						needsAuth
+							? styles.needsAuth
+							: needsResume || needsInput
+								? styles.needsInput
+								: conductorStalled
+									? styles.stalled
+									: isRunning
+										? styles.running
+										: styles.waiting
+					}`}
 					title={
 						needsAuth
 							? t('태스크 매니저에 인증이 필요합니다')
@@ -314,10 +328,12 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 								? t('세션 재개 확인이 필요합니다 (요약으로 재개할지 메뉴에서 멈춤)')
 								: needsInput
 									? t('태스크 매니저가 입력을 기다리고 있습니다')
-									: undefined
+									: conductorStalled
+										? t('지휘자가 한동안 응답이 없습니다 — 확인해보세요')
+										: undefined
 					}
 				>
-					{needsAuth ? LOCK : needsResume || needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
+					{needsAuth ? LOCK : needsResume || needsInput ? QUESTION : conductorStalled ? HELP : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
 				{renaming ? (
 					<input
