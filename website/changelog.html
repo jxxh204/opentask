@@ -55,8 +55,19 @@
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
-						<h3 style="margin:0; font-size:19px;">0.1.6</h3>
+						<h3 style="margin:0; font-size:19px;">0.1.7</h3>
 						<span class="chip chip-green">Latest</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-31</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li><strong>Critical hotfix — every terminal-based feature (Overmind, Terminal tab, Orchestrator sessions, Task Manager subtasks) crashed instantly with "posix_spawnp failed." in the downloaded app.</strong> Root cause: a path-resolution bug in node-pty that only showed up in this app's packaged layout. If v0.1.5 or v0.1.6 crashed for you, this fixes it — no reinstall steps needed beyond grabbing this version.</li>
+						<li>Also fixed a related, load-dependent glitch where the first character of a command sent to a freshly-opened terminal could be dropped (e.g. <code>claude</code> running as <code>laude</code>)</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.6</h3>
 						<span style="color:var(--t3); font-size:13px;">2026-08-31</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">

@@ -54,8 +54,19 @@
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
-						<h3 style="margin:0; font-size:19px;">0.1.6</h3>
+						<h3 style="margin:0; font-size:19px;">0.1.7</h3>
 						<span class="chip chip-green">최신</span>
+						<span style="color:var(--t3); font-size:13px;">2026-08-31</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li><strong>긴급 수정 — 다운로드한 앱에서 터미널을 쓰는 모든 기능(오버마인드, 터미널 탭, 오케스트레이터 세션, 태스크 매니저 서브태스크)이 "posix_spawnp failed."로 즉시 크래시하던 문제.</strong> 원인은 이 앱의 패키징 구조에서만 드러나는 node-pty의 경로 해석 버그였습니다. v0.1.5나 v0.1.6에서 크래시를 겪으셨다면 이 버전으로 바로 해결됩니다.</li>
+						<li>부하가 큰 환경에서 터미널을 새로 열 때 첫 명령의 앞글자가 씹히던 문제(예: <code>claude</code>가 <code>laude</code>로 실행)도 함께 수정</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.6</h3>
 						<span style="color:var(--t3); font-size:13px;">2026-08-31</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
