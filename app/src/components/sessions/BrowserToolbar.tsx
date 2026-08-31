@@ -29,6 +29,14 @@ const DEVTOOLS = (
 		<path d="M8 4L3 12l5 8M16 4l5 8-5 8M14 4l-4 16" />
 	</svg>
 )
+// "이런식으로 요소들을 볼 수 있고" — v0/Lovable류 "Grab page element" 크로스헤어. 이 파일 다른
+// 아이콘들과 같은 획(strokeWidth 1.8, round cap/join) — tabIcons.tsx의 2보다 얇은 이 파일만의 관례.
+const PICKER = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<circle cx="12" cy="12" r="6.5" />
+		<path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" />
+	</svg>
+)
 const OVERFLOW = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
 		<circle cx="5" cy="12" r="1.2" />
@@ -49,12 +57,14 @@ export default function BrowserToolbar({
 	error,
 	device,
 	cwd,
+	pickerActive,
 	onBack,
 	onForward,
 	onReload,
 	onNavigate,
 	onOpenDevtools,
 	onDeviceChange,
+	onTogglePicker,
 }: {
 	url: string
 	loading: boolean
@@ -63,12 +73,14 @@ export default function BrowserToolbar({
 	error: string | null
 	device: 'pc' | 'mobile'
 	cwd: string | null
+	pickerActive: boolean
 	onBack(): void
 	onForward(): void
 	onReload(): void
 	onNavigate(url: string): void
 	onOpenDevtools(): void
 	onDeviceChange(d: 'pc' | 'mobile'): void
+	onTogglePicker(): void
 }) {
 	const t = useT()
 	const [draft, setDraft] = useState(url)
@@ -122,6 +134,9 @@ export default function BrowserToolbar({
 					{error}
 				</span>
 			)}
+			<span className={`${styles.iconBtn} ${pickerActive ? styles.active : ''}`} onClick={onTogglePicker} title={t('요소 선택 (Esc로 취소)')}>
+				{PICKER}
+			</span>
 			<span className={styles.iconBtn} onClick={onOpenDevtools} title={t('개발자 도구 열기')}>
 				{DEVTOOLS}
 			</span>

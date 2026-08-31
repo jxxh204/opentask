@@ -598,7 +598,10 @@ export default function TabWorkspace() {
 				    바꿔도 "이미 시작함" 상태가 새 탭까지 이어져 그 탭은 영영 세션이 안 켜졌다. */}
 				{t?.kind === 'claude' && (claudeCwd ? <ClaudeSessionPane key={t.id} tabId={t.id} cwd={claudeCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
 				{t?.kind === 'server' && (realProjectCwd ? <ServerPane cwd={realProjectCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
-				{t?.kind === 'browser' && <BrowserPane taskId={activeNodeId!} cwd={realProjectCwd} />}
+				{/* folderId — "메인태스크에 보낼 수 있도록해줘"(§ BrowserPane 요소 피커→tellConductor)엔
+				    진짜 폴더 id가 필요하다. taskId(=activeNodeId)는 폴더/서브태스크 어느 쪽인지 모호해서
+				    쓸 수 없다 — OrchestratorPane/TeamRulesPane과 같은 자리의 found.folderId를 그대로. */}
+				{t?.kind === 'browser' && <BrowserPane taskId={activeNodeId!} cwd={realProjectCwd} folderId={found!.folderId} />}
 			</>
 		)
 	}
