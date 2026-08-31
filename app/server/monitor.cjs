@@ -579,7 +579,9 @@ async function claudeStatus(kind = 'ops') {
 	if (!has.ok) return { running: false, kind, session: cfg.session, loopSec: loopSec[kind], loopLabel: fmtLabel(loopSec[kind]), label: cfg.label, skill: cfg.skill }
 	const scr = await tmux(['capture-pane', '-t', cfg.session, '-p'])
 	const text = scr.out
-	const working = /esc to interrupt/.test(text) // claude가 작업 중
+	// term.cjs status()와 같은 이유로 넓힘 — 현재 CLI 상태줄이 "Lollygagging… (6m 18s · ↓ 24.4k tokens)"처럼
+	// 'esc to interrupt' 없이 "…(…tokens" 꼴로만 뜨는 경우가 실측됨(§ term.cjs 참고).
+	const working = /esc to interrupt/.test(text) || /…\s*\([^)]*tokens?/i.test(text) // claude가 작업 중
 	const needsAuth = /MFA|ExpiredToken|재인증|인증.*만료|AccessDenied|권한.*요청/i.test(text)
 	const waiting = !working && /❯|to manage|for agents|Do you want|계속할까|진행할까/.test(text)
 	const tail = text.split('\n').map((l) => l.trim()).filter(Boolean).slice(-3).join(' · ').slice(0, 200)

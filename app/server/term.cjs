@@ -530,7 +530,12 @@ async function status(name) {
   const entry = sessions.get(name)
   if (!entry || entry.exited) return { exists: false }
   const text = capturePane(name) || ''
-  const working = /esc to interrupt/i.test(text)
+  // "서브태스크에 로딩이 안생기는" — 실측: 서버가 뜬 순간(lastWorkingAt) 이후로 실제 작업 중인 세션도
+  // 'esc to interrupt'가 한 번도 안 잡혀 42분째 그 값 그대로였다(→ 15분 임계값을 넘겨 stalled로 오판,
+  // subChainDot이 stalled를 alive보다 우선해 초록 스피너가 영영 안 뜸). 현재 CLI 상태줄은
+  // "Lollygagging… (6m 18s · ↓ 24.4k tokens)"처럼 'esc to interrupt' 없이 "…(…tokens" 꼴로만 뜨는
+  // 경우가 실측됨 — 완료 요약줄("Brewed for 8m 57s · done 11:36 AM")은 말줄임표가 없어 안 겹친다.
+  const working = /esc to interrupt/i.test(text) || /…\s*\([^)]*tokens?/i.test(text)
   const needsAuth = /MFA|ExpiredToken|재인증|인증.*만료|AccessDenied|권한.*요청/i.test(text)
   // ❯ 단독/'to manage'/'for agents'는 claude가 유휴 상태(다음 지시 기다림)일 때도 항상 떠 있는 UI 껍데기라
   // '질문 대기'로 오판(거의 항상 true)했음 — 실제 결정 필요한 프롬프트에서만 뜨는 문구로 좁힌다.
