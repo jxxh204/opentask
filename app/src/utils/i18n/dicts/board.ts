@@ -5,6 +5,10 @@ const dict: Record<string, string> = {
 	'동기화 중…': 'Syncing…',
 	'레포·워크트리 상태(PR·dirty 등)를 처음 불러오는 중입니다.': 'Loading repo/worktree status (PRs, dirty state, etc.) for the first time.',
 
+	// SessionShell.tsx — 상태바 업데이트 알림(§ useUpdateCheck.ts)
+	'버전 {version} 릴리스 노트/다운로드 열기': 'Open release notes/download for version {version}',
+	'🔔 새 버전 v{version}': '🔔 New version v{version}',
+
 	// BranchChain.tsx
 	'스택 PR': 'Stacked PR',
 	'병렬 분기': 'Parallel branch',

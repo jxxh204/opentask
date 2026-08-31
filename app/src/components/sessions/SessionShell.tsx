@@ -6,6 +6,7 @@ import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import { useUiStore } from '../../store/useUiStore'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
+import { useUpdateCheck } from '../../utils/useUpdateCheck'
 import { useT, useTp, translate, localeFor } from '../../utils/i18n'
 import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
@@ -186,6 +187,7 @@ export default function SessionShell() {
 	const cockpitSummary = useSessionsStore((s) => s.cockpitSummary)
 	const devServers = useSessionsStore((s) => s.devServers)
 	const apiAddress = useSessionsStore((s) => s.apiAddress)
+	const updateInfo = useUpdateCheck()
 	// "가장 하단에 켜져있는 로컬서버 바로 클릭 가능한 버튼이나 뭔가 있으면 좋겠어" — 에이전트가
 	// 원격으로 브라우저 탭을 열어주는 경로는 없다(webview는 렌더러 안에만 존재 — §BrowserPane.tsx
 	// 주석). 대신 지금 보고 있는 태스크의 "브라우저" 탭을 사람이 직접 그 dev 서버로 연다 — 터미널
@@ -669,6 +671,17 @@ export default function SessionShell() {
 							PR {cockpitSummary?.prOpen ?? 0} open · {cockpitSummary?.prDraft ?? 0} draft
 						</span>
 					</>
+				)}
+				{updateInfo && (
+					<a
+						href={updateInfo.url}
+						target="_blank"
+						rel="noreferrer"
+						className={`${styles.sbItem} ${styles.sbItemLink}`}
+						title={tp('버전 {version} 릴리스 노트/다운로드 열기', { version: updateInfo.latestVersion })}
+					>
+						{tp('🔔 새 버전 v{version}', { version: updateInfo.latestVersion })}
+					</a>
 				)}
 				<span className={styles.sbSpacer} />
 				{apiAddress && (

@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('openrm', {
   // "완전 종료 시 백엔드도 같이 끌지" 토글 (설정 모달, main.cjs의 before-quit 참고).
   getQuitBehavior: () => ipcRenderer.invoke('openrm:get-quit-behavior'),
   setQuitBehavior: (killBackendOnQuit) => ipcRenderer.invoke('openrm:set-quit-behavior', { killBackendOnQuit }),
+  // 상태바 업데이트 알림용(§ SessionShell.tsx useUpdateCheck) — 패키징된 실제 버전 문자열이 필요하다.
+  getAppVersion: () => ipcRenderer.invoke('openrm:get-app-version'),
 })

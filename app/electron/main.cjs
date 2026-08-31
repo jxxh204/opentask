@@ -402,6 +402,12 @@ p{font-size:13px;letter-spacing:.02em}
     return { ok: true, path: result.filePaths[0] }
   })
 
+  // ── 상태바 업데이트 알림 ─────────────────────────────────────────────────
+  // 자동 설치(위 checkForUpdates/autoUpdater)는 공증 전까지 조용히 실패하므로, 다운로드해 쓰는
+  // 사람들에게 새 버전이 있다는 것 자체를 알려줄 다른 경로가 필요하다(§ useUpdateCheck.ts). 렌더러가
+  // GitHub Releases API와 직접 비교할 기준값(현재 패키징된 버전)만 여기서 내려준다.
+  ipcMain.handle('openrm:get-app-version', () => app.getVersion())
+
   // ── 종료 동작 설정(백엔드 detached 프로세스와 별개 관심사라 SQLite 대신 파일 하나) ──────────
   // "앱을 꺼도 백엔드가 안 죽어서 세션이 계속 일한다"는 게 기본 설계 의도(§ resolveDetachedBackendUrl)
   // 지만, 정말 완전히 끄고 싶은 사용자도 있다 — 설정에서 토글로 선택하게 한다. 렌더러 state가 아니라

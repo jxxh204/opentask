@@ -8,5 +8,6 @@ interface Window {
 		pickFolder(opts?: { title?: string; defaultPath?: string }): Promise<{ ok: true; path: string } | { ok: false; canceled: true }>
 		getQuitBehavior(): Promise<{ killBackendOnQuit: boolean }>
 		setQuitBehavior(killBackendOnQuit: boolean): Promise<{ killBackendOnQuit: boolean }>
+		getAppVersion(): Promise<string>
 	}
 }
