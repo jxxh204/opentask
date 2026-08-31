@@ -23,6 +23,17 @@ const APP_ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png')
 // 개발 모드는 그 과정을 안 거치므로 Dock 아이콘이 기본 Electron 로고로 나온다 — 여기서 직접 세팅.
 app.setName('OpenTask')
 
+// "로컬에서 실행하고있으면 다운로드했을때 크래시가 날 수 있나?" — 실제로 재현됨: dev 모드(electron .)와
+// 패키지 앱(/Applications/OpenTask.app)이 기본값으로 완전히 같은 userData 경로를 쓴다(app.setName이
+// 패키지 여부와 무관하게 항상 같은 이름을 주므로). 아래 싱글 인스턴스 락은 그 userData 스코프로
+// 걸리기 때문에, dev 모드가 떠 있는 동안 진짜 다운로드한 앱을 열면 "이미 같은 인스턴스가 떠 있다"고
+// 오판해 새 창을 하나도 안 띄우고 조용히 종료한다(에러도 안 남아 크래시인지 그냥 안 켜진 건지 구분도
+// 안 됨) — 다운로드한 앱이 고장난 것처럼 보이는 진짜 원인이었다. dev 모드만 별도 userData로 완전히
+// 분리해 패키지 앱과 절대 같은 인스턴스로 오인되지 않게 한다.
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('userData'), '..', 'OpenTask-dev'))
+}
+
 // ── PATH 상속 보정 ──────────────────────────────────────────────────────
 // macOS에서 Dock/Finder로 띄운 GUI 앱은 로그인 셸의 PATH(.zshrc/.zprofile 등에서 추가된
 // nvm/brew/asdf 경로)를 상속받지 못한다. git/gh/tmux/aws/claude CLI 호출이 전부 여기 의존하므로
