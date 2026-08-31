@@ -120,8 +120,9 @@ export default function TaskRow({
 	const isDone = git?.pr?.state === 'merged'
 	// 우선순위(§12): 완료 > 인증필요 > 질문대기 > 진행중 > 대기 — 완료가 아니면 그 다음 확인이 급한 것부터.
 	const needsAuth = !isDone && !!termStatus?.needsAuth
-	const needsInput = !isDone && !needsAuth && !!termStatus?.waiting
-	const isRunning = !isDone && !needsAuth && !needsInput && !!session
+	const needsResume = !isDone && !needsAuth && !!termStatus?.needsResume
+	const needsInput = !isDone && !needsAuth && !needsResume && !!termStatus?.waiting
+	const isRunning = !isDone && !needsAuth && !needsResume && !needsInput && !!session
 
 	// 사이드바가 "지금 대화 중"이라는 걸 실제로 보여주는 자리(§10) — 장식 애니메이션이 아니라 feed에
 	// 진짜 새 이벤트가 들어온 순간에만 0.5초 반짝인다. 이전엔 정적인 스피너뿐이라 대화가 오가도 티가 안 났다.
@@ -195,11 +196,11 @@ export default function TaskRow({
 			>
 				<span
 					className={`${styles.statusDot} ${
-						isDone ? styles.done : needsAuth ? styles.needsAuth : needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting
+						isDone ? styles.done : needsAuth ? styles.needsAuth : needsResume || needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting
 					}`}
-					title={needsAuth ? t('인증이 필요합니다') : needsInput ? t('입력이 필요합니다') : undefined}
+					title={needsAuth ? t('인증이 필요합니다') : needsResume ? t('세션 재개 확인이 필요합니다') : needsInput ? t('입력이 필요합니다') : undefined}
 				>
-					{isDone ? CHECK : needsAuth ? LOCK : needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
+					{isDone ? CHECK : needsAuth ? LOCK : needsResume || needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
 				<div className={styles.body}>
 					<div className={styles.line1}>

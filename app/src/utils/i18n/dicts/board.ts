@@ -64,6 +64,7 @@ const dict: Record<string, string> = {
 	// FolderCard.tsx
 	'태스크 매니저에 인증이 필요합니다': 'Task manager needs authentication',
 	'태스크 매니저가 입력을 기다리고 있습니다': 'Task manager is waiting for input',
+	'세션 재개 확인이 필요합니다 (요약으로 재개할지 메뉴에서 멈춤)': 'Session needs a resume confirmation (stuck at the "resume from summary" menu)',
 	'클린 판정이면 사람 확인 없이 자동으로 merge됩니다(우클릭으로 끌 수 있음)':
 		'If judged clean, merges automatically without human confirmation (right-click to turn off)',
 	'다시 누르면 보관함으로 이동합니다': 'Click again to move to Archive',
@@ -80,6 +81,7 @@ const dict: Record<string, string> = {
 	'정말 삭제할까요? (다시 클릭)': 'Really delete? (click again)',
 	'도움 요청: {reason}': 'Help requested: {reason}',
 	'인증이 필요합니다': 'Authentication required',
+	'세션 재개 확인이 필요합니다': 'Session needs a resume confirmation',
 	'입력이 필요합니다': 'Input required',
 	'한동안 응답이 없습니다 — 확인해보세요': 'No response for a while — please check',
 	'여기로 서브태스크를 드래그': 'Drag a subtask here',

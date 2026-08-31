@@ -309,6 +309,12 @@ function capturePane(name) {
   return lines.join('\n')
 }
 
+// 오래되고 큰 대화를 `--continue`로 이어받을 때 클로드가 띄우는 "요약으로 재개할지" 확인 메뉴 —
+// bypassPermissions(도구 승인 우회)는 이 화면엔 안 먹힌다. 별개의 TUI 프롬프트라 사람이 Enter를
+// 눌러줘야 넘어가고, 그러기 전까진 세션이 그 화면에 멈춰 서브태스크가 죽은 것처럼 보인다. 기본
+// 선택지가 이미 "1. Resume from summary (recommended)"라 Enter만 보내면 그대로 확정된다.
+const RESUME_PROMPT_RE = /Resuming the full session will consume|Resume from summary \(recommended\)/i
+
 // "태스크를 새로 키면 새로 켜줘. 세션은 동일해도" — conductorCwd를 폴더별로 분리한 뒤로 그 cwd에
 // claude가 이어받을 대화 자체가 없는 게 정상 케이스가 됐다(새 폴더거나, 이전 대화가 옛 공유 cwd
 // 아래 있던 경우). `claude --continue`가 "No conversation found to continue"를 내고 그냥 셸
@@ -317,6 +323,7 @@ function capturePane(name) {
 async function watchContinueFallback(name, cmd, fallbackSeed) {
   if (!/--continue\b/.test(String(cmd))) return
   const start = Date.now()
+  let resumeConfirmed = false
   // "처음엔 컨티뉴가없는데 명령하니까 문제가 생기는거였네" — 8초 안에 못 잡으면 이 워처는 그냥
   // 조용히 포기하고, "No conversation found..." 에러만 화면에 남은 채 아무도 새로 안 켜준다.
   // claude CLI 콜드스타트가 8초를 넘기는 경우가 실측됐다(병렬 세션 많을 때 특히) — 같은 이유로
@@ -326,6 +333,11 @@ async function watchContinueFallback(name, cmd, fallbackSeed) {
     const entry = sessions.get(name)
     if (!entry || entry.exited) return
     const screen = capturePane(name) || ''
+    if (!resumeConfirmed && RESUME_PROMPT_RE.test(screen)) {
+      entry.proc.write('\r')
+      resumeConfirmed = true
+      continue
+    }
     if (/No conversation found to continue/i.test(screen)) {
       const fallback = String(cmd).replace(/\s*--continue\b/, '').trim()
       if (!fallback) return
@@ -524,6 +536,10 @@ async function status(name) {
   // '질문 대기'로 오판(거의 항상 true)했음 — 실제 결정 필요한 프롬프트에서만 뜨는 문구로 좁힌다.
   // ☐(빈 체크박스)는 AskUserQuestion류 구조화 질문(단답/스테퍼 폼) 헤더에서만 관측됨 — 실사용 세션 전수 확인.
   const waiting = !working && /Do you want|계속할까|진행할까|\(y\/n\)|Enter to select|to navigate|Esc to cancel|☐/i.test(text)
+  // watchContinueFallback이 보통 이 화면을 Enter로 자동 확정하지만, 그 워처는 세션 생성 직후 60초만
+  // 지켜본다 — 그 창을 놓치면(예: 앱이 오래 떠 있다가 뒤늦게 이 화면이 뜨는 경우) waiting에도 걸리긴
+  // 하지만 원인이 뭉뚱그려진다. 재개 확인 메뉴라는 걸 구체적으로 알 수 있게 따로 뗀다.
+  const needsResume = RESUME_PROMPT_RE.test(text)
   const isClaude = /esc to interrupt|to manage|for agents|claude|tokens|⏵⏵/i.test(text)
   const tail = text
     .split('\n')
@@ -538,7 +554,7 @@ async function status(name) {
   // idle이면 즉시 "몇 시간째 응답없음"으로 오탐한다. working 여부와 무관하게 "이 세션을 처음 관측한
   // 시각"을 기준선으로 한 번은 찍어둬 — 재시작 후 첫 관측부터 정상적으로 새 유예 기간이 시작되게 한다.
   if (working || !lastWorkingAt.has(name)) lastWorkingAt.set(name, Date.now())
-  return { exists: true, working, waiting, needsAuth, isClaude, tail, lastWorkingAt: lastWorkingAt.get(name) || null }
+  return { exists: true, working, waiting, needsAuth, needsResume, isClaude, tail, lastWorkingAt: lastWorkingAt.get(name) || null }
 }
 
 // 빈 포트 찾기 (3000~3099 중 LISTEN 안 된 첫 포트)

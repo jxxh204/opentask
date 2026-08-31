@@ -158,7 +158,8 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	// TaskRow의 statusDot과 같은 소스(termStatus, § term.cjs가 계산)를 지휘자 세션명으로 조인한다.
 	const conductorTermStatus = useSessionsStore((s) => (orch.conductor ? s.termStatus[orch.conductor.session] : undefined))
 	const needsAuth = !!conductorTermStatus?.needsAuth
-	const needsInput = !needsAuth && !!conductorTermStatus?.waiting
+	const needsResume = !needsAuth && !!conductorTermStatus?.needsResume
+	const needsInput = !needsAuth && !needsResume && !!conductorTermStatus?.waiting
 	// "서브태스크가 돌아도 메인태스크 스피너가 도는것같기도하고" — orch.running은 웨이브 오케스트레이션이
 	// 한 번이라도 시작됐는지만 볼 뿐(start()에서 세션이 하나라도 있으면 켜지고, stop() 전까진 절대 안
 	// 꺼짐) 지금 실제로 뭔가 돌고 있는지와 무관했다. subChainDot과 같은 실데이터(subtaskWork[].alive)를
@@ -305,10 +306,18 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					</svg>
 				)}
 				<span
-					className={`${styles.statusIcon} ${needsAuth ? styles.needsAuth : needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting}`}
-					title={needsAuth ? t('태스크 매니저에 인증이 필요합니다') : needsInput ? t('태스크 매니저가 입력을 기다리고 있습니다') : undefined}
+					className={`${styles.statusIcon} ${needsAuth ? styles.needsAuth : needsResume || needsInput ? styles.needsInput : isRunning ? styles.running : styles.waiting}`}
+					title={
+						needsAuth
+							? t('태스크 매니저에 인증이 필요합니다')
+							: needsResume
+								? t('세션 재개 확인이 필요합니다 (요약으로 재개할지 메뉴에서 멈춤)')
+								: needsInput
+									? t('태스크 매니저가 입력을 기다리고 있습니다')
+									: undefined
+					}
 				>
-					{needsAuth ? LOCK : needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
+					{needsAuth ? LOCK : needsResume || needsInput ? QUESTION : isRunning ? <span className={styles.spinner} /> : CLOCK}
 				</span>
 				{renaming ? (
 					<input

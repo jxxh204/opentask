@@ -26,6 +26,9 @@ export interface TermStatus {
 	working?: boolean
 	waiting?: boolean
 	needsAuth?: boolean
+	// 오래되고 큰 세션을 --continue로 이어받을 때 뜨는 "요약으로 재개할지" 확인 메뉴에 멈춰 있음
+	// (server/term.cjs watchContinueFallback이 보통 자동으로 넘겨주지만, 그 60초 창을 놓치면 여기 걸림).
+	needsResume?: boolean
 	isClaude?: boolean
 	tail?: string
 }
