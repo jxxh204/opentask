@@ -12,6 +12,13 @@
 	padding: 16px 20px;
 	border-bottom: 1px solid var(--line);
 }
+/* "오버마인드라는 말과 함께 뇌 아이콘으로" — 이름 텍스트 옆에 실제 마크를 짝지어 배치. */
+.headIcon {
+	width: 20px;
+	height: 20px;
+	border-radius: 22%;
+	flex: none;
+}
 .state {
 	font-size: 13px;
 	font-weight: 700;
@@ -204,43 +211,23 @@
 }
 /* "비서가 말했다는걸 더 티나게해줘 잘 안보여" — 작은 점+글자 라벨은 카드가 없어지니 눈에 잘 안
    띄었다. 탭에 이미 쓰던 비서 아이콘(§ tabIcons.tsx control)을 그대로 키워 ChatGPT/Claude.ai식
-   좌측 아바타로 — 이 시스템의 에이전트=violet 신호(subChainDotAlive·feedNode 등과 동일 의미)를
-   유지하면서 훨씬 더 잘 보이게. */
+   좌측 아바타로. "그냥 내가 준 이미지 그대로" — 이미지 자체가 이미 어두운 배지라 배경색 없이
+   원형으로 꽉 채우기만 한다(overflow:hidden으로 모서리를 원에 맞춰 자름). */
 .avatar {
 	flex: none;
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	background: var(--violet);
-	color: #fff;
+	overflow: hidden;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	margin-top: 2px;
 }
-.avatar :global(svg) {
-	width: 16px;
-	height: 16px;
-}
-/* "혼자 섬뜩? 강렬한 리더의 인상" — 아바타 속 뇌 채움을 은은하게 명멸시켜 정지된 아이콘이 아니라
-   지금도 사고 중인 존재처럼 보이게 한다(§ SessionShell.module.css controlIconPulse와 같은 언어,
-   더 느린 4.2s — 계속 눈에 밟히면 산만해진다). */
-@keyframes avatarBrainPulse {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.5;
-	}
-}
-.avatarBrainPulse {
-	animation: avatarBrainPulse 4.2s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-	.avatarBrainPulse {
-		animation: none;
-	}
+.avatarImg {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 .bubble {
 	font-size: 13px;

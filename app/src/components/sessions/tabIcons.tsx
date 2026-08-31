@@ -1,5 +1,6 @@
 import type { TabKind } from '../../store/useTabsStore'
 import appIcon from '../../assets/app-icon.png'
+import overmindIcon from '../../assets/overmind-icon.png'
 
 // "탭에 아이콘 넣어줘 실제 아이콘. 태스크 매니저는 앱아이콘 넣어 유니크하게" — 탭 추가 메뉴·탭바가
 // 전부 순수 텍스트였다. 나머지는 이 시스템의 기존 아이콘 관례(24x24, stroke 2, round cap/join)를
@@ -71,18 +72,9 @@ export const TAB_ICON: Partial<Record<TabKind, React.ReactNode>> = {
 			<path d="M8.3 10.3l1 1 2-2M13 10.5h3.5M8.3 15.3l1 1 2-2M13 15.5h3.5" />
 		</svg>
 	),
-	// "눈에 띄고 혼자 섬뜩? 강렬한 리더의 인상" + "대화할때 아이콘은 상자속 뇌" — 뇌 윤곽만 있던
-	// 아이콘을 "표본함(유리병) 속에 든 뇌"로 업그레이드(§ SessionShell.tsx CONTROL_ICON과 동일 형상 —
-	// 사이드바·탭·채팅 아바타 전부 같은 실루엣). 이 14px 탭 자리는 나머지 탭 아이콘과 같은 순수
-	// 모노크롬(currentColor)만 쓴다 — violet 채움 명멸은 더 큰 사이드바 아이콘(§ SessionShell)과
-	// 채팅 아바타(§ ControlPane.tsx CONTROL_AVATAR_ICON) 전용이다. 이 크기에서 색+애니메이션까지
-	// 겹치면 오히려 뭉개져 안 읽힌다.
-	control: (
-		<svg {...S} width="14" height="14">
-			<rect x="10.6" y="3.4" width="2.8" height="2.2" rx="0.6" />
-			<rect x="7" y="6.2" width="10" height="14" rx="4.2" />
-			<path d="M12 8.6v10.4" />
-			<path d="M9.6 11h.01M14.4 13.6h.01" />
-		</svg>
-	),
+	// "그냥 내가 준 이미지 그대로 사용해줘" — 손으로 그린 표본함+뇌 시안 대신 사용자가 준 레퍼런스
+	// 이미지(유리돔 속 골드빛 뇌 + 회로선 배지)를 그대로 자산화. orchestrator와 같은 이유로 실제
+	// 래스터를 쓴다 — 사이드바(§ SessionShell.tsx CONTROL_ICON)·채팅 아바타(§ ControlPane.tsx)와
+	// 전부 같은 이미지, 크기만 다르다.
+	control: <img src={overmindIcon} alt="" width={14} height={14} style={{ borderRadius: '22%', display: 'block' }} />,
 }

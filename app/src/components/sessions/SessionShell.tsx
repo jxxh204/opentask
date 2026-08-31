@@ -21,6 +21,7 @@ import Modal from '../common/Modal'
 import RepoTable from './RepoTable'
 import AddRepoModal from './AddRepoModal'
 import NewTaskModal from './NewTaskModal'
+import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './SessionShell.module.css'
 
 const ARCHIVE_ICON = (
@@ -61,22 +62,10 @@ const CALENDAR_ICON = (
 )
 // "+ 새 레포 추가"가 텍스트 "+"만 있어서 뭘 하는 액션인지 한눈에 안 들어왔다 — 폴더+플러스 아이콘으로
 // (Orca 사이드바의 "새 프로젝트" 아이콘 참고).
-// 오버마인드(§control.cjs, 구 "관제") — "눈에 띄고 혼자 섬뜩? 강렬한 리더의 인상" 요청으로 뇌 윤곽
-// 아이콘을 "표본함(유리병) 속에 든 뇌"로 업그레이드(§ tabIcons.tsx control 아이콘과 동일 형상 —
-// 사이드바·탭에서 같은 실루엣으로 보이게). 표본함 윤곽·구분선·시냅스 점은 이 시스템의 기존 모노크롬
-// 스트로크 규칙(currentColor)을 그대로 지키고, 안쪽 채움만 시그널 바이올렛(violet=에이전트, §DESIGN.md
-// Signal-Only Rule)으로 — 새 색을 들이는 게 아니라 이미 있는 "에이전트=violet" 신호를 아이콘 안으로
-// 끌어들인 것. `.controlIconPulse`로 은은하게 명멸시켜 정지된 그림이 아니라 지금도 사고 중인
-// 존재처럼 보이게 한다.
-const CONTROL_ICON = (
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-		<rect className={styles.controlIconPulse} x="8" y="7.2" width="8" height="12" rx="3.4" fill="var(--violet)" stroke="none" />
-		<rect x="10.6" y="3.4" width="2.8" height="2.2" rx="0.6" />
-		<rect x="7" y="6.2" width="10" height="14" rx="4.2" />
-		<path d="M12 8.6v10.4" />
-		<path d="M9.6 11h.01M14.4 13.6h.01" />
-	</svg>
-)
+// 오버마인드(§control.cjs, 구 "관제") — "그냥 내가 준 이미지 그대로 사용해줘": 손그림 시안 대신
+// 사용자가 준 레퍼런스 이미지(§ tabIcons.tsx overmindIcon)를 그대로 자산화해서 사이드바·탭·채팅
+// 아바타 전부 같은 이미지로 통일.
+const CONTROL_ICON = <img src={overmindIcon} alt="" width={15} height={15} style={{ borderRadius: '22%', display: 'block' }} />
 const FOLDER_ADD_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
 		<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
@@ -388,7 +377,7 @@ export default function SessionShell() {
 							{t('캘린더')}
 						</button>
 						<button
-							className={styles.navLink}
+							className={`${styles.navLink} ${styles.navLinkControl}`}
 							type="button"
 							onClick={() => {
 								const s = useTabsStore.getState()

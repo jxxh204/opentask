@@ -4,6 +4,7 @@ import { getControlState, startControl, stopControl, askControl, getControlTrans
 import type { ControlState, ChatTurn, ChatPart } from '../../api/control'
 import StatusDot from '../common/StatusDot'
 import { useT, useTp } from '../../utils/i18n'
+import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './ControlPane.module.css'
 
 marked.setOptions({ breaks: true })
@@ -19,19 +20,10 @@ marked.setOptions({ breaks: true })
 // 검증된 기존 경로 그대로, 화면만 바꿨다).
 // 이모지(🔧) 대신 이 시스템의 그려진 아이콘 관례를 그대로(§tabIcons.tsx terminal 아이콘 재사용 —
 // "기술적인 동작"을 표현하는 자리에 이미 이 시스템이 쓰던 바로 그 아이콘).
-// "대화할때 아이콘은 상자속 뇌를 연상하는 그림으로" — 사이드바·탭과 같은 표본함+뇌 실루엣(§
-// SessionShell.tsx CONTROL_ICON, tabIcons.tsx control)이지만, 이 아바타는 배경 자체가 이미
-// violet(.avatar)이라 안쪽 채움을 같은 violet으로 두면 배경에 묻힌다 — 흰 반투명 채움으로 바꿔
-// violet 배경 위에서 도드라지게 하고, 같은 은은한 명멸(§ControlPane.module.css avatarBrainPulse)을 준다.
-const CONTROL_AVATAR_ICON = (
-	<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-		<rect className={styles.avatarBrainPulse} x="8" y="7.2" width="8" height="12" rx="3.4" fill="rgba(255,255,255,0.4)" stroke="none" />
-		<rect x="10.6" y="3.4" width="2.8" height="2.2" rx="0.6" />
-		<rect x="7" y="6.2" width="10" height="14" rx="4.2" />
-		<path d="M12 8.6v10.4" />
-		<path d="M9.6 11h.01M14.4 13.6h.01" />
-	</svg>
-)
+// "그냥 내가 준 이미지 그대로 사용해줘" — 손그림 표본함 아이콘 대신 사용자가 준 레퍼런스 이미지
+// 그대로(§ tabIcons.tsx overmindIcon). 이미지 자체가 이미 어두운 배지라 .avatar의 violet 배경은
+// 걷어내고(§ ControlPane.module.css .avatar) 이미지가 원형을 꽉 채우게 한다.
+const CONTROL_AVATAR_ICON = <img src={overmindIcon} alt="" className={styles.avatarImg} />
 const TOOL_ICON = (
 	<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 		<rect x="3" y="4" width="18" height="16" rx="2.2" />
@@ -437,6 +429,7 @@ export default function ControlPane() {
 	return (
 		<div className={styles.wrap}>
 			<div className={styles.head}>
+				<img src={overmindIcon} alt="" className={styles.headIcon} />
 				<StatusDot color={state?.running ? 'green' : 'muted'} pulse={!!state?.running} />
 				<span className={styles.state}>{t('오버마인드')}</span>
 				{state?.modelLabel && <span className={`m ${styles.meta}`}>{state.modelLabel}</span>}
