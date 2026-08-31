@@ -1,6 +1,6 @@
 {
   "name": "openrm-app",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "OpenTask · 병렬 AI 개발 관제탑 — 여러 워크트리·에이전트를 한 화면에서 감시·지시",
   "type": "module",
@@ -11,7 +11,7 @@
     "start": "concurrently -n server,vite -c blue,green \"node server/index.cjs\" \"vite\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "patch-package && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "electron:dev": "concurrently -n server,vite,electron -c blue,green,magenta \"node server/index.cjs\" \"vite\" \"ELECTRON_START_URL=http://localhost:5180 electron .\"",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3,node-pty",
     "electron:build": "tsc -b && vite build && electron-builder",
@@ -49,6 +49,7 @@
     "concurrently": "^9.1.0",
     "electron": "^44.0.0",
     "electron-builder": "^26",
+    "patch-package": "^8.0.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.6"
   },

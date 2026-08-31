@@ -1,0 +1,22 @@
+diff --git a/node_modules/node-pty/lib/unixTerminal.js b/node_modules/node-pty/lib/unixTerminal.js
+index 1ec12f7..075b465 100644
+--- a/node_modules/node-pty/lib/unixTerminal.js
++++ b/node_modules/node-pty/lib/unixTerminal.js
+@@ -28,8 +28,15 @@ var native = utils_1.loadNativeModule('pty');
+ var pty = native.module;
+ var helperPath = native.dir + '/spawn-helper';
+ helperPath = path.resolve(__dirname, helperPath);
+-helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
+-helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++// __dirname is already the real on-disk unpacked path (not the virtual .asar path) when this
++// module itself lives fully outside the asar (e.g. asarUnpack: ["node_modules/**/*"]) — replacing
++// again turns "app.asar.unpacked" into "app.asar.unpacked.unpacked", a path that doesn't exist.
++if (helperPath.indexOf('app.asar.unpacked') === -1) {
++  helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
++}
++if (helperPath.indexOf('node_modules.asar.unpacked') === -1) {
++  helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++}
+ var DEFAULT_FILE = 'sh';
+ var DEFAULT_NAME = 'xterm';
+ var DESTROY_SOCKET_TIMEOUT_MS = 200;
