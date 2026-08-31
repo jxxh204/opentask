@@ -43,6 +43,45 @@ function fmtTime(ts: number | null) {
 	return `${date} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// 성공/실패 배지는 백엔드가 실제로 들고 있는 신호에서만 유도한다 — scheduler.cjs의 runJob()은 실패 시
+// 언제나 '실행 실패: '로 시작하는 문자열을 last_result에 남기고(§scheduler.cjs runJob catch/실패 분기),
+// create_task 성공처럼 보고할 결과가 없는 액션은 last_result가 null인 채로 남는다. 그 외엔 실행 기록
+// 자체가 없는 것(한 번도 안 돎)뿐이라 세 상태(성공/실패/안 돎)로 완전히 나뉜다 — 실행 이력 타임라인처럼
+// 없는 데이터를 지어내지 않는다.
+type JobStatus = 'success' | 'failed' | 'never'
+function jobStatus(job: CronJob): JobStatus {
+	if (!job.last_run_at) return 'never'
+	if (job.last_result && job.last_result.startsWith('실행 실패:')) return 'failed'
+	return 'success'
+}
+function StatusIcon({ status, t }: { status: JobStatus; t: ReturnType<typeof useT> }) {
+	const cls = status === 'success' ? styles.statusSuccess : status === 'failed' ? styles.statusFailed : styles.statusNever
+	const title = status === 'success' ? t('마지막 실행 성공') : status === 'failed' ? t('마지막 실행 실패') : t('아직 실행되지 않음')
+	return (
+		<span className={`${styles.statusIcon} ${cls}`} title={title}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+				{status === 'success' && (
+					<>
+						<circle cx="12" cy="12" r="9" />
+						<path d="M8.3 12.3l2.4 2.4 5-5.4" />
+					</>
+				)}
+				{status === 'failed' && (
+					<>
+						<circle cx="12" cy="12" r="9" />
+						<path d="M9 9l6 6M15 9l-6 6" />
+					</>
+				)}
+				{status === 'never' && (
+					<>
+						<circle cx="12" cy="12" r="9" strokeDasharray="2.4 3.2" />
+					</>
+				)}
+			</svg>
+		</span>
+	)
+}
+
 function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: () => void; onCancel: () => void }) {
 	const t = useT()
 	const tp = useTp()
@@ -252,41 +291,58 @@ export default function CronJobsPane() {
 
 			{error && <div className={styles.formError}>{error}</div>}
 
-			<div className={styles.list}>
-				{jobs && jobs.length === 0 && !creating && <div className={styles.empty}>{t('아직 자동화가 없습니다. "+ 새 자동화"로 시작하세요.')}</div>}
-				{jobs?.map((job) => (
-					<div key={job.id} className={styles.jobCard}>
-						<div className={styles.jobMain}>
-							<span className={`${styles.jobDot} ${job.enabled ? styles.jobDotOn : styles.jobDotOff}`} />
+			{jobs && jobs.length === 0 && !creating && <div className={styles.empty}>{t('아직 자동화가 없습니다. "+ 새 자동화"로 시작하세요.')}</div>}
+
+			{jobs && jobs.length > 0 && (
+				<div className={styles.table}>
+					<div className={styles.theadRow}>
+						<span className={styles.th} />
+						<span className={styles.th}>{t('이름')}</span>
+						<span className={styles.th}>{t('일정')}</span>
+						<span className={styles.thRight}>{t('마지막 실행')}</span>
+						<span className={styles.thRight}>{t('다음 실행')}</span>
+						<span className={styles.thActions}>{t('작업')}</span>
+					</div>
+					{jobs.map((job) => (
+						<div key={job.id} className={`${styles.jobRow} ${job.enabled ? '' : styles.jobRowDisabled}`}>
+							<StatusIcon status={jobStatus(job)} t={t} />
 							<div className={styles.jobBody}>
 								<div className={styles.jobName}>{job.name}</div>
-								<div className={styles.jobMeta}>{tp('{schedule} · {action}', { schedule: describeSchedule(job), action: describeAction(job, t, tp) })}</div>
-								{job.last_result && <div className={styles.jobResult}>{tp('마지막 결과: {result}', { result: job.last_result })}</div>}
+								<div className={styles.jobMeta}>{describeAction(job, t, tp)}</div>
+								{job.last_result && <div className={styles.jobResult}>{job.last_result}</div>}
+							</div>
+							<div className={styles.jobSchedule}>{describeSchedule(job)}</div>
+							<div className={styles.jobTime}>{fmtTime(job.last_run_at)}</div>
+							<div className={styles.jobTime}>{job.enabled ? fmtTime(job.next_run_at) : t('꺼짐')}</div>
+							<div className={styles.jobActions}>
+								<button
+									className={`${styles.switch} ${job.enabled ? styles.switchOn : ''}`}
+									title={job.enabled ? t('끄기') : t('켜기')}
+									onClick={() => updateCronJob(job.id, { enabled: !job.enabled }).then(load)}
+								>
+									<span className={styles.switchKnob} />
+								</button>
+								<span className={styles.iconBtn} title={t('지금 실행')} onClick={() => runCronJobNow(job.id).then(load)}>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+										<path d="M7 4.5v15l13-7.5-13-7.5z" />
+									</svg>
+								</span>
+								<span
+									className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+									title={t('삭제')}
+									onClick={() => {
+										if (confirm(tp('"{name}" 자동화를 삭제할까요?', { name: job.name }))) removeCronJob(job.id).then(load)
+									}}
+								>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+										<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 .8 12.1a1 1 0 0 0 1 .9h6.4a1 1 0 0 0 1-.9L18 7" />
+									</svg>
+								</span>
 							</div>
 						</div>
-						<div className={styles.jobStats}>
-							<span>{tp('마지막 {time}', { time: fmtTime(job.last_run_at) })}</span>
-							<span>{tp('다음 {time}', { time: job.enabled ? fmtTime(job.next_run_at) : t('꺼짐') })}</span>
-						</div>
-						<div className={styles.jobActions}>
-							<button className={styles.jobBtn} onClick={() => runCronJobNow(job.id).then(load)}>
-								{t('지금 실행')}
-							</button>
-							<button className={styles.jobBtn} onClick={() => updateCronJob(job.id, { enabled: !job.enabled }).then(load)}>
-								{job.enabled ? t('끄기') : t('켜기')}
-							</button>
-							<button
-								className={styles.jobBtnDanger}
-								onClick={() => {
-									if (confirm(tp('"{name}" 자동화를 삭제할까요?', { name: job.name }))) removeCronJob(job.id).then(load)
-								}}
-							>
-								{t('삭제')}
-							</button>
-						</div>
-					</div>
-				))}
-			</div>
+					))}
+				</div>
+			)}
 		</div>
 	)
 }

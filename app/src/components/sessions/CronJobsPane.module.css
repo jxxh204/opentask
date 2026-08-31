@@ -141,11 +141,6 @@
 	color: #fff;
 }
 
-.list {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
 .empty {
 	padding: 24px;
 	text-align: center;
@@ -155,34 +150,79 @@
 	border-radius: var(--radius-card);
 }
 
-.jobCard {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 12px 14px;
-	background: var(--card);
+/* GitHub Actions/Vercel Cron 스타일 — 카드가 아니라 밀도 높은 데이터 테이블. 헤더 행이 열의 의미를
+   고정하므로 각 행 셀은 값만 표시(예: "마지막 09:12", "마지막 실행: 09:12" 아님) — Vercel Cron Jobs
+   대시보드가 Path/Schedule/Last/Next Execution을 그대로 열로 두는 것과 같은 밀도. */
+.table {
 	border: 1px solid var(--line2);
 	border-radius: var(--radius-card);
+	overflow: hidden;
+	background: var(--card);
 }
-.jobMain {
-	display: flex;
+.gridRow {
+	display: grid;
+	grid-template-columns: 22px minmax(0, 1.7fr) minmax(110px, 1fr) 92px 92px auto;
 	align-items: center;
-	gap: 10px;
-	flex: 1;
-	min-width: 0;
+	gap: 12px;
 }
-.jobDot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
+.theadRow {
+	composes: gridRow;
+	padding: 8px 14px;
+	background: var(--card2);
+	border-bottom: 1px solid var(--line2);
+}
+.th {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: var(--t3);
+}
+.thRight {
+	composes: th;
+	text-align: right;
+}
+.thActions {
+	composes: thRight;
+	visibility: hidden;
+}
+
+.jobRow {
+	composes: gridRow;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--line);
+}
+.jobRow:last-child {
+	border-bottom: none;
+}
+.jobRow:hover {
+	background: var(--card2);
+}
+.jobRowDisabled {
+	opacity: 0.55;
+}
+.jobRowDisabled:hover {
+	opacity: 0.85;
+}
+
+.statusIcon {
+	width: 15px;
+	height: 15px;
 	flex: none;
 }
-.jobDotOn {
-	background: var(--green);
+.statusIcon svg {
+	width: 100%;
+	height: 100%;
 }
-.jobDotOff {
-	background: var(--line2);
+.statusSuccess {
+	color: var(--green);
 }
+.statusFailed {
+	color: var(--red);
+}
+.statusNever {
+	color: var(--t3);
+}
+
 .jobBody {
 	min-width: 0;
 }
@@ -203,52 +243,85 @@
 	white-space: nowrap;
 }
 .jobResult {
-	font-size: 10.5px;
+	font-size: 10px;
 	color: var(--t2);
 	margin-top: 2px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.jobStats {
-	flex: none;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	font-size: 10px;
+
+.jobSchedule {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.jobTime {
+	font-family: var(--font-mono);
+	font-size: 11px;
 	color: var(--t3);
 	text-align: right;
 }
+
 .jobActions {
 	flex: none;
 	display: flex;
+	align-items: center;
 	gap: 6px;
 }
-.jobBtn {
-	height: 26px;
-	padding: 0 10px;
-	border-radius: var(--radius-chip);
+
+.switch {
+	flex: none;
+	width: 28px;
+	height: 16px;
+	border-radius: 999px;
+	border: none;
+	background: var(--line2);
+	padding: 2px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+}
+.switchOn {
+	background: var(--green);
+}
+.switchKnob {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #fff;
+	transition: transform 0.12s ease;
+}
+.switchOn .switchKnob {
+	transform: translateX(12px);
+}
+
+.iconBtn {
+	width: 24px;
+	height: 24px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-control);
 	border: 1px solid var(--line2);
 	background: var(--card2);
 	color: var(--t2);
-	font-size: 10.5px;
-	font-weight: 700;
 	cursor: pointer;
 }
-.jobBtn:hover {
+.iconBtn svg {
+	width: 13px;
+	height: 13px;
+}
+.iconBtn:hover {
 	background: var(--card-hover);
+	color: var(--ink);
 }
-.jobBtnDanger {
-	height: 26px;
-	padding: 0 10px;
-	border-radius: var(--radius-chip);
-	border: 1px solid var(--line2);
-	background: var(--card2);
-	color: var(--red);
-	font-size: 10.5px;
-	font-weight: 700;
-	cursor: pointer;
-}
-.jobBtnDanger:hover {
+.iconBtnDanger:hover {
 	background: var(--rtint);
+	color: var(--red);
 }
