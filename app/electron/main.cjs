@@ -371,7 +371,9 @@ html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-app
   var log = document.getElementById('log');
   function settlePrevious(){
     var msgs = log.querySelectorAll('.msg');
-    // column-reverse라 DOM 마지막 = 화면 맨 아래(최신). 그 앞 것들만 옅게.
+    // column-reverse + justify-content:flex-start라 DOM에 나중에 추가될수록(=최신) 화면에서 더
+    // 위쪽에 쌓인다(먼저 뜬 메시지가 바닥에 깔리고 새 메시지가 그 위로 쌓임) — 방금 추가된 마지막
+    // 하나만 원래 크기·진하기로 두고, 그 앞의 것들은 살짝 옅고 작게 가라앉힌다.
     for (var i = 0; i < msgs.length - 1; i++) msgs[i].classList.add('settled');
   }
   function addMessage(text){
