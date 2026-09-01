@@ -359,8 +359,8 @@ if (!gotLock) {
 html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;overflow:hidden}
 .spinner{width:28px;height:28px;border:3px solid #262b31;border-top-color:#5b8cff;border-radius:50%;animation:spin 0.8s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-#log{display:flex;flex-direction:column-reverse;align-items:center;gap:8px;height:110px;justify-content:flex-start}
-.msg{font-size:13px;letter-spacing:.02em;opacity:0;transform:translateY(10px) scale(0.82);animation:rise 0.42s cubic-bezier(0.16,1,0.3,1) forwards;transition:opacity 0.4s ease,transform 0.4s ease}
+#log{display:flex;flex-direction:column-reverse;align-items:center;gap:8px;height:96px;overflow:hidden;justify-content:flex-start}
+.msg{margin:0;font-size:13px;line-height:1.3;letter-spacing:.02em;opacity:0;transform:translateY(10px) scale(0.82);animation:rise 0.42s cubic-bezier(0.16,1,0.3,1) forwards;transition:opacity 0.4s ease,transform 0.4s ease}
 @keyframes rise{to{opacity:1;transform:translateY(0) scale(1)}}
 .msg.settled{opacity:0.4;transform:scale(0.92)}
 </style></head><body>
@@ -382,9 +382,10 @@ html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-app
     p.className = 'msg';
     p.textContent = text;
     log.appendChild(p);
-    // 스택이 무한히 안 늘어나게 오래된 것부터 정리(최근 5개만 유지).
+    // 96px 박스에 실제로 들어가는 개수만 유지(최근 3개) — overflow:hidden의 클립 방향이 위쪽(최신
+    // 쪽)이라, DOM 개수 자체를 박스에 맞게 눌러두는 쪽이 "최신은 항상 보인다"를 확실히 보장한다.
     var msgs = log.querySelectorAll('.msg');
-    while (msgs.length > 5) { log.removeChild(msgs[0]); msgs = log.querySelectorAll('.msg'); }
+    while (msgs.length > 3) { log.removeChild(msgs[0]); msgs = log.querySelectorAll('.msg'); }
   }
   if (window.openrm && window.openrm.onStartupProgress) {
     window.openrm.onStartupProgress(addMessage);
