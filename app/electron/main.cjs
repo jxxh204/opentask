@@ -160,9 +160,10 @@ if (!gotLock) {
   // 붙은 앱 번들 안 파일을 전부(asarUnpack이 node_modules 전체라 수만 개) 훑고 나서야 실행을 허용해서
   // 콜드스타트가 더 오래 걸릴 수 있다. 120초로 더 늘리고, 그동안 사용자가 "멈췄나?" 오해하지 않도록
   // createWindow()가 로딩 화면을 먼저 띄운다(§ LOADING_DATA_URL).
-  async function waitForHealthy(url, { attempts = 240, intervalMs = 500 } = {}) {
+  async function waitForHealthy(url, { attempts = 240, intervalMs = 500, onTick } = {}) {
     for (let i = 0; i < attempts; i++) {
       if (await pingHttp(url)) return true
+      if (onTick) onTick(i * intervalMs)
       await new Promise((r) => setTimeout(r, intervalMs))
     }
     return false
@@ -185,10 +186,20 @@ if (!gotLock) {
     })
   }
 
+  // "서버 연동... 로딩에는 어떤 연동이 진행되고있는지 실시간으로 알려줘야" — 로딩 화면(§
+  // LOADING_DATA_URL)에 단계별 메시지를 쏜다. mainWindow가 아직 없거나 이미 닫혔으면 조용히 무시
+  // (로딩 화면 자체가 실패해도 백엔드 기동을 막을 이유는 없다).
+  function sendProgress(message) {
+    try {
+      mainWindow?.webContents.send('openrm:startup-progress', message)
+    } catch (_) {}
+  }
+
   async function resolveDetachedBackendUrl() {
     setDataEnv()
     const host = '127.0.0.1'
     const pidFile = path.join(app.getPath('userData'), BACKEND_PIDFILE_NAME)
+    sendProgress('빈 포트 확인 중…')
 
     // 기본값 8770 대신 18771 — 이 개발자 머신엔 이 레포와 무관한 다른 프로젝트(mrm)가 자기 서버를
     // 기본 포트 8770/5180으로 띄운다(그쪽도 같은 계열 코드베이스라 API 응답 형태까지 비슷해서 내용으로
@@ -223,11 +234,13 @@ if (!gotLock) {
     // 이미 떠 있는 백엔드가 있으면(이전 실행에서 종료 없이 남아있던 것) 그대로 재사용 — PID 생존 +
     // 실제로 그 포트가 응답하는지 이중 확인(PID 재사용 오탐 방지). 포트를 자동으로 고르는 경로라
     // pidFile에 저장된 포트를 기준으로 확인해야 한다.
+    sendProgress('기존 백엔드 확인 중…')
     try {
       const saved = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
       const savedUrl = `http://${host}:${saved.port}/`
       if (saved && saved.pid && pidIsAlive(saved.pid) && (await pingHttp(`${savedUrl}api/health`))) {
         console.log(`♻️  기존 백엔드 재사용 (pid ${saved.pid}) — ${savedUrl}`)
+        sendProgress('기존 백엔드에 연결됐습니다')
         return savedUrl
       }
     } catch (_) {
@@ -241,6 +254,7 @@ if (!gotLock) {
     if (app.isPackaged) serverEntry = serverEntry.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
     const logPath = path.join(app.getPath('userData'), 'backend.log')
     const logFd = fs.openSync(logPath, 'a')
+    sendProgress('백엔드 프로세스 시작 중…')
     const child = spawn(process.execPath, [serverEntry], {
       detached: true,
       stdio: ['ignore', logFd, logFd],
@@ -259,9 +273,23 @@ if (!gotLock) {
     fs.writeFileSync(pidFile, JSON.stringify({ pid: child.pid, port, startedAt: Date.now() }))
     child.unref() // 이 Electron 프로세스가 죽어도(quit) 저 자식은 살아남는다 — 오늘 요청의 핵심.
 
-    const healthy = await waitForHealthy(healthUrl)
+    sendProgress('백엔드 응답 대기 중…')
+    // 첫 실행(Gatekeeper가 격리 속성 붙은 asarUnpack 파일 수만 개를 훑는 콜드스타트)은 120초까지도
+    // 정상 범위다(§ waitForHealthy 위 주석) — 아무 갱신 없이 그 시간을 보내면 사람은 멈췄다고 믿는다.
+    // 10초 이상 걸리는 중에만 경과 시간을 얹어 계속 살아있다는 걸 보여준다.
+    let lastTickMs = -1
+    const healthy = await waitForHealthy(healthUrl, {
+      onTick: (elapsedMs) => {
+        if (elapsedMs < 10000) return
+        const sec = Math.floor(elapsedMs / 1000)
+        if (sec === lastTickMs) return
+        lastTickMs = sec
+        if (sec % 5 === 0) sendProgress(`백엔드 응답 대기 중… (${sec}초)`)
+      },
+    })
     if (!healthy) throw new Error(`백엔드가 응답하지 않습니다(포트: ${port}, 로그: ${logPath})`)
     console.log(`🚀  백엔드 새로 기동 (pid ${child.pid}) — ${url}`)
+    sendProgress('백엔드 준비 완료')
     return url
   }
 
@@ -288,7 +316,7 @@ if (!gotLock) {
   function startNotifyPolling(apiBase) {
     if (notifyPollStarted) return
     notifyPollStarted = true
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
         await fetch(`${apiBase}api/notify/heartbeat`, { method: 'POST' })
         const r = await fetch(`${apiBase}api/notify/pending`)
@@ -308,21 +336,60 @@ if (!gotLock) {
       } catch (_) {
         // 백엔드가 잠깐 안 뜨는 중이거나 응답 실패 — 다음 폴링에서 다시 시도, 여기선 조용히 무시.
       }
-    }, 5000)
+    }
+    // setInterval은 첫 실행까지 5초를 그냥 흘려보낸다 — 그 사이 notify.cjs의 electronAlive()
+    // 판정(8초 창)이 아직 이전 heartbeat 기준이라 막 재시작한 Electron을 "죽었다"고 오판, 클릭
+    // 액션 없는 osascript 알림(Script Editor로 표시됨)으로 폴백하는 경합이 있었다. 시작하자마자
+    // 즉시 한 번 쏴서 그 창을 없앤다.
+    poll()
+    const timer = setInterval(poll, 5000)
     app.on('before-quit', () => clearInterval(timer))
   }
 
   // 창을 만들자마자(backgroundColor '#0b0d10'가 사실상 검정이라) 백엔드 헬스체크가 끝날 때까지
   // 아무 것도 안 그려주면, 정상 진행 중이어도 "꺼진 검은 화면"과 구분이 안 된다 — 최소한 로딩 중임을
   // 보여준다. 실패 시엔 아래 showStartupFailure()가 실제 원인을 사용자에게 보여준다.
+  // "서버 연동... 로딩에는 어떤 연동이 진행되고있는지 실시간으로 알려줘야하고. 메시지가 아래에서
+  // 위로 올라가면서 커지면서 일반크기로" — 고정 문구 한 줄 대신, 메인 프로세스가 단계마다 쏘는
+  // 진행 메시지(§ sendProgress)를 구독해 로그처럼 쌓는다. 새 메시지는 작고 흐리게 아래서 나타나
+  // 제자리(스택 맨 위)로 올라가며 커지고 진해진다 — 지난 메시지는 자연히 아래로 밀리며 옅어진다.
   const LOADING_DATA_URL =
     'data:text/html;charset=utf-8,' +
     encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>
-html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
-.spinner{width:28px;height:28px;border:3px solid #262b31;border-top-color:#5b8cff;border-radius:50%;animation:spin 0.8s linear infinite}
+html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;overflow:hidden}
+.spinner{width:28px;height:28px;border:3px solid #262b31;border-top-color:#5b8cff;border-radius:50%;animation:spin 0.8s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-p{font-size:13px;letter-spacing:.02em}
-</style></head><body><div class="spinner"></div><p>OpenTask 백엔드를 시작하는 중입니다… / Starting OpenTask backend…</p></body></html>`)
+#log{display:flex;flex-direction:column-reverse;align-items:center;gap:8px;height:110px;justify-content:flex-start}
+.msg{font-size:13px;letter-spacing:.02em;opacity:0;transform:translateY(10px) scale(0.82);animation:rise 0.42s cubic-bezier(0.16,1,0.3,1) forwards;transition:opacity 0.4s ease,transform 0.4s ease}
+@keyframes rise{to{opacity:1;transform:translateY(0) scale(1)}}
+.msg.settled{opacity:0.4;transform:scale(0.92)}
+</style></head><body>
+<div class="spinner"></div>
+<div id="log"><p class="msg">OpenTask 백엔드를 시작하는 중입니다… / Starting OpenTask backend…</p></div>
+<script>
+(function(){
+  var log = document.getElementById('log');
+  function settlePrevious(){
+    var msgs = log.querySelectorAll('.msg');
+    // column-reverse라 DOM 마지막 = 화면 맨 아래(최신). 그 앞 것들만 옅게.
+    for (var i = 0; i < msgs.length - 1; i++) msgs[i].classList.add('settled');
+  }
+  function addMessage(text){
+    settlePrevious();
+    var p = document.createElement('p');
+    p.className = 'msg';
+    p.textContent = text;
+    log.appendChild(p);
+    // 스택이 무한히 안 늘어나게 오래된 것부터 정리(최근 5개만 유지).
+    var msgs = log.querySelectorAll('.msg');
+    while (msgs.length > 5) { log.removeChild(msgs[0]); msgs = log.querySelectorAll('.msg'); }
+  }
+  if (window.openrm && window.openrm.onStartupProgress) {
+    window.openrm.onStartupProgress(addMessage);
+  }
+})();
+</script>
+</body></html>`)
 
   // 예전엔 createWindow() 실패를 console.error로만 남겼다 — 패키징된 앱엔 터미널이 없어 사용자
   // 눈엔 "아무 설명 없는 검은 창"으로만 보였다(실제 버그 리포트 재현됨). 네이티브 dialog는 렌더러

@@ -149,6 +149,19 @@
 	border: 1px dashed var(--line2);
 	border-radius: var(--radius-card);
 }
+.emptyBtn {
+	composes: empty;
+	width: 100%;
+	background: none;
+	font-family: inherit;
+	cursor: pointer;
+	transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.emptyBtn:hover {
+	border-color: var(--violet);
+	color: var(--ink);
+	background: color-mix(in srgb, var(--violet) 4%, transparent);
+}
 
 /* GitHub Actions/Vercel Cron 스타일 — 카드가 아니라 밀도 높은 데이터 테이블. 헤더 행이 열의 의미를
    고정하므로 각 행 셀은 값만 표시(예: "마지막 09:12", "마지막 실행: 09:12" 아님) — Vercel Cron Jobs

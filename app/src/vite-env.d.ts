@@ -9,5 +9,6 @@ interface Window {
 		getQuitBehavior(): Promise<{ killBackendOnQuit: boolean }>
 		setQuitBehavior(killBackendOnQuit: boolean): Promise<{ killBackendOnQuit: boolean }>
 		getAppVersion(): Promise<string>
+		onStartupProgress(cb: (message: string) => void): () => void
 	}
 }

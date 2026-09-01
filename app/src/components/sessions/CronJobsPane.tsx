@@ -92,7 +92,6 @@ function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: 
 	const [hour, setHour] = useState(9)
 	const [minute, setMinute] = useState(0)
 	const [dow, setDow] = useState(1)
-	const [taskName, setTaskName] = useState('')
 	const [taskDesc, setTaskDesc] = useState('')
 	const [repoId, setRepoId] = useState<string | null>(null)
 	const [instruction, setInstruction] = useState('')
@@ -104,10 +103,6 @@ function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: 
 			setError(t('자동화 이름은 필수입니다.'))
 			return
 		}
-		if (actionType === 'create_task' && !taskName.trim()) {
-			setError(t('생성할 일감 제목은 필수입니다.'))
-			return
-		}
 		if (actionType === 'run_instruction' && !instruction.trim()) {
 			setError(t('실행할 지시를 입력하세요.'))
 			return
@@ -116,7 +111,7 @@ function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: 
 		setError(null)
 		try {
 			const schedule = scheduleType === 'interval' ? { minutes } : scheduleType === 'daily' ? { hour, minute } : { dow, hour, minute }
-			const action = actionType === 'create_task' ? { name: taskName.trim(), desc: taskDesc.trim(), repoId } : { instruction: instruction.trim() }
+			const action = actionType === 'create_task' ? { name: name.trim(), desc: taskDesc.trim(), repoId } : { instruction: instruction.trim() }
 			const r = await createCronJob({ name: name.trim(), scheduleType, schedule, actionType, action })
 			if ('ok' in r && r.ok === false) throw new Error(t(r.error))
 			onCreated()
@@ -181,10 +176,6 @@ function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: 
 			<div className={styles.formDivider} />
 			{actionType === 'create_task' ? (
 				<>
-					<div className={styles.formRow}>
-						<span className={styles.formLabel}>{t('생성할 일감 제목')}</span>
-						<input className="fin m" style={{ flex: 1 }} value={taskName} onChange={(e) => setTaskName(e.target.value)} placeholder={t('예: 백로그 정리 태스크')} />
-					</div>
 					<div className={styles.formRow}>
 						<span className={styles.formLabel}>{t('설명(선택)')}</span>
 						<input className="fin m" style={{ flex: 1 }} value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} />
@@ -269,7 +260,7 @@ export default function CronJobsPane() {
 					<span className={styles.title}>{t('크론잡')}</span>
 					<span className={styles.subtitle}>{t('정해둔 시각에 태스크를 만들거나, 자유롭게 쓴 지시를 그대로 실행합니다 — 이 앱이 켜져 있는 동안만 동작합니다.')}</span>
 				</div>
-				{!creating && (
+				{!creating && jobs && jobs.length > 0 && (
 					<button className={styles.btnPrimary} onClick={() => setCreating(true)}>
 						+ {t('새 자동화')}
 					</button>
@@ -291,7 +282,11 @@ export default function CronJobsPane() {
 
 			{error && <div className={styles.formError}>{error}</div>}
 
-			{jobs && jobs.length === 0 && !creating && <div className={styles.empty}>{t('아직 자동화가 없습니다. "+ 새 자동화"로 시작하세요.')}</div>}
+			{jobs && jobs.length === 0 && !creating && (
+				<button type="button" className={styles.emptyBtn} onClick={() => setCreating(true)}>
+					{t('아직 자동화가 없습니다. 클릭해서 첫 자동화를 만드세요.')}
+				</button>
+			)}
 
 			{jobs && jobs.length > 0 && (
 				<div className={styles.table}>

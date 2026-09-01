@@ -98,6 +98,10 @@ function toolLabel(name: string, t: ReturnType<typeof useT>): string {
 type CanvasKind = 'task' | 'subtask' | 'cron' | 'blocked'
 interface CanvasItem {
 	id: string
+	// "이거 자연스럽지 않아" — 같은 태스크를 create_task로 만들고 곧이어 start_task로 착수시키면
+	// 실제로는 한 대상인데 tool_use 콜마다 카드를 하나씩 찍어 똑같은 제목이 두 번 쌓였다. entityId로
+	// "무엇을 가리키는가"를 분리해두고 deriveCanvasItems에서 최신 한 장만 남긴다.
+	entityId: string
 	kind: CanvasKind
 	label: string
 	title: string
@@ -163,17 +167,32 @@ function canvasItemFor(turnId: string, partIndex: number, name: string, input: u
 	switch (bare) {
 		case 'create_task':
 		case 'update_task':
-			return { id, kind: 'task', label: t('태스크'), title: String(pick('name') ?? t('태스크')), meta: fmtDate(pick('due_date') ?? pick('dueDate')) }
+			return {
+				id,
+				entityId: String(data?.id ?? inp.taskId ?? id),
+				kind: 'task',
+				label: t('태스크'),
+				title: String(pick('name') ?? t('태스크')),
+				meta: fmtDate(pick('due_date') ?? pick('dueDate')),
+			}
 		case 'reschedule_task':
-			return { id, kind: 'task', label: t('태스크'), title: String(data?.name ?? t('일정 조정')), meta: fmtDate(pick('due_date') ?? pick('dueDate')) }
+			return { id, entityId: String(inp.taskId ?? id), kind: 'task', label: t('태스크'), title: String(data?.name ?? t('일정 조정')), meta: fmtDate(pick('due_date') ?? pick('dueDate')) }
 		case 'start_task':
-			return { id, kind: 'task', label: t('태스크'), title: String(inp.taskName ?? t('태스크')), meta: t('착수') }
+			return { id, entityId: String(inp.taskId ?? id), kind: 'task', label: t('태스크'), title: String(inp.taskName ?? t('태스크')), meta: t('착수') }
 		case 'create_subtask':
 		case 'update_subtask':
-			return { id, kind: 'subtask', label: t('서브태스크'), title: String(pick('name') ?? t('서브태스크')), meta: fmtDate(pick('due_date') ?? pick('dueDate')) }
+			return {
+				id,
+				entityId: String(data?.id ?? inp.subtaskId ?? id),
+				kind: 'subtask',
+				label: t('서브태스크'),
+				title: String(pick('name') ?? t('서브태스크')),
+				meta: fmtDate(pick('due_date') ?? pick('dueDate')),
+			}
 		case 'create_blocked_period':
 			return {
 				id,
+				entityId: String(data?.id ?? id),
 				kind: 'blocked',
 				label: t('차단 기간'),
 				title: String(pick('name') ?? t('차단 기간')),
@@ -182,10 +201,19 @@ function canvasItemFor(turnId: string, partIndex: number, name: string, input: u
 		case 'create_cron_job':
 		case 'update_cron_job': {
 			const scheduleType = String(pick('schedule_type') ?? pick('scheduleType') ?? '')
-			return { id, kind: 'cron', label: t('크론잡'), title: String(pick('name') ?? t('크론잡')), meta: SCHEDULE_TYPE_LABEL[scheduleType] ? t(SCHEDULE_TYPE_LABEL[scheduleType]) : null }
+			return {
+				id,
+				entityId: String(data?.id ?? inp.id ?? id),
+				kind: 'cron',
+				label: t('크론잡'),
+				title: String(pick('name') ?? t('크론잡')),
+				meta: SCHEDULE_TYPE_LABEL[scheduleType] ? t(SCHEDULE_TYPE_LABEL[scheduleType]) : null,
+			}
 		}
 		case 'run_cron_job_now':
-			return { id, kind: 'cron', label: t('크론잡'), title: t('지금 실행'), meta: null }
+			// 수동 실행은 매번 독립된 이벤트라(같은 크론잡을 여러 번 눌러도 각각 의미가 있다) entityId를
+			// 공유시키지 않는다 — id 자체를 써서 항상 새 카드로 쌓인다.
+			return { id, entityId: id, kind: 'cron', label: t('크론잡'), title: t('지금 실행'), meta: null }
 		default:
 			return null
 	}
@@ -201,7 +229,18 @@ function deriveCanvasItems(turns: ChatTurn[], t: ReturnType<typeof useT>): Canva
 			if (item) items.push(item)
 		})
 	}
-	return items.reverse() // 최신이 위로 쌓이게(§ "위로쌓이는 구조") — 배열 맨 앞이 가장 최근
+	const reversed = items.reverse() // 최신이 위로 쌓이게(§ "위로쌓이는 구조") — 배열 맨 앞이 가장 최근
+	// 같은 태스크/서브태스크/크론잡을 대화 중 여러 번 건드리면(예: create_task 후 start_task) 매번
+	// 새 카드가 찍혀 같은 제목이 중복 표시됐다("이거 자연스럽지 않아") — 대상당 가장 최근 카드 한 장만.
+	const seen = new Set<string>()
+	const deduped: CanvasItem[] = []
+	for (const item of reversed) {
+		const key = `${item.kind}:${item.entityId}`
+		if (seen.has(key)) continue
+		seen.add(key)
+		deduped.push(item)
+	}
+	return deduped
 }
 
 function CanvasCard({ item }: { item: CanvasItem }) {

@@ -583,17 +583,21 @@ export default function TabWorkspace() {
 				    재사용) 초기화가 안 되고 이전 탭의 세션을 계속 붙들고 있는다 — 탭 인스턴스가 바뀌면
 				    아예 새 인스턴스로 마운트되게 강제한다. */}
 				{t?.kind === 'subtask' && t.subtaskId && t.parentTaskId && <SubtaskSessionPane key={t.id} tabId={t.id} subtaskId={t.subtaskId} parentTaskId={t.parentTaskId} fallbackCwd={claudeCwd} />}
+				{/* "터미널은 완전 별개자나" — mainSession(지휘자/서브태스크 오케스트레이션 세션)의 raw pty는
+				    이미 folder면 orchestrator 탭(§ OrchestratorPane), task/subtask면 subtask 탭(§
+				    SubtaskSessionPane)이 각자 따로 보여준다 — "터미널"까지 같은 세션에 붙여두면 그냥
+				    중복이었다. 여기는 그 세션과 무관한 독립 빈 셸(AdHocTerminalPane, 미추적 워크트리
+				    즉석 터미널과 같은 컴포넌트)로 분리한다. */}
 				{t?.kind === 'terminal' &&
-					(mainSession ? (
-						<div className={styles.termWrap}>
-							{found!.kind === 'task' && <SubagentStrip cwd={mainSession.worktreePath} sessionName={mainSession.tmuxSession} />}
-							<div className={styles.termHost}>
-								<XTerm session={mainSession.tmuxSession} cwd={mainSession.worktreePath} modelLabel={mainSession.modelLabel} />
+					(() => {
+						const adHocCwd = found!.kind === 'folder' ? realProjectCwd : claudeCwd
+						return (
+							<div className={styles.termWrap}>
+								{found!.kind === 'task' && mainSession && <SubagentStrip cwd={mainSession.worktreePath} sessionName={mainSession.tmuxSession} />}
+								<div className={styles.termHost}>{adHocCwd ? <AdHocTerminalPane key={t.id} tabId={t.id} cwd={adHocCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />}</div>
 							</div>
-						</div>
-					) : (
-						<NoSessionStub folderKind={found!.kind === 'folder'} />
-					))}
+						)
+					})()}
 				{/* key=t.id — SubtaskSessionPane과 같은 버그: startedRef가 로컬 ref라 다른 클로드 세션 탭으로
 				    바꿔도 "이미 시작함" 상태가 새 탭까지 이어져 그 탭은 영영 세션이 안 켜졌다. */}
 				{t?.kind === 'claude' && (claudeCwd ? <ClaudeSessionPane key={t.id} tabId={t.id} cwd={claudeCwd} /> : <NoSessionStub folderKind={found!.kind === 'folder'} />)}
