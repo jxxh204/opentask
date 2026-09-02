@@ -209,7 +209,11 @@ async function launchSubtask(task, subtask) {
 	// 테스트 통과, 계획 변경 등)마다 짧게 알리게 한다 — 세션을 안 끝내는 가벼운 체크인이라 완료/막힘
 	// 판단과 안 섞인다.
 	const progressLine = `■ 작업 중간중간 의미 있는 진행이 있을 때마다(예: 파일 하나 완성, 테스트 통과, 계획 변경 등 — 완료도 막힘도 아닌 작은 진척) 조용히 넘어가지 말고 짧게 알려라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/progress -H 'Content-Type: application/json' -d '{"text":"<지금 뭘 하고 있는지 한두 문장>"}' (세션엔 아무 영향 없다 — 자주 알릴수록 좋다, 완료·막힘 보고를 대신하지는 않는다)`
-	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '') + `\n\n${advanceLine}\n\n${blockedLine}\n\n${progressLine}`
+	// "검증을 위한 자료라고 추상화하는거야... 로컬서버나 링크가 될수도있지" — 완료 전에도 사람이 지금
+	// 뭘로 확인하면 되는지 알려줄 수 있으면 아무 때나 알려라. 웹 프론트라 로컬서버 URL이 있으면 그걸,
+	// 없으면(백엔드·CLI·설정 작업 등) 어떻게 확인하면 되는지 짧은 안내문만 보내도 된다 — url은 선택.
+	const verifyLine = `■ 지금 작업 중인 걸 사람이 직접 확인해볼 수 있는 자료가 생기면(예: 로컬서버 URL, 스크린샷 경로, 확인용 명령어나 로그 위치 — 웹 화면이 아니어도 된다) 아무 때나 이 curl로 알려라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/verify -H 'Content-Type: application/json' -d '{"text":"<어떻게 확인하면 되는지 한두 문장>","url":"<접속 가능한 URL이 있으면, 없으면 생략>"}' (세션엔 아무 영향 없다 — 확인 가능한 게 바뀔 때마다 다시 불러 최신으로 덮어써도 된다)`
+	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '') + `\n\n${advanceLine}\n\n${blockedLine}\n\n${progressLine}\n\n${verifyLine}`
 	const model = Settings.modelFor('dev')
 	const t = await Term.create({ cwd: wt.path, command: 'claude', label: subtask.name, seed, model })
 	if (!t.ok) return { ok: false, error: t.error }
@@ -345,6 +349,53 @@ async function reportSubtaskProgress(taskId, text) {
 	return { ok: true, subtaskId: current.id }
 }
 
+// "앱 알림 충전... 검증 링크나 개발서버 띄우는게 있을텐데 안들어가 있는 이유가 뭐야? ... 이 툴은
+// 웹프론트개발자를 위한 툴이 아니라는점이 중요해 그래서 '검증을 위한 자료'라고 추상화하는거야" —
+// dev서버 자동 감지(§ getBoardStatus)는 "떠 있으면"만 잡는 낮은 기본값이었을 뿐, 정작 뭘로 확인하면
+// 되는지는 그 작업을 하고 있는 에이전트 자신이 제일 잘 안다(백엔드면 로그 위치나 curl 예시, 디자인이면
+// 스크린샷 경로, 프론트면 로컬서버 URL 등 — 코드가 미리 다 나열할 수 없다). progress와 같은 원칙의
+// 네 번째 채널 — 세션 상태는 안 건드리고, 아무 때나 "이걸로 확인해봐라"만 갱신한다.
+async function reportSubtaskVerify(taskId, text, url) {
+	const task = StoreTasks.get(taskId)
+	if (!task) return { ok: false, error: 'task not found' }
+	if (!task.folder_id) return { ok: false, error: '메인 태스크에 아직 연결되지 않았습니다.' }
+	const subtasks = StoreSubtasks.listByTask(taskId)
+	const liveIdx = subtasks.findIndex((st) => !!StoreSubtaskSessions.getActiveForSubtask(st.id))
+	if (liveIdx === -1) return { ok: false, error: '진행 중인 서브태스크가 없습니다.' }
+	const current = subtasks[liveIdx]
+	const cleanText = String(text || '').trim().slice(0, 300) || '(내용 없음)'
+	const cleanUrl = url ? String(url).trim().slice(0, 500) : null
+	const s = ensureState(task.folder_id)
+	s.verify[current.id] = { text: cleanText, url: cleanUrl, at: Date.now() }
+	await notifyConductor(task.folder_id, current.id, cleanUrl ? `${cleanText} → ${cleanUrl}` : cleanText, 'progress')
+	return { ok: true, subtaskId: current.id }
+}
+
+// "여기 들어가는 정보들이 여러 단계에서 적용되어야할것같은데 서브태스크, 메인태스크, 하이브마인드가
+// 만들어갈 수 있도록" — reportSubtaskVerify는 "지금 살아있는 서브태스크 하나"의 관점이라 그 세션이
+// 죽으면 더는 못 부른다. 이건 특정 서브태스크에 안 묶인 태스크 전체 관점 — 여러 서브태스크의 결과를
+// 종합해서 확인하는 지휘자(conductor, § mcpDispatch.cjs report_task_verify)나, 사람과 직접 대화하며
+// 확인한 하이브마인드(§ mcpControl.cjs report_task_verify)가 부른다. source로 둘을 구분해 현황판이
+// 따로 표시한다(§ getBoardStatus의 note 필드) — 누가 보고했는지 사라지면 "여러 단계가 함께 만든다"는
+// 게 안 보인다.
+async function reportTaskVerify(taskId, text, url, source) {
+	const task = StoreTasks.get(taskId)
+	if (!task) return { ok: false, error: 'task not found' }
+	if (!task.folder_id) return { ok: false, error: '메인 태스크에 아직 연결되지 않았습니다.' }
+	const cleanText = String(text || '').trim().slice(0, 300) || '(내용 없음)'
+	const cleanUrl = url ? String(url).trim().slice(0, 500) : null
+	const cleanSource = source === 'hivemind' ? 'hivemind' : 'conductor'
+	const s = ensureState(task.folder_id)
+	s.taskVerify[taskId] = { text: cleanText, url: cleanUrl, at: Date.now(), source: cleanSource }
+	// 지휘자 자신이 보고했으면 자기 pty로 다시 안 쏜다 — 방금 자기가 한 말이 자기한테 되돌아오면
+	// 이상하다. 하이브마인드가 보고했을 때만 지휘자에게 알린다(다른 데서 온 정보라 실제로 알려줄 값이
+	// 있다).
+	if (cleanSource === 'hivemind') {
+		await notifyConductor(task.folder_id, '하이브마인드', cleanUrl ? `${cleanText} → ${cleanUrl}` : cleanText, 'progress')
+	}
+	return { ok: true, taskId }
+}
+
 // "업무가 어떻든간에" — 명시적 보고(report-blocked) 없이 그냥 조용해지는 경우(컨텍스트 한도, 크래시,
 // 보고를 잊음)를 잡는 안전망. blocked(확정 신호)와 달리 이건 추정이라 s.stalled에 따로 저장하고
 // UI도 일부러 다른 색(amber)을 쓴다 — 둘을 섞으면 진짜 확정 신호의 긴급도가 희석된다.
@@ -470,6 +521,97 @@ async function getSubtaskWorkState(taskId) {
 	return { ok: true, subtasks: result }
 }
 
+// "현황판에는 pr, 브랜치, 접속해서 확인가능한 링크" — 처음엔 gh CLI를 여기서 직접 다시 부르는 캐시를
+// 짜다가, cockpit.cjs가 이미 "워크트리 경로 → PR·브랜치(체크아웃된 실제 브랜치, 15초 캐시 + stale-
+// while-revalidate)"와 "지금 떠 있는 dev서버(port 포함)"를 둘 다 계산해 캐싱해두고 있다는 걸 확인했다
+// (§ src/api/sessions.ts GitStatusEntry/DevServerEntry 주석 — TaskRow가 이미 byBranch로 같은 걸
+// 쓰고 있음). 별도 PR 캐시를 새로 만드는 대신 그걸 그대로 재사용한다 — gh CLI 왕복이 안 늘고,
+// StoreBranches(워크트리 생성 시점 스냅샷이라 에이전트가 직접 git checkout -b 하면 낡아짐)보다
+// byPath 쪽이 항상 "지금 실제 체크아웃된 브랜치"라 더 정확하다.
+const Cockpit = require('./cockpit.cjs')
+
+// "현황판... 각 메인태스크의 현재 진행중인 서브태스크와 그것을 확인할 수 있는 html파일이나 url화면"
+// — 주캘린더 상단에 상시 띄울 현황판(§ CalendarPane.tsx)의 데이터 소스. getSubtaskWorkState와 같은
+// 로직(세션 생존 확인)을 전체 폴더로 배치화한다 — Term.list()/cockpit()은 한 번만 불러 재사용(폴더마다
+// 다시 안 부름). 메인태스크(=task, 폴더로 승격된 것) 하나당:
+//   · active: 지금 alive한 서브태스크 — 검증 자료는 에이전트가 직접 보고한 것(§ reportSubtaskVerify,
+//     verify:{text,url})을 최우선으로 쓴다. "이 툴은 웹프론트개발자를 위한 툴이 아니라는점이 중요해
+//     그래서 '검증을 위한 자료'라고 추상화하는거야" — dev서버 자동 감지(§ cockpit devServers)는
+//     에이전트가 아직 아무것도 보고 안 했을 때만 쓰는 낮은 기본값(폴백)이다. 둘 다 없으면 "눈으로
+//     검증할 방법이 아직 없다"는 뜻 그대로 verify:null. branch/pr도 그 워크트리의 실제 git 상태
+//     (§ cockpit byPath)에서.
+//   · lastDone: 가장 최근 완료된(report_html이 남은) 서브태스크 — "완료된 것까지 같이 보여줘서 빈
+//     칸을 줄이자"(둘 다 보여줘) — 완료 리포트는 항상 있어 진행 중인 것보다 빈 칸이 적다.
+// 둘 다 없는 태스크(아직 아무 세션도 안 띄운 것)는 현황판에 안 보여준다 — 볼 게 없다.
+async function getBoardStatus() {
+	const [live, cockpitData] = await Promise.all([Term.list().catch(() => []), Cockpit.cockpit().catch(() => null)])
+	const byPath = (cockpitData && cockpitData.byPath) || {}
+	const devServers = (cockpitData && cockpitData.devServers) || []
+	const gitInfoFor = (worktreePath) => {
+		if (!worktreePath) return { branch: null, pr: null }
+		const g = byPath[worktreePath]
+		if (!g) return { branch: null, pr: null }
+		return { branch: g.branch || null, pr: g.pr ? { number: g.pr.number, url: g.pr.url, state: g.pr.state, draft: g.pr.draft, ci: g.pr.ci } : null }
+	}
+	const devUrlFor = (worktreePath) => {
+		const d = worktreePath ? devServers.find((x) => x.cwd === worktreePath) : null
+		return d ? `http://localhost:${d.port}` : null
+	}
+	const items = []
+	for (const folder of StoreFolders.list()) {
+		if (folder.hidden) continue // "숨긴 태스크는 캘린더에서도 안 보이게" — 현황판도 같은 원칙.
+		const folderState = ensureState(folder.id)
+		const folderVerify = folderState.verify || {}
+		const folderTaskVerify = folderState.taskVerify || {}
+		for (const task of StoreTasks.listByFolder(folder.id)) {
+			const subtasks = StoreSubtasks.listByTask(task.id)
+			let active = null
+			let lastDone = null
+			for (const st of subtasks) {
+				const session = StoreSubtaskSessions.latestForSubtask(st.id)
+				if (!session) continue
+				if (!active && !session.ended_at && isLive(live, session.tmux_session)) {
+					const reported = folderVerify[st.id] || null
+					const devUrl = devUrlFor(session.worktree_path)
+					active = {
+						subtaskId: st.id,
+						subtaskName: st.name,
+						tmuxSession: session.tmux_session,
+						verifyText: reported ? reported.text : null,
+						verifyUrl: reported ? reported.url : devUrl,
+						devUrl,
+						...gitInfoFor(session.worktree_path),
+					}
+				}
+				if (session.ended_at && session.report_html && (!lastDone || session.ended_at > lastDone.endedAt)) {
+					lastDone = {
+						subtaskId: st.id,
+						subtaskName: st.name,
+						endedAt: session.ended_at,
+						reportUrl: `/api/subtask-sessions/${session.id}/report`,
+						...gitInfoFor(session.worktree_path),
+					}
+				}
+			}
+			const taskNote = folderTaskVerify[task.id] || null
+			if (!active && !lastDone && !taskNote) continue
+			items.push({
+				folderId: folder.id,
+				folderName: folder.name,
+				taskId: task.id,
+				taskName: task.name,
+				active,
+				lastDone,
+				// "서브태스크, 메인태스크, 하이브마인드가 만들어갈 수 있도록" — active/lastDone은 서브태스크
+				// 관점, note는 태스크 전체 관점(§ reportTaskVerify) — 지휘자 또는 하이브마인드가 보고한
+				// 것. source로 누가 보고했는지 그대로 실어 보낸다(카드가 라벨로 구분해서 보여준다).
+				note: taskNote,
+			})
+		}
+	}
+	return { ok: true, items }
+}
+
 // folderId → { running, currentWaveIndex, sessions:[{taskId,tmuxSession,worktreePath}], log:[{t,dot,at}],
 //              conductor:{session,model,startedAt}|null, feed:[{ts,from,to,text,kind}] }
 const states = new Map()
@@ -480,9 +622,17 @@ const starting = new Set()
 
 function blank() {
 	// blocked: subtaskId → reason(§ reportSubtaskBlocked). stalled: subtaskId → true(§ checkStalledSubtasks).
-	// 둘 다 같은 원칙(인메모리, 폴더당 하나, DB 영속화 불필요 — 재시작하면 그 서브태스크가 다시
-	// 물어보거나 다시 감지되면 됨).
-	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, conductorStalled: false, feed: [], blocked: {}, stalled: {} }
+	// verify: subtaskId → {text,url,at}(§ reportSubtaskVerify) — "이 툴은 웹프론트개발자를 위한 툴이
+	// 아니다... 검증을 위한 자료라고 추상화" — dev서버 유무를 코드가 추측하는 대신, 에이전트 자신이
+	// "이걸로 확인해봐라"를 아무 때나 보고하게 한다(로컬서버 URL일 수도, 그냥 짧은 안내문일 수도).
+	// taskVerify: taskId → {text,url,at,source}(§ reportTaskVerify) — "여러 단계에서 적용되어야 할 것
+	// 같은데 서브태스크, 메인태스크, 하이브마인드가 만들어갈 수 있도록" — verify는 서브태스크 하나의
+	// 관점이라 "지금 이 세션이 뭘 했는지"만 말한다. taskVerify는 특정 서브태스크에 안 묶인 태스크
+	// 전체 관점 — 지휘자(여러 서브태스크를 종합)나 하이브마인드(사람과 직접 대화하며 확인한 것)가
+	// 보고한다. 서로 대체하지 않는다 — 현황판이 둘 다 각자 자리에 보여준다.
+	// 넷 다 같은 원칙(인메모리, 폴더당 하나, DB 영속화 불필요 — 재시작하면 다시 물어보거나 다시
+	// 감지되면 됨).
+	return { running: false, currentWaveIndex: 0, sessions: [], log: [], conductor: null, conductorStalled: false, feed: [], blocked: {}, stalled: {}, verify: {}, taskVerify: {} }
 }
 function getState(folderId) {
 	return states.get(folderId) || blank()
@@ -645,7 +795,7 @@ function conductorSeed(folder, tasks, cwd) {
 ■ 이 폴더의 태스크 목록 (taskId: 이름):
 ${list}
 
-■ 태스크 하나의 실제 작업 진행 — create_subtask / get_subtask_chain / start_subtask_work / advance_subtask_work (taskId만 넘기면 됨):
+■ 태스크 하나의 실제 작업 진행 — create_subtask / get_subtask_chain / start_subtask_work / advance_subtask_work / report_task_verify (taskId만 넘기면 됨):
 0. ${rules ? '위 팀 규칙이 있으면 아래 단계를 진행하기 전에 다시 한번 확인해라 — 서브태스크를 만들거나 진행시킬 때마다 그 규칙에 맞는지 스스로 점검한다.' : '(이 레포엔 등록된 팀 규칙이 없다 — 특별한 제약 없이 진행)'}
 1. get_subtask_chain({taskId})로 지금 서브태스크 체인 상태(뭐가 있고, 어느 게 살아있고, 워크트리·브랜치가
    뭔지)를 먼저 확인해라.
@@ -662,6 +812,11 @@ ${list}
    막힌 서브태스크가 있으면(도움요청 통보가 오거나 조용해서 확인해보니 막혀있으면) dispatch_subtask로
    맥락을 주거나 ${operator}에게 물어봐서 풀어줘라.
 4. 모든 서브태스크가 끝나면(마지막 단계 완료 통보가 옴) ${operator}에게 완료를 보고해.
+5. 현황판(캘린더 위 상시 대시보드)에 이 태스크를 어떻게 확인하면 되는지 보여줘라 — 서브태스크가 이미
+   자기 세션 관점으로 보고하지만(하나가 죽으면 그 보고도 같이 사라진다), 너는 여러 서브태스크를 종합한
+   태스크 전체 관점을 report_task_verify({taskId, text, url?})로 언제든 갱신할 수 있다. 특히 서브태스크
+   여러 개를 합쳐야 확인되는 것(예: dev1 페이지 + dev2 API를 같이 켜야 보이는 화면)이거나, 네가 직접
+   결과물을 검토해 정리한 확인 방법이 있을 때 써라 — 다시 부르면 최신 내용으로 덮어쓴다.
 
 ■ 서브에게 말 걸기·기록은 반드시 OpenRM API/MCP 경유(관측·대화 로그 기록용) — tmux로 직접 하지 마.
 MCP 툴 dispatch_subtask/log_event/set_subtask_kind가 있으면(도구 목록 확인) 그걸 우선 써. 없거나
@@ -672,6 +827,7 @@ MCP 툴 dispatch_subtask/log_event/set_subtask_kind가 있으면(도구 목록 �
 - 서브태스크 생성(계획): curl -s -X POST http://localhost:${port}/api/tasks/<taskId>/subtasks -H 'Content-Type: application/json' -d '{"name":"<8~16자 업무 단위 이름>","desc":"<1~2문장>"}' — 순서대로 여러 번 부르면 그 순서 그대로 체이닝된다.
 - 서브태스크 체인 시작/진행: curl -s -X POST http://localhost:${port}/api/tasks/<taskId>/subtask-work/start (또는 /advance)
 - 체인 상태 확인: curl -s http://localhost:${port}/api/tasks/<taskId>/subtask-work/state
+- 태스크 전체 검증 자료 갱신(5번): curl -s -X POST http://localhost:${port}/api/tasks/<taskId>/verify -H 'Content-Type: application/json' -d '{"text":"<확인 방법>","url":"<URL 있으면>","source":"conductor"}'
 - kind(진행 방식) 판단·수정: curl -s -X POST http://localhost:${port}/api/folders/${folder.id}/conductor/set-kind -H 'Content-Type: application/json' -d '{"taskId":"<위 목록의 taskId>","kind":"single|chain|parallel","reason":"<왜 이 kind인지 한 줄>"}' — 이전 산출물 위에 이어서 작업해야 하면 chain, 서로 독립적이라 동시에 여러 버전을 시도해볼 만하면 parallel, 그 외엔 single. reason은 필수.
 
 ■ 앱 내부 브라우저 — MCP 툴 browser_open/browser_read/browser_click/browser_type/browser_close가 있으면
@@ -930,8 +1086,11 @@ module.exports = {
 	advanceSubtaskWork,
 	reportSubtaskBlocked,
 	reportSubtaskProgress,
+	reportSubtaskVerify,
+	reportTaskVerify,
 	checkStalledSubtasks,
 	stopSubtaskSession,
 	getSubtaskWorkState,
+	getBoardStatus,
 	restoreAllOnBoot,
 }

@@ -116,10 +116,18 @@
 	color: var(--t3);
 }
 
+/* "주캘린더를 밑으로 내리고 상단의 반절을 현황판으로" — StatusBoard와 세로로 반씩 나눠 가지는
+   부모(§ CalendarPane.tsx week 렌더). 두 자식 다 flex:1 1 50%라 균등 분할된다. */
+.weekSplit {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
 /* ── 주(week) — 요일별 풀하이트 레인 ── */
 .weekGrid {
 	position: relative;
-	flex: 1 1 auto;
+	flex: 1 1 50%;
 	min-height: 0;
 	display: flex;
 	overflow: hidden;

@@ -126,6 +126,30 @@ server.registerTool('delete_task', { title: '태스크 삭제', description: '�
 	return ok(await apiDelete(`/api/tasks/${taskId}`))
 })
 
+// "여기 들어가는 정보들이 여러 단계에서 적용되어야할것같은데 서브태스크, 메인태스크, 하이브마인드가
+// 만들어갈 수 있도록" — 현황판(StatusBoard)의 검증 자료는 서브태스크(§ orchestrator.cjs
+// reportSubtaskVerify)·태스크 매니저(§ mcpDispatch.cjs report_task_verify) 다음으로, 대표(너)가
+// ${operator}와 직접 대화하며 확인한 것도 보고할 수 있어야 한다 — 예: 사람이 보여준 스크린샷을 보고
+// 판단했거나, 리포트를 직접 읽고 확인 방법을 정리했거나.
+server.registerTool(
+	'report_task_verify',
+	{
+		title: '태스크 검증 자료 보고',
+		description:
+			'이 태스크를 사람이 눈으로 확인할 방법을 현황판(StatusBoard)에 보고한다 — 로컬서버 URL, 스크린샷 경로, 확인용 명령어나 로그 위치 등(웹 화면이 아니어도 된다). 다시 부르면 최신 내용으로 덮어쓴다.',
+		inputSchema: {
+			taskId: z.string(),
+			text: z.string().describe('어떻게 확인하면 되는지 한두 문장'),
+			url: z.string().optional().describe('접속 가능한 URL이 있으면, 없으면 생략'),
+		},
+	},
+	async ({ taskId, text, url }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		return ok(await apiPost(`/api/tasks/${taskId}/verify`, { text, url, source: 'hivemind' }))
+	},
+)
+
 // 서브태스크 — 태스크 하나를 개발/개발자테스트/QA/배포처럼 단계로 쪼갠 것(list_tasks가 돌려주는
 // 각 태스크의 subtasks 배열 참고). "태스크 시작"이 폴더 안에 태스크를 늘어놓는 것과는 다른 개념 —
 // 이건 태스크 하나 밑에 딸린 하위 항목이다. 자기만의 예정일/기간/설명을 갖고 캘린더에도 따로 뜬다.

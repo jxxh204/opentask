@@ -1,0 +1,355 @@
+.wrap {
+	flex: 1 1 50%;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	/* "주캘린더가 위에있는게 낫겠어" — 이제 이 패널이 아래쪽이라 위 캘린더와 구분선은 border-top으로. */
+	border-top: 1px solid var(--line);
+	background: var(--bg);
+}
+.head {
+	flex: none;
+	padding: 10px 20px 6px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--t3);
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+/* "한눈에 안 들어옴" — 한 줄도 안 읽고 전체 그림부터: 몇 개가 도움이 필요하고, 몇 개가 정체됐고,
+   몇 개가 정상 진행 중인지. FolderCard.module.css의 .previewChip과 같은 크기·색 관례(카운트 배지를
+   새로 디자인하지 않는다). 0개인 항목은 안 보여준다 — 평소엔 조용하고 문제가 생겼을 때만 눈에 띈다. */
+.headCounts {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	text-transform: none;
+	letter-spacing: normal;
+}
+.countChip {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 2px 7px;
+	border-radius: var(--radius-chip);
+}
+.countBlocked {
+	background: var(--rtint);
+	color: var(--red);
+}
+.countStalled {
+	background: var(--atint);
+	color: var(--amber);
+}
+.countAlive {
+	background: var(--gtint);
+	color: var(--green);
+}
+.body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0 16px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.empty {
+	font-size: 12px;
+	color: var(--t3);
+	padding: 12px 4px;
+}
+
+/* 태스크당 카드 하나 — 예전 3열 표(태스크명·진행중·완료)는 전부 동급으로 평평해서 "한눈에 안
+   들어옴"이었다. 이제는 왼쪽 마커(blocked/stalled/alive, § TaskRow.module.css subChainDot* 그대로
+   재사용 — 사이드바·캘린더·현황판이 항상 같은 색·펄스) + 세로로 쌓은 본문 하나. 정렬은
+   StatusBoard.tsx가 blocked→stalled→alive→idle 순으로 이미 해준다. */
+.card {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border-radius: var(--radius-card);
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	cursor: pointer;
+}
+.card:hover {
+	background: var(--card-hover);
+}
+/* subChainDot은 사이드바 레일의 position:absolute 좌표 전용 — 여기선 위치만 되돌린다.
+   border-color/background 같은 색 속성은 절대 여기서 다시 선언하지 않는다(§ CalendarPane.module.css
+   .chainDotReset과 같은 이유 — CSS 모듈 로드 순서에 따라 서로의 색 선언을 덮어쓴 적이 있다). */
+.markerReset {
+	position: static !important;
+	left: auto !important;
+	top: auto !important;
+	display: inline-flex !important;
+	flex: none;
+	margin-top: 3px;
+}
+/* idle(지금 도는 서브태스크가 없음)은 subChainDot의 기존 변형 어디에도 없는 새 상태라 색을 직접
+   정의한다 — "완료"가 아니라 "지금은 조용함"이라 green(성공)도 amber(주의)도 아닌 중립. */
+.markerIdle {
+	border-color: var(--t3);
+	background: var(--card);
+}
+
+.cardBody {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.cardHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.taskName {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* "막힘/정체 신호 부재" — 색만으로 구분하지 않는다(마커 색+펄스에 더해 글자로도). 정상 진행(alive)은
+   따로 라벨을 안 단다 — 매 줄마다 "진행 중"을 반복하면 정작 빨강/주황이 묻힌다. */
+.urgencyChip {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 2px 7px;
+	border-radius: var(--radius-chip);
+}
+.chipBlocked {
+	background: var(--rtint);
+	color: var(--red);
+}
+.chipStalled {
+	background: var(--atint);
+	color: var(--amber);
+}
+/* "정보 밀도가 낮음" — 이 태스크의 서브태스크 체인이 지금 어디쯤 있는지 한 줄 요약. 색은 miniDot*가
+   subChainDot과 같은 의미 팔레트를 쓰지만, 6px 스케일에 절대좌표 레일을 억지로 끼워 맞추지 않고
+   새 클래스로 직접 정의한다(§ .markerReset 주석과 같은 이유 — 크기가 다른 재사용은 오히려 위험). */
+.miniChain {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	margin-left: auto;
+}
+.miniDot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex: none;
+}
+.miniBlocked {
+	background: var(--red);
+}
+.miniStalled {
+	background: var(--amber);
+}
+.miniAlive {
+	background: var(--green);
+	box-shadow: 0 0 0 2px var(--gtint);
+}
+.miniDone {
+	background: var(--green);
+}
+/* 세션이 advance 없이 그냥 죽은 것(subChainDotDone과 같은 의미) — stalled와 색은 같지만(둘 다 "봐야
+   할 것") 펼쳐보면 blockedReason/체인 상세로 구분된다. */
+.miniDead {
+	background: var(--amber);
+	opacity: 0.6;
+}
+.miniWaiting {
+	background: var(--card);
+	border: 1px solid var(--line2);
+}
+
+/* "서브태스크, 메인태스크, 하이브마인드가 만들어갈 수 있도록" — 태스크 매니저(지휘자)나 하이브마인드가
+   종합한 관점(§ reportTaskVerify). violet은 이 앱에서 이미 "지휘/조율"에 쓰는 색(§ FolderCard.module.css
+   .running — 조율 중 스피너와 같은 팔레트) — 서브태스크 자신의 초록(진행)·빨강/주황(막힘·정체)과
+   섞이면 안 되니 새 색을 새로 고르지 않고 그대로 가져온다. */
+.noteLine {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 4px 8px;
+	border-radius: var(--radius-control);
+	background: var(--vtint);
+}
+.noteSource {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	color: var(--violet);
+}
+.noteText {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 11px;
+	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.primaryLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.subtaskText {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--t2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hint {
+	font-size: 11px;
+	color: var(--t3);
+}
+.verifyBtn {
+	flex: none;
+	margin-left: auto;
+	height: 22px;
+	padding: 0 9px;
+	border-radius: var(--radius-control);
+	background: none;
+	border: 1px solid var(--line2);
+	color: var(--t2);
+	font-size: 10.5px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.verifyBtn:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
+/* 에이전트가 직접 보고한 검증 자료 텍스트(§ reportSubtaskVerify) — "검증을 위한 자료" 자체가
+   url 없이 텍스트만일 수도 있다("로그 위치는 ~"). */
+.verifyTextRow {
+	font-size: 11px;
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* 확정 개입 신호(§ reportSubtaskBlocked)의 이유 — red 팔레트로, chip과 같은 신뢰도(확정)를 공유. */
+.blockedReasonRow {
+	width: fit-content;
+	max-width: 100%;
+	font-size: 11px;
+	color: var(--red);
+	background: var(--rtint);
+	padding: 3px 7px;
+	border-radius: var(--radius-control);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.gitRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.branchText {
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* TaskRow.module.css .pillPr/.pillPrDraft와 같은 색 관례(open=blue, draft=muted) — 같은 PR 배지가
+   사이드바와 현황판에서 다른 색으로 보이면 안 되니 그대로 맞춘다. */
+.prPill {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--btint);
+	color: var(--blue);
+	text-decoration: none;
+	cursor: pointer;
+}
+.prPillDraft {
+	flex: none;
+	font-size: 9.5px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--card2);
+	color: var(--t2);
+	border: 1px solid var(--line2);
+	text-decoration: none;
+	cursor: pointer;
+}
+
+/* 가장 최근 완료 — "둘 다 보여줘"는 유지하되, 지금 진행 중인 것보다 한 단계 낮은 위계로(옅은 색,
+   구분선). FolderCard.module.css .taskBody의 점선(border-left dashed)과 같은 "하위 정보" 관례를
+   가로 구분선으로 옮겨 재사용. */
+.doneLine {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	margin-top: 2px;
+	padding-top: 4px;
+	border-top: 1px dashed var(--line);
+}
+.dotDoneMini {
+	flex: none;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--t3);
+}
+.doneText {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 11px;
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.verifyBtnGhost {
+	flex: none;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: var(--radius-control);
+	background: none;
+	border: none;
+	color: var(--t3);
+	font-size: 10.5px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.verifyBtnGhost:hover {
+	color: var(--ink);
+	background: var(--card-hover);
+}

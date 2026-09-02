@@ -539,6 +539,14 @@ const server = http.createServer((req, res) => {
   if (url === '/api/sessions/board' && req.method === 'GET') {
     return sendJSON(res, 200, StoreTasks.board(StoreFolders.list()))
   }
+  // "현황판... 각 메인태스크의 현재 진행중인 서브태스크와 검증할 수 있는 화면" — 주캘린더 상단
+  // 현황판(§ CalendarPane.tsx)이 폴링하는 전용 엔드포인트. /api/sessions/board는 DB 스냅샷만 주고
+  // 세션 생존·dev서버 여부 같은 라이브 상태가 없어서 따로 뺐다(§ orchestrator.cjs getBoardStatus).
+  if (url === '/api/board-status' && req.method === 'GET') {
+    return Orchestrator.getBoardStatus()
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // folders
   if (url === '/api/folders' && req.method === 'POST') {
     return readBody(req)
@@ -949,7 +957,7 @@ const server = http.createServer((req, res) => {
   // 체이닝으로" — 태스크 단위(위 폴더 오케스트레이션)와 별개로, 태스크 하나의 실제 코드 작업을
   // 서브태스크(개발 단위) 체인으로 진행한다.
   if (url.startsWith('/api/tasks/') && url.includes('/subtask-work/')) {
-    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state|report-blocked|progress)$/)
+    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state|report-blocked|progress|verify)$/)
     if (sm) {
       const tid = decodeURIComponent(sm[1])
       const action = sm[2]
@@ -977,7 +985,26 @@ const server = http.createServer((req, res) => {
           .then((b) => done(Orchestrator.reportSubtaskProgress(tid, b && b.text)))
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
+      // "검증을 위한 자료라고 추상화" — 로컬서버 URL이든 그냥 짧은 안내문이든, 지금 이 작업을 사람이
+      // 어떻게 확인하면 되는지 에이전트가 아무 때나 갱신(§ orchestrator.cjs reportSubtaskVerify) —
+      // 현황판(StatusBoard)이 이걸 최우선으로 보여준다.
+      if (action === 'verify' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => done(Orchestrator.reportSubtaskVerify(tid, b && b.text, b && b.url)))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
     }
+  }
+  // "여기 들어가는 정보들이 여러 단계에서 적용되어야할것같은데 서브태스크, 메인태스크, 하이브마인드가
+  // 만들어갈 수 있도록" — 위 subtask-work/verify와 별개 라우트다. 그건 "지금 살아있는 서브태스크"가
+  // 있어야만 부를 수 있지만, 이건 특정 서브태스크에 안 묶인 태스크 전체 관점(§ orchestrator.cjs
+  // reportTaskVerify) — 지휘자(mcpDispatch.cjs)나 하이브마인드(mcpControl.cjs)가 부른다.
+  if (url.match(/^\/api\/tasks\/([^/]+)\/verify$/) && req.method === 'POST') {
+    const tid = decodeURIComponent(url.match(/^\/api\/tasks\/([^/]+)\/verify$/)[1])
+    return readBody(req)
+      .then((b) => Orchestrator.reportTaskVerify(tid, b && b.text, b && b.url, b && b.source))
+      .then((r) => sendJSON(res, r && r.ok === false ? 400 : 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
   // "이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘" — 서브태스크 완료 시 저장된
   // HTML 리포트(§ orchestrator.cjs advanceSubtaskWork)를 그대로 서빙. durationEstimate.cjs의

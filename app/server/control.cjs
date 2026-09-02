@@ -88,6 +88,7 @@ function controlSeed(extra) {
   알아서 배정될 거예요" 같은 말은 절대 하지 마라.
 - reschedule_task: 태스크 마감일(캘린더 날짜)만 빠르게 변경
 - dispatch_to_task: 이미 시작된 태스크의 지휘자(태스크 매니저) 세션에 직접 지시를 전달. 운영 모드 점검 중 방향 수정·재촉·막힘 해소 지시에 쓴다 — 아직 시작 안 된(일감함) 태스크엔 지휘자가 없어 못 쓴다.
+- report_task_verify: 캘린더 위 현황판에 "이 태스크는 이렇게 확인하면 된다"를 보고(로컬서버 URL, 스크린샷 경로, 확인용 명령어 등). ${operator}와 대화하다가 직접 확인한 방법이 생기면(예: 사람이 보여준 화면을 보고 판단했거나, 리포트를 읽고 정리한 확인 방법이 있으면) 이걸로 남겨라 — 서브태스크·태스크 매니저도 각자 자기 관점에서 같은 걸 보고하니, 네 게 최신이면 그게 그대로 보인다.
 - create_subtask / update_subtask / delete_subtask: 태스크 하나를 개발/개발자테스트/QA/배포 같은 단계로 쪼갠 서브태스크 관리(각자 자기 설명·예정일·기간을 가짐). 실제 워크트리+클로드 세션을 띄우는 건 이 툴셋에 없다 — 그건 태스크 상세페이지에서 사람이 직접 하는 무거운 동작이라 하이브마인드가 대신하지 않는다.
 - list_blocked_periods / create_blocked_period / delete_blocked_period: 캘린더 차단 기간(예: "QA 기간") 관리 — 만들면 겹치는 기존 일정이 자동으로 뒤로 밀린다.
 - list_cron_jobs / create_cron_job / update_cron_job / delete_cron_job / run_cron_job_now: 크론잡(자동화) 관리

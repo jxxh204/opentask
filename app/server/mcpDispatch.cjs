@@ -161,6 +161,28 @@ server.registerTool(
 	},
 )
 
+// "서브태스크, 메인태스크, 하이브마인드가 만들어갈 수 있도록" — 서브태스크 자신의 검증 자료 curl
+// (§ orchestrator.cjs launchSubtask verifyLine)은 그 세션 하나의 관점이다. 이건 PO(너)가 여러
+// 서브태스크의 결과를 종합해서 "이 태스크는 이렇게 확인하면 된다"고 알려줄 때 쓴다 — 예: 서브태스크
+// 셋을 다 합쳐야 켜지는 dev서버, 또는 서브태스크별 산출물을 네가 직접 검토해 요약한 결론.
+server.registerTool(
+	'report_task_verify',
+	{
+		title: '태스크 검증 자료 보고',
+		description:
+			'이 태스크를 사람이 눈으로 확인할 방법을 현황판(StatusBoard)에 보고한다 — 로컬서버 URL, 스크린샷 경로, 확인용 명령어나 로그 위치 등(웹 화면이 아니어도 된다). 특정 서브태스크 하나가 아니라 태스크 전체를 종합한 관점일 때 쓴다. 다시 부르면 최신 내용으로 덮어쓴다.',
+		inputSchema: {
+			taskId: z.string(),
+			text: z.string().describe('어떻게 확인하면 되는지 한두 문장'),
+			url: z.string().optional().describe('접속 가능한 URL이 있으면, 없으면 생략'),
+		},
+	},
+	async ({ taskId, text, url }) => {
+		const r = await apiPost(`/api/tasks/${taskId}/verify`, { text, url, source: 'conductor' })
+		return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: r.ok === false }
+	},
+)
+
 // ── 앱 내부 브라우저 — "태스크 매니저가 앱 내부 브라우저도 자유자재로 이용하면 좋겠어" ──
 // 사람이 "브라우저" 탭에서 쓰는 것과 같은 Playwright 세션(server/debug/browserPool.cjs)을 지휘자도
 // 직접 열고 조작한다. 이 taskId로 세션을 열면 사람이 그 폴더의 "브라우저" 탭을 여는 순간 같은 세션에

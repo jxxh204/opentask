@@ -442,6 +442,26 @@ html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-app
       return { action: 'deny' }
     })
 
+    // "웹링크 누르면 앱전체가 웹화면으로 변해. 새탭으로 나오면어덜까?" — 위 setWindowOpenHandler는
+    // target=_blank(새 창을 요구하는 링크)만 잡는다. 하이브마인드 채팅(marked.parse → innerHTML)이
+    // 그리는 마크다운 링크는 target 속성이 없는 평범한 <a href>라, 클릭하면 Electron 기본 동작대로
+    // "새 창 열기"가 아니라 "지금 이 창을 그 URL로 그대로 이동"해버린다 — OpenTask 전체가 그 웹페이지로
+    // 뒤바뀌는 이유가 이것(실측: 2026-09-02, GitHub PR·Notion 링크로 재현). will-navigate로 최상위 프레임
+    // 이동을 가로채, 지금 로드된 origin과 다르면(=OpenTask 자기 자신이 아니면) 막고 시스템 기본
+    // 브라우저로 대신 연다 — main 프로세스가 loadURL()로 하는 자체 내비게이션(로딩 화면→실제 앱 URL
+    // 전환 등)은 이 이벤트 대상이 아니라 안 건드린다.
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+      const current = mainWindow.webContents.getURL()
+      let sameOrigin = false
+      try {
+        sameOrigin = new URL(url).origin === new URL(current).origin
+      } catch (_) {}
+      if (!sameOrigin) {
+        event.preventDefault()
+        shell.openExternal(url)
+      }
+    })
+
     // <webview>가 붙을 때마다 게스트 페이지 쪽 preferences를 강제로 잠근다 — "브라우저" 탭은 사람이
     // 임의 URL(외부 사이트)을 여는 자리라, 게스트 안에서 Node API에 닿을 수 있으면 안 된다. src 자체는
     // 막지 않는다(범용 인앱 브라우저 — 특정 도메인으로 제한하지 않음).

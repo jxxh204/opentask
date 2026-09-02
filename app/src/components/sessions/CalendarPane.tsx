@@ -11,6 +11,7 @@ import type { SubtaskWorkStatus } from '../../api/sessions'
 import { businessDayRange } from '../../utils/businessDays'
 import NewTaskModal from './NewTaskModal'
 import BlockPeriodModal from './BlockPeriodModal'
+import StatusBoard from './StatusBoard'
 import { CHECK, HELP } from './TaskRow'
 import styles from './CalendarPane.module.css'
 import taskRowStyles from './TaskRow.module.css'
@@ -140,6 +141,10 @@ function chipDotState(item: CalItem, subtaskWork: Record<string, SubtaskWorkStat
 function openSubtaskReport(task: Task | undefined, w: SubtaskWorkStatus) {
 	if (!task?.folder_id || !w.reportUrl) return
 	const port = window.location.port || '18771'
+	// 캘린더는 지금 열려 있지 않은 다른 태스크의 칩도 함께 보여준다 — openOrFocusTab만 부르면
+	// activeNodeId가 안 바뀌어 탭이 보이지 않는 곳에 열린다(§ StatusBoard.tsx openVerifyUrl과 동일한
+	// 원인의 동일한 버그 — setActiveNode로 먼저 그 폴더 워크스페이스로 전환해야 한다).
+	useTabsStore.getState().setActiveNode(task.folder_id, 'orchestrator')
 	useTabsStore.getState().openOrFocusTab(task.folder_id, 'browser')
 	useBrowserNavStore.getState().request(task.folder_id, `http://localhost:${port}${w.reportUrl}`)
 }
@@ -747,23 +752,28 @@ export default function CalendarPane() {
 					const blocked = computeBlockedLanes(weekDays!, blockedPeriods)
 					const tasks = computeLanes(weekDays!, calendarItems)
 					const laneCount = blocked.laneCount + tasks.laneCount
+					// "주캘린더가 위에있는게 낫겠어" — 위 절반은 주캘린더, 아래 절반이 현황판(§ StatusBoard.tsx).
+					// 월 뷰는 이미 정보 밀도가 높아 그대로 둠.
 					return (
-						<div className={styles.weekGrid}>
-							{weekDays!.map((d) => renderDayCell(d, false, laneCount * LANE_H))}
-							{laneCount > 0 && (
-								<div
-									className={styles.monthLanesBanner}
-									style={{ top: WEEK_CELL_HEAD_H, height: laneCount * LANE_H }}
-									onClick={(e) => {
-										if (e.target !== e.currentTarget) return
-										setBlockDefaultDate(weekDays![0].getTime())
-										setBlockModalOpen(true)
-									}}
-								>
-									{blocked.entries.map((e) => renderBlockedBar(e, weekDays!.length))}
-									{tasks.entries.map((e) => renderLaneBar(e, weekDays!.length, blocked.laneCount))}
-								</div>
-							)}
+						<div className={styles.weekSplit}>
+							<div className={styles.weekGrid}>
+								{weekDays!.map((d) => renderDayCell(d, false, laneCount * LANE_H))}
+								{laneCount > 0 && (
+									<div
+										className={styles.monthLanesBanner}
+										style={{ top: WEEK_CELL_HEAD_H, height: laneCount * LANE_H }}
+										onClick={(e) => {
+											if (e.target !== e.currentTarget) return
+											setBlockDefaultDate(weekDays![0].getTime())
+											setBlockModalOpen(true)
+										}}
+									>
+										{blocked.entries.map((e) => renderBlockedBar(e, weekDays!.length))}
+										{tasks.entries.map((e) => renderLaneBar(e, weekDays!.length, blocked.laneCount))}
+									</div>
+								)}
+							</div>
+							<StatusBoard />
 						</div>
 					)
 				})()}

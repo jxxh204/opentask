@@ -384,8 +384,16 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 		}
 	}, [state?.running])
 
+	// "하이브 마인드 스크롤이 계속 고정되고있어" — turns는 1~2초마다 폴링으로 새 배열 참조가 들어오고
+	// (내용이 실제로 안 바뀌었어도), 그때마다 이 effect가 다시 돌아 무조건 맨 아래로 끌어내렸다 —
+	// 사람이 스크롤을 올려 지난 대화를 읽는 중이어도 다음 폴링 tick에 바로 도로 끌려 내려갔다. 이미
+	// 바닥 근처(=방금까지 실시간으로 지켜보던 중)일 때만 자동 스크롤하고, 위로 올려 읽고 있으면 그
+	// 자리 그대로 둔다 — 일반적인 채팅 UI의 "스마트 오토스크롤" 관례.
 	useEffect(() => {
-		bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight })
+		const el = bodyRef.current
+		if (!el) return
+		const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+		if (nearBottom) el.scrollTo({ top: el.scrollHeight })
 	}, [turns, pendingUser, live.waiting])
 
 	async function restart() {

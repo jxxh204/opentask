@@ -109,6 +109,50 @@ export function advanceSubtaskWork(taskId: string) {
 export function getSubtaskWorkState(taskId: string) {
 	return api.get<{ ok: true; subtasks: SubtaskWorkStatus[] } | { ok: false; error: string }>(`/api/tasks/${taskId}/subtask-work/state`)
 }
+
+// "현황판... 각 메인태스크의 현재 진행중인 서브태스크와 그것을 확인할 수 있는 html파일이나 url화면"
+// — 주캘린더 상단 현황판(§ CalendarPane.tsx StatusBoard)의 데이터 소스(§ server/orchestrator.cjs
+// getBoardStatus). /api/sessions/board(DB 스냅샷)와 달리 세션 생존·검증 자료 같은 라이브 상태를 준다.
+// "현황판에는 pr, 브랜치, 접속해서 확인가능한 링크" — pr/branch는 그 서브태스크 워크트리의 실제 git
+// 상태(§ server/cockpit.cjs byPath — TaskRow의 GitStatusEntry.pr와 같은 소스, 재사용). PR이 없으면
+// null(아직 안 만들었거나 매칭 레포 밖).
+// "이 툴은 웹프론트개발자를 위한 툴이 아니라는점이 중요해 그래서 '검증을 위한 자료'라고 추상화하는거야"
+// — verifyText/verifyUrl은 에이전트가 직접 보고한 것(§ reportSubtaskVerify)이 최우선이고, devUrl은
+// 그게 없을 때만 참고하는 자동 감지 폴백(§ getBoardStatus 주석). verifyUrl은 이미 devUrl 폴백이 backend
+// 에서 섞여 들어와 있다 — 프론트는 그냥 verifyText/verifyUrl만 보면 된다.
+export interface BoardStatusPr {
+	number: number
+	url: string
+	state: string
+	draft: boolean
+	ci: string | null
+}
+export interface BoardStatusItem {
+	folderId: string
+	folderName: string
+	taskId: string
+	taskName: string
+	active: {
+		subtaskId: string
+		subtaskName: string
+		tmuxSession: string
+		verifyText: string | null
+		verifyUrl: string | null
+		devUrl: string | null
+		branch: string | null
+		pr: BoardStatusPr | null
+	} | null
+	lastDone: { subtaskId: string; subtaskName: string; endedAt: number; reportUrl: string; branch: string | null; pr: BoardStatusPr | null } | null
+	// "여기 들어가는 정보들이 여러 단계에서 적용되어야할것같은데 서브태스크, 메인태스크, 하이브마인드가
+	// 만들어갈 수 있도록" — active/lastDone은 서브태스크 관점(§ 위 주석)이고, note는 특정 서브태스크에
+	// 안 묶인 태스크 전체 관점(§ server/orchestrator.cjs reportTaskVerify) — 여러 서브태스크를 종합한
+	// 지휘자(conductor)나, 사람과 직접 대화하며 확인한 하이브마인드가 보고한다. source로 어느 쪽인지
+	// 구분해서 보여준다(둘을 섞으면 "누가 보고했는지"가 사라진다).
+	note: { text: string; url: string | null; at: number; source: 'conductor' | 'hivemind' } | null
+}
+export function getBoardStatus() {
+	return api.get<{ ok: true; items: BoardStatusItem[] } | { ok: false; error: string }>('/api/board-status')
+}
 // "서브태스크 클로드 세션은 어떻게 킬지 고민이야" — 다음으로 안 넘기고 지금 세션만 끝낸다.
 export function stopSubtaskSession(subtaskId: string) {
 	return api.post<{ ok: true } | { ok: false; error: string }>(`/api/subtasks/${subtaskId}/session/stop`)
