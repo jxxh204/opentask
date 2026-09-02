@@ -437,6 +437,16 @@ const MIGRATIONS = [
 			CREATE INDEX idx_cron_jobs_next_run ON cron_jobs(enabled, next_run_at);
 		`)
 	},
+	// v27 — "태스크 숨기기 기능있으면 좋겠다. 다 보여서 힘들어." §v5 보관함과 달리 "완료"는 아니라서
+	// 거기로 보내면 안 된다 — 사이드바 트리에서만 안 보이게 하고 캘린더 등 다른 화면은 그대로(§v13
+	// completed_at과 동일 원칙: board()는 hidden도 그대로 반환하고 프론트가 트리 렌더링에서만 거른다).
+	// hidden_at은 archived_at과 같은 용도 — "숨김" 목록을 최근 숨긴 순으로 보여줄 때 쓴다.
+	(db) => {
+		db.exec(`
+			ALTER TABLE folders ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE folders ADD COLUMN hidden_at INTEGER;
+		`)
+	},
 ]
 
 function migrate() {

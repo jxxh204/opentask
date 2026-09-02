@@ -30,7 +30,11 @@ const MODEL_POLICY = {
 }
 // operatorName — 이 인스턴스의 운영자(리뷰어) 이름. 오픈소스 배포라 특정인에 하드코딩 금지 → 설정으로 노출.
 // 기본값 '운영자'는 프롬프트/피드에 그대로 넣어도 조사(가/에게)가 자연스럽게 붙는 일반 명사.
-const DEFAULTS = { reviewMode: true, modelPolicy: MODEL_POLICY, fableLock: false, agentNotify: true, operatorName: '운영자' } // + Fable 킬스위치 + 에이전트 완료/질문 맥 알림
+// opsMode — "하이브마인드 전체 운영 모드": 켜면 15분마다(§ control.cjs runOpsModeTick) 하이브마인드
+// 자신에게 "전체 태스크 그래프 점검 → 방향/진행 확인 → 멈춘 것 지시" 프롬프트를 자동으로 넣는다.
+// 기본 꺼짐 — 사람이 명시적으로 켜야 자율 지시가 나간다(레포 자동배정 사고 이후의 "검증 없는 자동
+// 판단은 기본 꺼짐" 원칙과 같은 이유).
+const DEFAULTS = { reviewMode: true, modelPolicy: MODEL_POLICY, fableLock: false, agentNotify: true, operatorName: '운영자', opsMode: false } // + Fable 킬스위치 + 에이전트 완료/질문 맥 알림 + 하이브마인드 운영 모드
 function modelFor(action) {
 	const s = load()
 	const p = s.modelPolicy || {}

@@ -9,6 +9,9 @@
    탭 사이는 얇은 구분선으로만 나뉜다. 탭바 자체는 재킷(--card2)처럼 콘텐츠보다 한 단 가라앉은
    톤이고, 활성 탭만 콘텐츠와 같은 --card로 밝게 떠서 아래와 이어진다 — 라이트/다크 둘 다 이 관계로
    자동 성립(고정 다크 하드코딩 아님; ActivityBar가 없어진 지금은 그걸 기준 삼을 이유도 없다). */
+/* "화면 작으면 ui 깨지는것도" — 탭이 안 들어갈 만큼 좁으면 기본 flex가 .tab을 찌부러뜨려 라벨이
+   36px 높이 안에서 두 줄로 깨졌다(ControlPane.tsx 헤더와 같은 원인·같은 처방). 못 들어가는 폭은
+   가로 스크롤로 흡수하고, 탭 자체는 절대 안 줄어들게 못박는다. */
 .tabbar {
 	flex: 0 0 auto;
 	display: flex;
@@ -16,6 +19,8 @@
 	height: 36px;
 	background: var(--card2);
 	border-bottom: 1px solid var(--line);
+	overflow-x: auto;
+	scrollbar-width: thin;
 }
 
 .tab {
@@ -29,6 +34,8 @@
 	font-weight: 500;
 	color: var(--t3);
 	cursor: pointer;
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .tab:hover {
 	color: var(--t2);

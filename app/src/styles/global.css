@@ -97,10 +97,23 @@ button {
 	font-size: 11px;
 	font-weight: 600;
 	cursor: pointer;
+	/* "화면 작으면 ui 깨지는것도" — 좁은 flex 툴바 안에서 이 버튼이 찌부러지며 라벨이 두 줄로
+	   깨지는 걸 막는다. 못 들어가는 폭은 부모(overflow-x:auto인 바)가 스크롤로 흡수하지, 이
+	   버튼 자체를 줄이지 않는다. */
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .btn-dry:hover {
 	background: var(--card-hover);
 	color: var(--ink);
+}
+.btn-dry:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.btn-dry:disabled:hover {
+	background: var(--card2);
+	color: var(--t2);
 }
 
 /* XTerm.tsx — 실제 xterm.js 터미널 패널. 부모가 높이를 갖고 있어야 fit()이 맞게 계산된다.

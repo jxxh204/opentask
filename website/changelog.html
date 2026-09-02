@@ -55,8 +55,25 @@
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
-						<h3 style="margin:0; font-size:19px;">0.1.8</h3>
+						<h3 style="margin:0; font-size:19px;">0.1.9</h3>
 						<span class="chip chip-green">Latest</span>
+						<span style="color:var(--t3); font-size:13px;">2026-09-01</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Renamed the assistant back to "Hive Mind" (하이브마인드) throughout the app — same brain-in-a-dome icon, reverted name</li>
+						<li>The Task Manager is now framed as a PO/planner that never writes code directly — it plans, dispatches to subtasks, and reviews, with Hive Mind above it and subtasks (developers/designers) below</li>
+						<li>Subtasks can now send lightweight "still working on it" progress check-ins between the start and the done/blocked report, so the conversation log doesn't go quiet for long stretches</li>
+						<li>A subtask's completion report now shows an excerpt directly in the Task Manager's chat log with a button to open the full report, instead of a bare one-line "done"</li>
+						<li>Added a "hide" toggle on task folders in the sidebar — dims a folder in place (collapsed, no expand) without archiving it</li>
+						<li>The sidebar spinner now also reflects the Task Manager's own session activity, not just its subtasks — previously it looked idle while the Task Manager was still planning</li>
+						<li><strong>Fixed the startup loading screen never appearing</strong> when the backend connects quickly (a fast local reconnect could load the real app before the loading page ever painted a frame)</li>
+						<li><strong>Fixed the sidebar showing "no tasks in progress" during the first sync</strong> instead of a loading indicator, which could be misread as genuinely having zero tasks</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.8</h3>
 						<span style="color:var(--t3); font-size:13px;">2026-09-01</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">

@@ -4,6 +4,9 @@ import type { Theme, Lang } from '../../store/useUiStore'
 import { useTabsStore, MODEL_POLICY_NODE_ID, TEAM_RULES_NODE_ID } from '../../store/useTabsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
 import { useQuickstartStore } from '../../store/useQuickstartStore'
+import { getSetupStatus, postConnector, getTerminalCapabilities } from '../../api/setup'
+import type { TerminalCapabilities } from '../../api/setup'
+import { useSessionsStore } from '../../store/useSessionsStore'
 import { useT } from '../../utils/i18n'
 import Modal from '../common/Modal'
 import styles from './SettingsModal.module.css'
@@ -47,6 +50,38 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 		const next = !killBackendOnQuit
 		setKillBackendOnQuit(next)
 		await window.openrm!.setQuitBehavior(next)
+	}
+
+	// "고스티도 tmux도 설정 토글로 제공해야해. 기본은 터미널이고. 둘 다 안 깔려있는 사람은 비활성화하고
+	// 경고표기" — 값(terminalGhostty/terminalTmux)과 설치 여부(caps)는 별개 조회다. 값은 appConfig에
+	// 저장되지만, 안 깔려있으면 그 값과 무관하게 토글 자체를 막는다(예: 지웠다 다시 깔면 값은 그대로
+	// 살아있다가 다시 켜짐 — 사용자가 매번 다시 켤 필요 없게).
+	const [terminalGhostty, setTerminalGhostty] = useState(false)
+	const [terminalTmux, setTerminalTmux] = useState(false)
+	const [terminalCaps, setTerminalCaps] = useState<TerminalCapabilities | null>(null)
+	useEffect(() => {
+		if (!open) return
+		getSetupStatus().then((s) => {
+			setTerminalGhostty(!!s.appConfig.terminalGhostty)
+			setTerminalTmux(!!s.appConfig.terminalTmux)
+		})
+		getTerminalCapabilities().then(setTerminalCaps)
+	}, [open])
+	async function toggleTerminalGhostty() {
+		if (!terminalCaps?.ghostty) return
+		const next = !terminalGhostty
+		setTerminalGhostty(next)
+		// "설정 키자마자 바로 바뀌는것맞아?" — useSessionsStore.terminalGhostty는 앱 시작 시 한 번만
+		// 불러오므로(§ loadTerminalGhostty), 이미 열려 있는 XTerm 탭들의 버튼이 즉시 반응하려면
+		// 저장 API 응답을 기다리지 않고 이 store도 직접 갱신해야 한다.
+		useSessionsStore.setState({ terminalGhostty: next })
+		await postConnector('terminal', { ghostty: next })
+	}
+	async function toggleTerminalTmux() {
+		if (!terminalCaps?.tmux) return
+		const next = !terminalTmux
+		setTerminalTmux(next)
+		await postConnector('terminal', { tmux: next })
 	}
 
 	function openModelPolicy() {
@@ -147,6 +182,45 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 						</div>
 					</div>
 				)}
+				<div className={styles.row} style={{ marginTop: 16 }}>
+					<div>
+						<div className={styles.rowLabel}>
+							{t('Ghostty로 보기')}
+							<span className={`${styles.resTag} ${styles.resTagGpu}`}>GPU</span>
+						</div>
+						<div className={styles.rowHint}>
+							{terminalCaps && !terminalCaps.ghostty
+								? t('Ghostty가 설치되어 있지 않습니다 — 설치 후 다시 열면 켤 수 있습니다.')
+								: t('켜면 터미널 탭에 "고스티에서 열기" 버튼이 생깁니다. GPU 렌더링이라 내장 패널보다 무거운 출력에서 빠릅니다.')}
+						</div>
+					</div>
+					<div className={`${styles.toggle} ${terminalCaps && !terminalCaps.ghostty ? styles.toggleDisabled : ''}`}>
+						<button type="button" className={`${styles.opt} ${!terminalGhostty ? styles.optActive : ''}`} disabled={!terminalCaps?.ghostty} onClick={() => terminalGhostty && toggleTerminalGhostty()}>
+							{t('꺼짐 (기본)')}
+						</button>
+						<button type="button" className={`${styles.opt} ${terminalGhostty ? styles.optActive : ''}`} disabled={!terminalCaps?.ghostty} onClick={() => !terminalGhostty && toggleTerminalGhostty()}>
+							{t('켜기')}
+						</button>
+					</div>
+				</div>
+				<div className={styles.row} style={{ marginTop: 16 }}>
+					<div>
+						<div className={styles.rowLabel}>{t('tmux로 세션 유지')}</div>
+						<div className={styles.rowHint}>
+							{terminalCaps && !terminalCaps.tmux
+								? t('tmux가 설치되어 있지 않습니다 — 설치 후 다시 열면 켤 수 있습니다.')
+								: t('켜면 서버 재시작에도 세션이 안 죽습니다. 이후 만드는 세션부터 적용됩니다.')}
+						</div>
+					</div>
+					<div className={`${styles.toggle} ${terminalCaps && !terminalCaps.tmux ? styles.toggleDisabled : ''}`}>
+						<button type="button" className={`${styles.opt} ${!terminalTmux ? styles.optActive : ''}`} disabled={!terminalCaps?.tmux} onClick={() => terminalTmux && toggleTerminalTmux()}>
+							{t('꺼짐 (기본)')}
+						</button>
+						<button type="button" className={`${styles.opt} ${terminalTmux ? styles.optActive : ''}`} disabled={!terminalCaps?.tmux} onClick={() => !terminalTmux && toggleTerminalTmux()}>
+							{t('켜기')}
+						</button>
+					</div>
+				</div>
 				<div className={styles.row} style={{ marginTop: 16, cursor: 'pointer' }} onClick={openTeamRules}>
 					<div>
 						<div className={styles.rowLabel}>{t('팀 규칙 →')}</div>

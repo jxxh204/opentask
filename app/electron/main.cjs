@@ -452,11 +452,29 @@ html,body{margin:0;height:100%;background:#0b0d10;color:#9aa4af;font-family:-app
       webPreferences.sandbox = true
     })
 
+    // "브라우저 들어가니까 화면 꽉차서 뒤로 갈 수 없어" — 위 setWindowOpenHandler는 메인 창 자신의
+    // webContents에만 걸려 있다. <webview>(BrowserPane.tsx, allowpopups) 게스트 페이지가 target=_blank
+    // 링크를 열면 그건 별개의 webContents라 저 핸들러를 안 타고, Electron 기본값대로 아무 툴바·뒤로가기도
+    // 없는 새 네이티브 창이 그냥 열려버린다(실측: 2026-09-02, 공비서 CRM의 팝업 링크로 재현 — 메뉴바에
+    // "Electron"만 뜨고 BrowserToolbar가 없는 그 창). did-attach-webview로 게스트 webContents를 잡아
+    // 거기에도 같은 정책(새 창 대신 시스템 기본 브라우저)을 건다 — 메인 창 링크와 동작을 통일한다.
+    mainWindow.webContents.on('did-attach-webview', (_event, guestWebContents) => {
+      guestWebContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url)
+        return { action: 'deny' }
+      })
+    })
+
     mainWindow.on('closed', () => {
       mainWindow = null
     })
 
-    mainWindow.loadURL(LOADING_DATA_URL).catch(() => {})
+    // 여기서 await 안 하면(fire-and-forget) 백엔드가 이미 떠 있는 흔한 경우(재사용/로컬 재기동 —
+    // resolveTargetUrl()이 수십 ms 안에 끝남) 이 data: URL이 첫 페인트도 하기 전에 아래
+    // loadWithRetry()가 실제 앱 URL로 또 loadURL을 걸어버려 로딩 화면이 통째로 스킵된다("로딩없고"
+    // 리포트의 원인) — 로딩 페이지가 완전히 그려지고 onStartupProgress 리스너까지 등록된 뒤에야
+    // 백엔드 기동을 시작해야 진행 메시지도 놓치지 않는다.
+    await mainWindow.loadURL(LOADING_DATA_URL).catch(() => {})
 
     let url
     try {

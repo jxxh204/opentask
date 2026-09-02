@@ -4,6 +4,11 @@
 	flex-direction: column;
 	min-height: 0;
 }
+/* "화면 작으면 ui 깨지는것도" — 운영 모드·고스티 버튼이 늘면서 좁은 도킹 패널에서 이 줄 자체가
+   버튼 폭보다 좁아졌다. 기본 flex는 못 들어가는 만큼 자식을 찌부러뜨려(text-wrap) 버튼 라벨이
+   두 줄로 깨졌다 — overflow-x:auto로 못 들어가는 만큼은 옆으로 스크롤하게 하고, 아래 flex-shrink:0
+   으로 버튼 자체는 절대 안 찌부러지게 못박는다(찌부러질 수 있는 건 가운데 스페이서 하나뿐).
+   스크롤바는 얇게(스크롤 가능하다는 힌트는 남기되 툴바 느낌을 안 해침). */
 .head {
 	flex: none;
 	display: flex;
@@ -11,6 +16,8 @@
 	gap: 8px;
 	padding: 16px 20px;
 	border-bottom: 1px solid var(--line);
+	overflow-x: auto;
+	scrollbar-width: thin;
 }
 /* "오버마인드라는 말과 함께 뇌 아이콘으로" — 이름 텍스트 옆에 실제 마크를 짝지어 배치. */
 .headIcon {
@@ -23,10 +30,13 @@
 	font-size: 13px;
 	font-weight: 700;
 	color: var(--ink);
+	flex-shrink: 0;
 }
 .meta {
 	font-size: 10.5px;
 	color: var(--t3);
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .btn {
 	height: 28px;
@@ -38,6 +48,8 @@
 	font-size: 11px;
 	font-weight: 700;
 	cursor: pointer;
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .btn:hover {
 	background: var(--card-hover);
@@ -45,6 +57,15 @@
 .btn:disabled {
 	opacity: 0.5;
 	cursor: default;
+}
+/* "하이브마인드 전체 운영 모드" 토글의 켜짐 상태 — .askSubmit과 같은 violet 강조. */
+.btnActive {
+	background: var(--violet);
+	border-color: var(--violet);
+	color: #fff;
+}
+.btnActive:hover {
+	background: var(--violet);
 }
 .starting {
 	flex: 1 1 auto;
@@ -56,9 +77,6 @@
 }
 
 /* ── "대화형으로 가자" — raw 터미널(XTerm) 대신 채팅 UI. ── */
-/* "왼쪽 오른쪽 공간이 남는데... 관련 내용이 떠오르면서 위로쌓이는 구조" — 대화 스크롤 컬럼(§
-   .threadScroll)과 컨텍스트 캔버스(§ .canvasRail)를 나란히 두는 가로 컨테이너로 바뀌었다. 스크롤은
-   이제 이 둘 각자가 독립적으로 갖는다(전엔 .body 자신이 스크롤했다). */
 .body {
 	flex: 1 1 auto;
 	min-height: 0;
@@ -81,76 +99,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 22px;
-}
-/* "관련 내용이 아주 단순하게 떠오르면서 위로쌓이는 구조로 보였으면" — 오버마인드가 실제로 만지는
-   태스크/서브태스크/크론잡/캘린더를 실시간 미니어처 카드로 보여주는 자리. 데이터는 새 추적 코드
-   없이 이미 파싱된 tool_use part(§ ControlPane.tsx deriveCanvasItems)에서 그대로 뽑는다. 최신
-   항목이 배열 맨 앞이라(reverse) 일반적인 위→아래 column만으로 "새 카드가 위에 쌓이는" 효과가
-   난다 — column-reverse 같은 트릭 불필요.*/
-.canvasRail {
-	flex: none;
-	width: 220px;
-	overflow-y: auto;
-	padding: 28px 16px 28px 0;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.canvasCard {
-	background: var(--card2);
-	border: 1px solid var(--line2);
-	border-radius: var(--radius-card);
-	padding: 10px 12px;
-	animation: canvasIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes canvasIn {
-	from {
-		opacity: 0;
-		transform: translateY(8px) scale(0.96);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0) scale(1);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.canvasCard {
-		animation: none;
-	}
-}
-.canvasCardHead {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-bottom: 4px;
-}
-.canvasCardIcon {
-	flex: none;
-	width: 15px;
-	height: 15px;
-	color: var(--violet);
-}
-.canvasCardIcon svg {
-	width: 100%;
-	height: 100%;
-}
-.canvasCardKind {
-	font-size: 9.5px;
-	font-weight: 700;
-	color: var(--violet);
-}
-.canvasCardTitle {
-	font-size: 12px;
-	font-weight: 700;
-	color: var(--ink);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.canvasCardMeta {
-	font-size: 10.5px;
-	color: var(--t3);
-	margin-top: 2px;
 }
 /* "비서라는 이름에 맞게" — 빈 화면도 무기력한 회색 텍스트 한 줄보다, 이 시스템의 에이전트=violet
    신호(StatusDot·feedNode 등과 같은 색)를 점 하나로 얹어 "여기 비서가 있다"는 느낌을 준다. */
@@ -188,6 +136,27 @@
 	display: flex;
 	flex-direction: column;
 	animation: turnIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* "명시도 해줘" — 운영 모드 자동 점검 턴은 사람 말풍선이 아니라 구분선으로(§ ControlPane.tsx turns.map).
+   가운데 정렬 + 얇은 배지라 스크롤하며 훑을 때도 사람 대화와 절대 안 헷갈린다. */
+.autoTickRow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	animation: turnIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.autoTickBadge {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--violet);
+	background: var(--vtint);
+	border-radius: 999px;
+	padding: 3px 10px;
+}
+.autoTickTime {
+	font-size: 10.5px;
+	color: var(--t3);
 }
 @media (prefers-reduced-motion: reduce) {
 	.turnRow {
@@ -291,6 +260,128 @@
 		animation: none;
 		opacity: 0.7;
 	}
+}
+/* "이걸 UI로 풀어줘 답변할 수 없어" — AskUserQuestion(claude 자신의 방향키 선택 UI)은 채팅 파싱으로
+   재현 불가능해서 그 순간만 진짜 pty를 붙인다(§ ControlPane.tsx askingQuestion). .thread와 같은 읽기
+   폭 컬럼에 맞춰 폭을 고정 — 이 자리만 갑자기 화면 전체 폭으로 넓어지면 어색하다. */
+.rawAnswer {
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.rawAnswerLabel {
+	font-size: 12px;
+	color: var(--t2);
+}
+.rawAnswerHost {
+	height: 320px;
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	overflow: hidden;
+}
+
+/* "AskUserQuestion를 UI로 표현해서 마우스로 클릭 가능하도록" — 실측된 키 시퀀스(§ ControlPane.tsx
+   AskQuestionPanel, server/control.cjs buildAnswerKeys)로 실제 pty에 타이핑하는 클릭형 질문 UI.
+   .rawAnswer와 같은 읽기 폭 컬럼. */
+.askPanel {
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+.askQuestion {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.askQuestionText {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ink);
+}
+.askOptions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.askOption {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	text-align: left;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	padding: 9px 12px;
+	cursor: pointer;
+	color: var(--ink);
+}
+.askOption:hover {
+	background: var(--card-hover);
+}
+.askOption:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+.askOptionSelected {
+	border-color: var(--violet);
+	background: var(--vtint);
+}
+.askCheckbox {
+	flex: none;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--violet);
+}
+.askOptionLabel {
+	font-size: 12.5px;
+	font-weight: 600;
+	line-height: 1.5;
+}
+.askOptionDesc {
+	font-size: 11.5px;
+	color: var(--t3);
+	line-height: 1.5;
+	margin-top: 2px;
+}
+.askError {
+	font-size: 11.5px;
+	color: var(--red);
+}
+.askFooter {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+.askRawToggle {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: 11.5px;
+	color: var(--t3);
+	text-decoration: underline;
+	cursor: pointer;
+}
+.askSubmit {
+	height: 30px;
+	padding: 0 16px;
+	border-radius: var(--radius-control);
+	background: var(--violet);
+	border: 1px solid var(--violet);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.askSubmit:disabled {
+	opacity: 0.5;
+	cursor: default;
 }
 /* marked()가 만든 raw HTML — 기본 브라우저 마진을 눌러 버블 안에서 붕 뜨지 않게 한다. */
 .md :global(p) {

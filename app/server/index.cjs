@@ -126,6 +126,9 @@ const SETUP_CONNECTOR_MAP = {
   notion: { db: { config: 'notionBacklogDb' }, assignee: { config: 'notionBacklogAssignee' }, service: { config: 'notionBacklogService' }, platform: { config: 'notionBacklogPlatform' } },
   slackSign: { secret: { secret: 'slackSigningSecret' } },
   deploy: { repo: { config: 'deployRepo' }, base: { config: 'deployBase' } },
+  // "고스티도 tmux도 설정 토글로 제공해야해" — SetupPage 온보딩 커넥터는 아니지만, "필드 하나 = AppConfig
+  // 한 키"라는 이 맵의 메커니즘 자체는 그대로 재사용할 수 있어 새 API를 안 만들고 여기 얹었다.
+  terminal: { ghostty: { config: 'terminalGhostty' }, tmux: { config: 'terminalTmux' } },
 }
 // GET/POST connector 공통 응답 — 현재 저장 상태 스냅샷.
 function setupStatus() {
@@ -510,6 +513,14 @@ const server = http.createServer((req, res) => {
   if (url === '/api/setup/tmux' && req.method === 'GET') {
     return Term.checkAvailable().then((r) => sendJSON(res, 200, r))
   }
+  // "고스티도 tmux도 설정 토글로 제공해야해. 둘 다 안 깔려있는 사람은 비활성화하고 경고표기" — 위
+  // /api/setup/tmux는 예전 tmux 아키텍처 시절 온보딩용으로 이제 하드코딩된 stub(§ term.cjs
+  // checkAvailable 주석)이라 재사용하지 않고, 실제 hasTmux()/hasGhostty() 캐시를 그대로 노출하는
+  // 새 엔드포인트를 둔다. 설정 토글의 disabled 여부는 이 값을 봐야 한다(값 자체는 appConfig에 저장,
+  // 설치 여부는 이 엔드포인트로 별도 확인).
+  if (url === '/api/setup/terminal-capabilities' && req.method === 'GET') {
+    return sendJSON(res, 200, { tmux: Term.hasTmux(), ghostty: Term.hasGhostty() })
+  }
   // GitHub 연동 — ① gh CLI 위임(설정 0) ② OAuth Device Flow(gh CLI 없을 때)
   if (url === '/api/setup/github/gh-status' && req.method === 'GET') {
     return GithubConnect.ghStatus().then((r) => sendJSON(res, 200, r))
@@ -606,6 +617,12 @@ const server = http.createServer((req, res) => {
       .then((r) => sendJSON(res, 200, r))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
+  // "세션을 초기화하는거나" — "재시작"(위 start, --continue)과 달리 이전 대화를 안 이어받는 진짜 새 대화.
+  if (url === '/api/control/reset' && req.method === 'POST') {
+    return Control.reset()
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(위 stop과 다름), 지금 생성 중인 응답만 끊는다.
   if (url === '/api/control/interrupt' && req.method === 'POST') {
     return Control.interrupt()
@@ -626,6 +643,22 @@ const server = http.createServer((req, res) => {
     const file = Transcript.findControlTranscript(Control.CONTROL_CWD)
     if (!file) return sendJSON(res, 200, { ok: true, turns: [] })
     return sendJSON(res, 200, { ok: true, turns: Transcript.parseTranscript(file) })
+  }
+  // "질문이 안왔는데?" — AskUserQuestion은 사람이 답하기 전까진 대화 기록(jsonl)에 안 나타난다(§
+  // control.cjs getLivePrompt 주석) — 그래서 대화 기록 폴링과 별개로, 살아있는 pty 화면을 직접 읽어
+  // 지금 질문이 떠 있는지+그 구조를 돌려주는 전용 폴링 경로.
+  if (url === '/api/control/live-prompt' && req.method === 'GET') {
+    return Control.getLivePrompt()
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // "AskUserQuestion를 UI로 표현해서 마우스로 클릭 가능하도록" — ControlPane.tsx가 지금 화면 기준으로
+  // 고른 옵션 인덱스(혹은 next/submit/cancel)를 넘기면, 그대로 키 하나로 옮겨 하이브마인드 pty에 타이핑한다.
+  if (url === '/api/control/live-action' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => Control.sendLiveAction(b && b.action))
+      .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
 
   // repos (멀티레포 프로젝트 — 레포 레지스트리)
@@ -916,7 +949,7 @@ const server = http.createServer((req, res) => {
   // 체이닝으로" — 태스크 단위(위 폴더 오케스트레이션)와 별개로, 태스크 하나의 실제 코드 작업을
   // 서브태스크(개발 단위) 체인으로 진행한다.
   if (url.startsWith('/api/tasks/') && url.includes('/subtask-work/')) {
-    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state|report-blocked)$/)
+    const sm = url.match(/^\/api\/tasks\/([^/]+)\/subtask-work\/(start|advance|state|report-blocked|progress)$/)
     if (sm) {
       const tid = decodeURIComponent(sm[1])
       const action = sm[2]
@@ -935,6 +968,13 @@ const server = http.createServer((req, res) => {
       if (action === 'report-blocked' && req.method === 'POST') {
         return readBody(req)
           .then((b) => done(Orchestrator.reportSubtaskBlocked(tid, b && b.reason)))
+          .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+      }
+      // "자잘한 업무도 대화하는게 보여야 신뢰가 가니까" — 완료/막힘 사이의 가벼운 진행 체크인
+      // (§ orchestrator.cjs reportSubtaskProgress). 세션 상태는 안 건드리고 대화 로그에만 남는다.
+      if (action === 'progress' && req.method === 'POST') {
+        return readBody(req)
+          .then((b) => done(Orchestrator.reportSubtaskProgress(tid, b && b.text)))
           .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
       }
     }
@@ -1909,6 +1949,16 @@ const server = http.createServer((req, res) => {
     )
     return
   }
+  // "고스티에서 열기" 버튼 — 이 세션이 tmux로 떠 있으면 그대로 attach, 아니면 그 워크트리에서 새 셸만
+  // 연다(§ term.cjs openExternal). 설치 여부는 여기서도 한 번 더 막는다(프론트 disabled가 뚫려도 안전).
+  if (url === '/api/term/open-external' && req.method === 'POST') {
+    readBody(req).then((b) =>
+      Term.openExternal(b.name)
+        .then((r) => sendJSON(res, r.ok ? 200 : 400, r))
+        .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) })),
+    )
+    return
+  }
   // ── 워크트리별 .env.local — "로컬 서버" 탭. cwd는 /term WS와 같은 규칙으로 프로젝트 루트
   // 하위여야만 허용(임의 경로 읽기/쓰기 방지). 재시작은 기존 Term.devSessionForPort/
   // restartDevSession을 그대로 재사용 — 포트가 그 워크트리에서 실제로 떠 있으면 제자리 재시작.
@@ -2345,7 +2395,9 @@ function startServer(opts = {}) {
       loop(C.pollPorts, 10000)
       loop(C.pollPRs, 30000)
       loop(Orchestrator.checkStalledSubtasks, 60000) // "업무가 어떻든간에" — 침묵형 막힘 안전망(§ orchestrator.cjs)
-      loop(Control.checkStalled, 60000) // 오버마인드용 같은 안전망(§ control.cjs checkStalled)
+      loop(Control.checkStalled, 60000) // 하이브마인드용 같은 안전망(§ control.cjs checkStalled)
+      loop(Control.runOpsModeTick, 15 * 60000) // "하이브마인드 전체 운영 모드" — 켜져 있을 때만 15분마다 점검(§ control.cjs runOpsModeTick)
+      loop(Term.cleanupStalePanes, 120000) // "orm-control pane이 짜부라짐" 안전망(§ term.cjs cleanupStalePanes)
       Monitor.start() // PR·이슈 모니터 자동 시작 (cmux "10분 모니터링" 세션 대체)
       console.log('   👁  모니터: PR 리뷰·CI·이슈 자동 감시 시작')
       Aws.startExpiryWatch() // AWS MFA 세션 만료 감시 — 인증 풀리면 맥 알림 (읽기전용 STS 호출만, aws.cjs 참고)
@@ -2364,8 +2416,8 @@ function startServer(opts = {}) {
       // 없으면 오늘 고친 DISABLE_UPDATE_PROMPT 콜드스타트 경로를 그대로 탄다. 부팅을 막지 않는
       // fire-and-forget.
       Control.start()
-        .then(() => console.log('   🧠  오버마인드: 백그라운드 세션 준비\n'))
-        .catch((e) => console.log(`   ⚠️  오버마인드 준비 실패: ${String((e && e.message) || e)}\n`))
+        .then(() => console.log('   🧠  하이브마인드: 백그라운드 세션 준비\n'))
+        .catch((e) => console.log(`   ⚠️  하이브마인드 준비 실패: ${String((e && e.message) || e)}\n`))
       resolve({ port, host, server })
     })
   })

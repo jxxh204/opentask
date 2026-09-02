@@ -52,7 +52,7 @@
 			<a href="#use-cronjobs">크론잡</a>
 			<a href="#use-model-policy">모델 배정</a>
 			<a href="#use-team-rules">팀 규칙</a>
-			<a href="#use-assistant">오버마인드</a>
+			<a href="#use-assistant">하이브마인드</a>
 
 			<div class="group-label">레퍼런스</div>
 			<a href="#features">기능 요약</a>
@@ -95,7 +95,7 @@
 							<text x="430" y="47" text-anchor="middle" class="diagram-box-title">크론잡</text>
 
 							<rect x="605" y="20" width="150" height="44" rx="8" fill="var(--card2)" stroke="var(--line)" />
-							<text x="680" y="47" text-anchor="middle" class="diagram-box-title">오버마인드</text>
+							<text x="680" y="47" text-anchor="middle" class="diagram-box-title">하이브마인드</text>
 						</g>
 
 						<path d="M180,64 Q180,95 405,116" fill="none" stroke="var(--t3)" stroke-width="1.5" marker-end="url(#arrow-ko-docs)" />
@@ -140,7 +140,7 @@
 						<text x="430" y="391" text-anchor="middle" class="diagram-box-body">서브태스크를 한 번에 하나씩 웨이브로 지휘 — 별도 시작 버튼 없음</text>
 					</svg>
 				</div>
-				<img class="docs-shot" src="/screenshots/overview.png" alt="OpenTask 사이드바와 메인 화면 — 태스크 트리, 메모, 크론잡·캘린더·오버마인드 진입점" loading="lazy" />
+				<img class="docs-shot" src="/screenshots/overview.png" alt="OpenTask 사이드바와 메인 화면 — 태스크 트리, 메모, 크론잡·캘린더·하이브마인드 진입점" loading="lazy" />
 				<p>
 					원래는 1인 운영자(오퍼레이터) 도구로 시작했고, 오픈소스로 공개되며 여러 명이 함께 여러
 					워크트리에서 동시에 도는 에이전트를 감시하는 소규모 개발팀 대상으로 대상 범위가
@@ -164,7 +164,7 @@ npm install
 npm run electron:dev</code></div>
 				<p>
 					명령이 끝나면 OpenTask 데스크톱 창이 뜹니다. 아무 설정도 하지 않은 상태라면 <strong>데모
-					데이터</strong>로 전체 화면 구조(태스크 트리 · 캘린더 · 크론잡 · 오버마인드)를 바로 둘러볼 수
+					데이터</strong>로 전체 화면 구조(태스크 트리 · 캘린더 · 크론잡 · 하이브마인드)를 바로 둘러볼 수
 					있습니다. 실제 내 레포에 연결하려면 온보딩 화면에서 "레포 추가"를 누르세요 — 자세한
 					절차는 <a href="#install">설치</a>와 <a href="#use-tasks">태스크 만들기</a>를 참고하세요.
 				</p>
@@ -267,11 +267,11 @@ npm run electron:rebuild</code></div>
 
 				<h3>모델 배정</h3>
 				<p>
-					설계 · 태스크 매니저 · 오버마인드 · 코딩 · 리뷰 · QA 등 16개 이상의 작업 종류별로 어떤 AI
+					설계 · 태스크 매니저 · 하이브마인드 · 코딩 · 리뷰 · QA 등 16개 이상의 작업 종류별로 어떤 AI
 					모델을 쓸지 정책으로 지정합니다.
 				</p>
 
-				<h3>오버마인드</h3>
+				<h3>하이브마인드</h3>
 				<p>
 					태스크 하나가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 대화로 조작하는
 					최상위 에이전트입니다. 태스크 매니저와 이름 · 자리를 분리해, "이 태스크"가 아니라
@@ -404,7 +404,7 @@ npm run electron:rebuild</code></div>
 				<h2>사용 방법 — 모델 배정</h2>
 				<p>
 					전역 탭 <strong>"모델 배정"</strong>에서, 설계 · 태스크 매니저(서브태스크 체인 조율) ·
-					오버마인드(캘린더 · 크론잡 · 설정) · 코딩 · QA 테스트케이스 생성 등
+					하이브마인드(캘린더 · 크론잡 · 설정) · 코딩 · QA 테스트케이스 생성 등
 					작업 종류마다 드롭다운으로 사용할 모델(Fable 5 / Opus 4.8 / Sonnet 4.6 등)을 지정합니다.
 					속도가 중요한 작업엔 가벼운 모델을, 판단이 중요한 작업엔 상위 모델을 배정하는 식으로
 					씁니다.
@@ -431,9 +431,9 @@ npm run electron:rebuild</code></div>
 			</section>
 
 			<section class="docs-section" id="use-assistant">
-				<h2>사용 방법 — 오버마인드</h2>
+				<h2>사용 방법 — 하이브마인드</h2>
 				<p>
-					사이드바 상단 <strong>"오버마인드"</strong> 버튼 — 탭을 열면 버튼 없이 바로 대화 세션이
+					사이드바 상단 <strong>"하이브마인드"</strong> 버튼 — 탭을 열면 버튼 없이 바로 대화 세션이
 					시작됩니다. 특정 태스크가 아니라 앱 전체(캘린더 일정 · 크론잡 · 운영 설정)를 자연어로
 					조작할 때 씁니다.
 				</p>
@@ -461,7 +461,7 @@ npm run electron:rebuild</code></div>
 					<tr><td>크론잡</td><td>N분마다 · 매일 · 매주 예약 — 정형화된 "태스크 생성" 또는, 사람이 미리 써둔 자연어 지시를 즉흥적 판단 없이 그대로 실행하는 자유 지시 중 선택</td></tr>
 					<tr><td>모델 배정</td><td>설계 · 태스크 매니저 · 코딩 · 리뷰 · QA 등 작업 종류별 AI 모델 정책</td></tr>
 					<tr><td>캘린더</td><td>서브태스크 일정을 주/월 단위로 배치 · 드래그 재조정, 차단 기간 표시</td></tr>
-					<tr><td>오버마인드</td><td>태스크 하나가 아니라 앱 전체(캘린더 · 크론잡 · 설정)를 대화로 조작</td></tr>
+					<tr><td>하이브마인드</td><td>태스크 하나가 아니라 앱 전체(캘린더 · 크론잡 · 설정)를 대화로 조작</td></tr>
 				</table>
 			</section>
 

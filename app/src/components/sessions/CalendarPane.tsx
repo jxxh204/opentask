@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
 import { useUiStore } from '../../store/useUiStore'
-import { useT, useTp } from '../../utils/i18n'
+import { useTabsStore } from '../../store/useTabsStore'
+import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useT, useTp, translate } from '../../utils/i18n'
 import type { Task, BlockedPeriod } from '../../store/types'
+import type { SubtaskWorkStatus } from '../../api/sessions'
 import { businessDayRange } from '../../utils/businessDays'
 import NewTaskModal from './NewTaskModal'
 import BlockPeriodModal from './BlockPeriodModal'
+import { CHECK, HELP } from './TaskRow'
 import styles from './CalendarPane.module.css'
+import taskRowStyles from './TaskRow.module.css'
 
 // "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든... 서브태스크 일정은
 // 기존처럼 옮길수있어 각각 일정이 별도" — 캘린더가 실제로 그리는 최소 단위. 서브태스크가 예정일을
@@ -61,6 +67,90 @@ function flattenCalendarItems(tasks: Task[]): CalItem[] {
 // 안 그러면 서브태스크에만 날짜를 준 태스크가 "날짜 없음" 스트립에도 잘못 걸린다.
 function hasSchedule(t: Task) {
 	return !!t.due_date || t.subtasks.some((st) => !!st.due_date)
+}
+
+// "마우스를 올렸을때 팝오버로 현재 진행중인 작업이 보였으면 좋겠어" + "관련 메인태스크 하위로
+// 서브태스크 쭉 나열하고 현재 마우스 올린 태스크 강조로" — 캘린더 칩 하나는 태스크의 서브태스크
+// 체인 중 한 칸일 뿐이라, 그 칸만 보여주면 전체 진행 상황을 알 수 없다. 사이드바(TaskRow)의
+// subChain 목록과 완전히 같은 데이터(subtaskWork, § refreshAllSubtaskWork 15초 폴링)로 그 태스크의
+// 서브태스크 전체를 나열하고, 지금 가리키고 있는 칸만 강조 + 상세(브랜치/워크트리/막힌 이유/리포트)를
+// 펼친다. 색·아이콘도 TaskRow.module.css의 subChainDot* 그대로 재사용 — 같은 상태는 사이드바와
+// 항상 같은 픽셀로 보여야 한다.
+type WorkRowState = 'alive' | 'blocked' | 'stalled' | 'done' | 'dead' | 'waiting'
+function workStateLabel(state: WorkRowState): string {
+	switch (state) {
+		case 'alive':
+			return translate('지금 실행 중')
+		case 'blocked':
+			return translate('도움 필요')
+		case 'stalled':
+			return translate('한동안 응답 없음')
+		case 'done':
+			return translate('완료 처리됨')
+		case 'dead':
+			return translate('세션 종료 (완료 처리 안 됨)')
+		default:
+			return translate('대기 중')
+	}
+}
+function subtaskRowState(w: SubtaskWorkStatus | undefined): WorkRowState {
+	if (!w) return 'waiting'
+	if (w.blocked) return 'blocked'
+	if (w.alive) return 'alive'
+	if (w.stalled) return 'stalled'
+	if (w.done) return 'done'
+	if (w.started) return 'dead' // 세션이 완료 신호 없이 그냥 죽음
+	return 'waiting'
+}
+// TaskRow.module.css의 subChainDot 변형 클래스 이름 — 색/애니메이션은 거기서 그대로 가져오고,
+// position:absolute(사이드바 레일 전용 좌표)만 CalendarPane.module.css의 .chainDotReset으로 되돌린다.
+function subChainDotKey(state: WorkRowState): string {
+	switch (state) {
+		case 'blocked':
+			return 'subChainDotAlert'
+		case 'alive':
+			return 'subChainDotAlive'
+		case 'done':
+			return 'subChainDotComplete'
+		case 'dead':
+			return 'subChainDotDone'
+		case 'stalled':
+			return 'subChainDotStalled'
+		default:
+			return ''
+	}
+}
+// 통짜 태스크 칩(서브태스크 없음)의 "지금 뭔가 활발한 게 있나"만 보는 요약 — 개별 칩 점(chipDotState)
+// 전용. 체인 팝오버는 항상 전체를 보여주므로 이 필터를 안 쓴다.
+function chipDotState(item: CalItem, subtaskWork: Record<string, SubtaskWorkStatus[]>): WorkRowState | null {
+	if (item.completed_at) return null // 이미 체크마크로 표시됨(§ renderChip)
+	const work = subtaskWork[item.openId] ?? []
+	if (item.subtaskId) {
+		const state = subtaskRowState(work.find((w) => w.id === item.subtaskId))
+		return state === 'waiting' ? null : state
+	}
+	if (work.some((w) => w.blocked)) return 'blocked'
+	if (work.some((w) => w.alive)) return 'alive'
+	if (work.some((w) => w.stalled)) return 'stalled'
+	return null
+}
+// "이 html파일은 해당 서브태스크 상세에서 계속 볼 수 있도록해줘"(§ SubtaskDetailPanel.openReport)와
+// 완전히 같은 방식 — reportUrl은 앱 서버가 서빙하는 상대 경로라 <a href>가 아니라 내부 브라우저
+// 탭으로 열어야 한다.
+function openSubtaskReport(task: Task | undefined, w: SubtaskWorkStatus) {
+	if (!task?.folder_id || !w.reportUrl) return
+	const port = window.location.port || '18771'
+	useTabsStore.getState().openOrFocusTab(task.folder_id, 'browser')
+	useBrowserNavStore.getState().request(task.folder_id, `http://localhost:${port}${w.reportUrl}`)
+}
+// 팝오버는 document.body로 포탈된다(§ CalendarPane 렌더) — 캘린더 칸(.cell/.cellTasksScroll)이
+// overflow:hidden/auto라 그 안에 그냥 넣으면 잘려서 안 보인다. 그래서 뷰포트 기준 고정 좌표가 필요.
+// 리포트 링크를 실제로 누를 수 있어야 해서(pointer-events:auto) 칩→팝오버 사이 틈을 최소로 둔다.
+function popoverPosition(rect: { top: number; bottom: number; left: number }) {
+	const width = 250
+	const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8)
+	const openUp = window.innerHeight - rect.bottom < 220 && rect.top > 220
+	return openUp ? { left, bottom: window.innerHeight - rect.top + 4, width } : { left, top: rect.bottom + 4, width }
 }
 // "적용해서 5일로 확정됐으면 주/월 캘린더에서도 그만큼 길어져야해... 완전히 이어지게해줘... 중간에
 // 일감이 있을때도 자동으로 처리가 되어야해" — 각 날 칸이 독립적으로 자기 몫만 그리는 방식(칸마다
@@ -218,6 +308,9 @@ export default function CalendarPane() {
 	const updateTaskDueDate = useSessionsStore((s) => s.updateTaskDueDate)
 	const updateSubtaskDueDate = useSessionsStore((s) => s.updateSubtaskDueDate)
 	const openSubtaskDetail = useSessionsStore((s) => s.openSubtaskDetail)
+	// "마우스를 올렸을때 팝오버로 현재 진행중인 작업이 보였으면 좋겠어" — FolderCard/TaskRow와 같은
+	// 전역 폴링 데이터(§ SessionShell의 15초 refreshAllSubtaskWork)를 그대로 구독.
+	const subtaskWork = useSessionsStore((s) => s.subtaskWork)
 	// "좋아. 이것 그대로 두고 이게 캘린더에도 적용되게 해줘" — 사이드바(SessionShell)의 레포 체크박스
 	// 필터를 그대로 공유한다(§ useSessionsStore.repoFilters) — 캘린더 자체 필터 UI는 만들지 않는다.
 	const repoFilters = useSessionsStore((s) => s.repoFilters)
@@ -246,11 +339,29 @@ export default function CalendarPane() {
 	// 별개로, 서브태스크 드래그는 이 컴포넌트 로컬 상태로만 추적한다(사이드바 등 다른 곳은 서브태스크를
 	// 안 다루니 전역일 필요가 없다).
 	const [dragSubtaskId, setDragSubtaskId] = useState<string | null>(null)
+	const [hoverWork, setHoverWork] = useState<{ item: CalItem; rect: { top: number; bottom: number; left: number } } | null>(null)
+	function hoverProps(item: CalItem) {
+		return {
+			onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+				const r = e.currentTarget.getBoundingClientRect()
+				setHoverWork({ item, rect: { top: r.top, bottom: r.bottom, left: r.left } })
+			},
+			onMouseLeave: () => setHoverWork((h) => (h?.item === item ? null : h)),
+		}
+	}
 
 	const allTasks = useMemo(() => {
-		const all = [...inbox, ...folders.flatMap((f) => f.tasks)]
+		// "눈모양으로 안보이게 표시하면 캘린더에서도 안보이게해줘" — 예전엔 숨김(folder.hidden)이 사이드바
+		// 트리에서만 적용되고 캘린더는 이 값을 안 봤다(§types.ts Folder.hidden 주석, completed_at과 같은
+		// 원칙으로 의도적으로 배제했던 것). 이제 캘린더도 같이 걸러낸다 — inbox 항목은 폴더 밖이라
+		// hidden 필드 자체가 없어 그대로 둔다.
+		const all = [...inbox, ...folders.filter((f) => !f.hidden).flatMap((f) => f.tasks)]
 		return repoFilters ? all.filter((t) => !!t.repo_id && repoFilters.has(t.repo_id)) : all
 	}, [inbox, folders, repoFilters])
+	// 팝오버가 칩 하나(item.openId)에서 그 태스크의 서브태스크 전체 체인을 찾아 보여주는 데 쓴다
+	// (§ 아래 hoverWork 팝오버) — filtered(검색으로 좁혀짐)가 아니라 allTasks 기준이면 충분하다,
+	// 검색에 걸러진 태스크의 칩은 애초에 캘린더에 안 그려지니 호버될 일이 없다.
+	const tasksById = useMemo(() => new Map(allTasks.map((t) => [t.id, t])), [allTasks])
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase()
 		return q ? allTasks.filter((t) => t.name.toLowerCase().includes(q)) : allTasks
@@ -341,6 +452,10 @@ export default function CalendarPane() {
 		// "완료해도... 캘린더에는 남아있어야함" — 태스크 트리에서는 걸러내는(SessionShell.tsx) completed_at을
 		// 캘린더는 무시하고 그대로 그린다. 완료됐다는 건 체크마크+취소선으로만 구분.
 		const done = !!item.completed_at
+		// "캘린더화면에서 각 태스크의 상태를 보여주면 좋을듯해. 한눈에 현재 상황이 보일테니까" —
+		// 완료(체크마크)는 이미 있으니, 지금 활발한(실행/도움필요/정지의심) 것만 점으로 더한다 —
+		// 조용한 기본 상태(대기 중)까지 점을 켜면 신호가 묽어진다.
+		const dot = chipDotState(item, subtaskWork)
 		return (
 			<div
 				key={item.id}
@@ -349,13 +464,14 @@ export default function CalendarPane() {
 					background: item.color && !done ? `color-mix(in srgb, ${item.color} 14%, var(--card2))` : undefined,
 				}}
 				{...itemDrag(item)}
+				{...hoverProps(item)}
 				onClick={(e) => {
 					e.stopPropagation()
 					openTask(item)
 				}}
-				title={item.subtaskId ? `${item.parentName} — ${item.name}` : item.name}
 			>
 				{done && <span className={styles.chipCheck}>✓</span>}
+				{dot && <span className={`${taskRowStyles.subChainDot} ${taskRowStyles[subChainDotKey(dot)] ?? ''} ${styles.chainDotReset} ${styles.chipDot}`} />}
 				{item.name}
 			</div>
 		)
@@ -368,6 +484,7 @@ export default function CalendarPane() {
 	function renderLaneBar(e: LaneEntry, cols: number, laneOffset = 0) {
 		const item = e.item
 		const done = !!item.completed_at
+		const dot = chipDotState(item, subtaskWork)
 		return (
 			<div
 				key={item.id}
@@ -379,13 +496,14 @@ export default function CalendarPane() {
 					background: item.color && !done ? `color-mix(in srgb, ${item.color} 16%, var(--card2))` : undefined,
 				}}
 				{...itemDrag(item)}
+				{...hoverProps(item)}
 				onClick={(ev) => {
 					ev.stopPropagation()
 					openTask(item)
 				}}
-				title={tp('{label} (영업일 {days}일)', { label: item.subtaskId ? `${item.parentName} — ${item.name}` : item.name, days: item.duration_days ?? 0 })}
 			>
 				{done && <span className={styles.chipCheck}>✓</span>}
+				{dot && <span className={`${taskRowStyles.subChainDot} ${taskRowStyles[subChainDotKey(dot)] ?? ''} ${styles.chainDotReset} ${styles.chipDot}`} />}
 				{e.continuesLeft ? '‹ ' : ''}
 				{item.name}
 				<span className={styles.chipDuration}>{tp('{days}일', { days: item.duration_days ?? 0 })}</span>
@@ -693,6 +811,69 @@ export default function CalendarPane() {
 
 			<NewTaskModal open={newTaskDate !== null} onClose={() => setNewTaskDate(null)} defaultDueDate={newTaskDate} />
 			<BlockPeriodModal open={blockModalOpen} onClose={() => setBlockModalOpen(false)} defaultStartDate={blockDefaultDate} />
+
+			{hoverWork &&
+				createPortal(
+					<div className={styles.workPopover} style={popoverPosition(hoverWork.rect)} onMouseLeave={() => setHoverWork(null)}>
+						<div className={styles.workPopoverTitle}>{hoverWork.item.parentName}</div>
+						{(() => {
+							const item = hoverWork.item
+							const task = tasksById.get(item.openId)
+							const work = subtaskWork[item.openId] ?? []
+							// "관련 메인태스크 하위로 서브태스크 쭉 나열하고 현재 마우스 올린 태스크 강조로" —
+							// 사이드바 TaskRow와 같은 필터(완료된 건 숨기되, 아직 alive인 건 예외로 보여줌).
+							const chain = (task?.subtasks ?? []).filter((st) => !st.completed_at || work.find((w) => w.id === st.id)?.alive)
+							// 서브태스크가 아예 없는 태스크(taskToCalItem 케이스) — 태스크 자신을 한 줄로.
+							if (chain.length === 0) {
+								const state: WorkRowState = item.completed_at ? 'done' : 'waiting'
+								return (
+									<div className={styles.workRow}>
+										<span className={`${taskRowStyles.subChainDot} ${taskRowStyles[subChainDotKey(state)] ?? ''} ${styles.chainDotReset}`}>{state === 'done' ? CHECK : null}</span>
+										<span className={styles.workRowLabel}>{item.name}</span>
+										<span className={styles.workRowState}>{workStateLabel(state)}</span>
+									</div>
+								)
+							}
+							return chain.map((st) => {
+								const w = work.find((x) => x.id === st.id)
+								const state = subtaskRowState(w)
+								const active = st.id === item.subtaskId
+								return (
+									<div key={st.id} className={`${styles.workRow} ${active ? styles.workRowActive : ''}`}>
+										<span className={`${taskRowStyles.subChainDot} ${taskRowStyles[subChainDotKey(state)] ?? ''} ${styles.chainDotReset}`}>{state === 'blocked' ? HELP : state === 'done' ? CHECK : null}</span>
+										<div className={styles.workRowBody}>
+											<div className={styles.workRowTop}>
+												<span className={styles.workRowLabel}>{st.name}</span>
+												<span className={styles.workRowState}>{workStateLabel(state)}</span>
+											</div>
+											{active && w && (
+												<div className={styles.workRowDetail}>
+													{w.branch && <div className={styles.workDetailLine}>⎇ {w.branch}</div>}
+													{w.worktreePath && <div className={styles.workDetailLine}>{w.worktreePath.split('/').slice(-1)[0]}</div>}
+													{w.blocked && w.blockedReason && <div className={styles.workDetailLine}>{tp('도움 요청: {reason}', { reason: w.blockedReason })}</div>}
+													{w.done && w.reportUrl && (
+														<button
+															type="button"
+															className={styles.workReportLink}
+															onClick={(ev) => {
+																ev.stopPropagation()
+																openSubtaskReport(task, w)
+																setHoverWork(null)
+															}}
+														>
+															{t('완료 리포트 보기')}
+														</button>
+													)}
+												</div>
+											)}
+										</div>
+									</div>
+								)
+							})
+						})()}
+					</div>,
+					document.body,
+				)}
 		</div>
 	)
 }

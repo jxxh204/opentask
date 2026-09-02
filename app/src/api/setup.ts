@@ -28,6 +28,9 @@ export interface AppConfig {
 	deployRepo: string | null
 	deployBase: string | null
 	githubOAuthClientId: string | null
+	// "고스티도 tmux도 설정 토글로 제공해야해. 기본은 터미널이고" — 둘 다 기본 꺼짐(§ store/settings.cjs).
+	terminalGhostty: boolean
+	terminalTmux: boolean
 }
 
 // GitHub 연동 — ① gh CLI 위임 ② OAuth Device Flow (server/githubConnect.cjs)
@@ -67,6 +70,9 @@ export interface OperatorSettings {
 	// server/settings.cjs MODEL_POLICY와 같은 형태 — 액션명 → 실제 claude 모델 id.
 	// 얕은 병합(Settings.save)이라 patch로 보낼 땐 항상 전체 객체를 다시 보내야 한다.
 	modelPolicy?: Record<string, string>
+	// "하이브마인드 전체 운영 모드" — 켜면 15분마다 하이브마인드 자신에게 전체 태스크 그래프 점검
+	// 프롬프트를 자동으로 넣는다(§ server/control.cjs runOpsModeTick). 기본 꺼짐.
+	opsMode?: boolean
 }
 
 export function getOperatorSettings() {
@@ -104,7 +110,9 @@ export function getSetupStatus() {
 	return api.get<SetupStatus>('/api/setup/status')
 }
 
-export function postConnector(id: string, fields: Record<string, string>) {
+// "terminal" 커넥터(ghostty/tmux)는 boolean 필드라 나머지 커넥터의 string 전용 타입을 그대로 못
+// 쓴다 — 백엔드는 이미 타입 무관하게 그대로 저장하므로(§ index.cjs SETUP_CONNECTOR_MAP) 타입만 넓힌다.
+export function postConnector(id: string, fields: Record<string, string | boolean>) {
 	return api.post<SetupStatus & { skipped: string[] }>(`/api/setup/connectors/${encodeURIComponent(id)}`, { fields })
 }
 
@@ -148,4 +156,15 @@ export interface TmuxCheckResult {
 
 export function checkTmux() {
 	return api.get<TmuxCheckResult>('/api/setup/tmux')
+}
+
+// "둘 다 안 깔려있는 사람은 비활성화하고 경고표기" — 위 checkTmux()/TmuxCheckResult는 옛 tmux
+// 아키텍처 시절 온보딩용으로 지금은 하드코딩 stub(§ term.cjs checkAvailable)이라 재사용하지 않는다.
+// 설정 화면의 실제 disabled 판단은 이 값을 본다.
+export interface TerminalCapabilities {
+	tmux: boolean
+	ghostty: boolean
+}
+export function getTerminalCapabilities() {
+	return api.get<TerminalCapabilities>('/api/setup/terminal-capabilities')
 }

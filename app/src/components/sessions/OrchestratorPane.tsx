@@ -6,9 +6,11 @@ import StatusDot from '../common/StatusDot'
 import type { DotColor } from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
 import { useT, translate, translateP } from '../../utils/i18n'
+import { useTabsStore } from '../../store/useTabsStore'
+import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import styles from './OrchestratorPane.module.css'
 
-const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류', blocked: '도움요청', stalled: '응답없음' }
+const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류', blocked: '도움요청', stalled: '응답없음', progress: '진행' }
 const DECISION_LABEL: Record<DecisionKind, string> = { repo_assign: '② 레포 분류', repo_verify_hold: '② 레포 재확인', kind_judge: '⑤ kind 판단', review_verdict: '⑧ 리뷰 판정' }
 
 // 컴포넌트가 아닌 모듈 함수라 useT() 대신 non-hook translate를 직접 쓴다.
@@ -64,6 +66,13 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 	const startConductor = useSessionsStore((s) => s.startConductor)
 	const stopConductor = useSessionsStore((s) => s.stopConductor)
 	const startedRef = useRef<string | null>(null)
+	// "그건 나와 태스크매니저가 같이 봐야해" — 완료 보고(§ SubtaskDetailPanel openReport와 같은 패턴)를
+	// 대화 로그 그 자리에서 바로 열람 — 서브태스크 상세 탭을 따로 찾아 들어갈 필요 없게.
+	function openReport(reportUrl: string) {
+		const port = window.location.port || '18771'
+		useTabsStore.getState().openOrFocusTab(folderId, 'browser')
+		useBrowserNavStore.getState().request(folderId, `http://localhost:${port}${reportUrl}`)
+	}
 	// 감사 로그(§12) — conductor.feed(인메모리, 재시작시 소실)와 별개로 SQLite에 영속된 판정 이유.
 	const [decisions, setDecisions] = useState<Decision[]>([])
 
@@ -169,6 +178,11 @@ export default function OrchestratorPane({ folderId }: { folderId: string }) {
 													<span className={styles.chatTime}>{timeAgo(e.ts)}</span>
 												</div>
 												<div className={styles.chatText}>{e.text}</div>
+												{e.reportUrl && (
+													<button type="button" className={styles.chatReportBtn} onClick={() => openReport(e.reportUrl!)}>
+														{t('보고서 보기')}
+													</button>
+												)}
 											</div>
 										</div>
 									)

@@ -500,3 +500,111 @@
 	background: var(--card2);
 	color: var(--t2);
 }
+
+/* "마우스를 올렸을때 팝오버로 현재 진행중인 작업이 보였으면 좋겠어" — document.body로 포탈되는
+   팝오버(§ CalendarPane.tsx). .cell/.cellTasksScroll이 overflow:hidden/auto라 그 안에 그냥
+   두면 잘려서, position:fixed + 뷰포트 좌표(popoverPosition)로 띄운다. 리포트 버튼을 실제로 눌러야
+   해서(pointer-events:auto) 칩→팝오버 사이를 mouseleave로 잇는다(§ CalendarPane.tsx onMouseLeave). */
+.workPopover {
+	position: fixed;
+	z-index: 50;
+	max-width: 300px;
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-modal);
+	box-shadow: var(--shadow-popover);
+	padding: 10px 12px;
+	pointer-events: auto;
+}
+.workPopoverTitle {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--t3);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin-bottom: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.workRow {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	padding: 3px 0;
+}
+/* 색·애니메이션·크기는 TaskRow.module.css의 subChainDot(+ subChainDot* 변형)를 그대로 쓴다
+   (§ CalendarPane.tsx subChainDotKey) — 같은 상태는 사이드바와 항상 같은 픽셀. 여기선 그 클래스의
+   position:absolute(사이드바 레일 좌표 전용)만 이 레이아웃에 맞게 되돌린다. border-color 같은
+   색 속성은 절대 여기서 다시 선언하지 않는다 — 두 CSS 모듈 파일이 로드 순서에 따라 서로의 색
+   선언을 덮어써버리는 걸 겪은 뒤(§ 커밋 로그) 위치만 !important로 리셋하는 쪽으로 굳혔다. */
+.chainDotReset {
+	position: static !important;
+	left: auto !important;
+	top: auto !important;
+	display: inline-flex !important;
+	vertical-align: middle;
+	flex: none;
+}
+.chipDot {
+	margin-right: 4px;
+}
+.workRowActive {
+	background: var(--card2);
+	border-radius: 6px;
+	margin: 0 -6px;
+	padding: 4px 6px;
+}
+.workRowBody {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.workRowTop {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+.workRowLabel {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.workRowState {
+	flex: none;
+	font-size: 10.5px;
+	color: var(--t2);
+}
+.workRowDetail {
+	margin-top: 4px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.workDetailLine {
+	font-size: 10.5px;
+	font-family: var(--mono, ui-monospace, monospace);
+	color: var(--t3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.workReportLink {
+	align-self: flex-start;
+	margin-top: 2px;
+	border: none;
+	background: none;
+	padding: 0;
+	font-size: 10.5px;
+	font-weight: 600;
+	color: var(--violet);
+	cursor: pointer;
+	text-decoration: underline;
+}
+.workReportLink:hover {
+	color: var(--ink);
+}

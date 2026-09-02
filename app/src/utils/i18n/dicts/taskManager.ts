@@ -43,7 +43,7 @@ const dict: Record<string, string> = {
 	크론잡: 'Cron Jobs',
 	'모델 배정': 'Model Policy',
 	캘린더: 'Calendar',
-	오버마인드: 'Overmind',
+	하이브마인드: 'Hivemind',
 	'팀 규칙': 'Team Rules',
 
 	// OrchestratorPane.tsx — KIND_LABEL/DECISION_LABEL 값 + 나머지 UI 문자열
@@ -93,6 +93,8 @@ const dict: Record<string, string> = {
 	'터미널에 다시 연결합니다': 'Reconnect the terminal',
 	재연결: 'Reconnect',
 	'패널 닫기 (세션은 유지)': 'Close panel (session stays alive)',
+	'워크트리 경로에서 Ghostty를 엽니다(tmux로 유지 중이면 지금 화면 그대로 이어봅니다)': 'Opens Ghostty at this worktree path (if kept alive with tmux, picks up this exact screen)',
+	'고스티에서 열기': 'Open in Ghostty',
 }
 
 export default dict

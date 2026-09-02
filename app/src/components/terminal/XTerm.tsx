@@ -4,6 +4,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useTabsStore } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useSessionsStore } from '../../store/useSessionsStore'
+import { openTermExternal } from '../../api/term'
 import { useT } from '../../utils/i18n'
 import '@xterm/xterm/css/xterm.css'
 
@@ -16,6 +18,24 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 	// 지수 백오프로 자동 재연결하고, 그래도 안 되면 사용자가 직접 누를 수 있게 버튼도 노출한다.
 	const [disconnected, setDisconnected] = useState(false)
 	const reconnectRef = useRef<() => void>(() => {})
+
+	// "고스티도 tmux도 설정 토글로 제공해야해" — 이 세션이 실제로 tmux로 떠 있는지는 프론트가 몰라도
+	// 된다(§ term.cjs openExternal이 서버에서 판단: tmux면 attach, 아니면 새 셸). 버튼 노출 여부만
+	// 전역 설정을 본다.
+	const ghosttyEnabled = useSessionsStore((s) => s.terminalGhostty)
+	const [openingExternal, setOpeningExternal] = useState(false)
+	async function openExternal() {
+		if (openingExternal) return
+		setOpeningExternal(true)
+		try {
+			const r = await openTermExternal(session)
+			if (!r.ok) console.error('[XTerm] 고스티에서 열기 실패:', r.error)
+		} catch (e) {
+			console.error('[XTerm] 고스티에서 열기 실패:', e)
+		} finally {
+			setOpeningExternal(false)
+		}
+	}
 
 	useEffect(() => {
 		if (!hostRef.current) return
@@ -33,11 +53,14 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 		// 시스템 브라우저로 새 창을 띄우는 대신, 지금 활성 노드의 "브라우저" 탭에서 그대로 연다.
 		term.loadAddon(
 			new WebLinksAddon((event, uri) => {
+				console.log('[XTerm] 링크 클릭 감지:', uri)
 				event.preventDefault()
 				const nodeId = useTabsStore.getState().activeNodeId
+				console.log('[XTerm] activeNodeId:', nodeId)
 				if (!nodeId) return
 				useTabsStore.getState().openOrFocusTab(nodeId, 'browser')
 				useBrowserNavStore.getState().request(nodeId, uri)
+				console.log('[XTerm] 브라우저 탭 요청 완료')
 			}),
 		)
 		term.open(hostRef.current)
@@ -133,6 +156,11 @@ export default function XTerm({ session, cwd, onClose, modelLabel }: { session: 
 				{disconnected && (
 					<button className="btn-dry" onClick={() => reconnectRef.current()} title={t('터미널에 다시 연결합니다')}>
 						⟳ {t('재연결')}
+					</button>
+				)}
+				{ghosttyEnabled && (
+					<button className="btn-dry" onClick={openExternal} disabled={openingExternal} title={t('워크트리 경로에서 Ghostty를 엽니다(tmux로 유지 중이면 지금 화면 그대로 이어봅니다)')}>
+						↗ {t('고스티에서 열기')}
 					</button>
 				)}
 				{modelLabel && (

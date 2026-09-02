@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useReviewStore } from '../../store/useReviewStore'
-import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID, CONTROL_NODE_ID } from '../../store/useTabsStore'
+import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import { useUiStore } from '../../store/useUiStore'
 import type { Repo } from '../../store/types'
@@ -11,6 +11,7 @@ import { useT, useTp, translate, localeFor } from '../../utils/i18n'
 import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
+import ControlPane from './ControlPane'
 import PrReviewModal from './PrReviewModal'
 import TaskDetailModal from './TaskDetailModal'
 import SubtaskDetailPanel from './SubtaskDetailPanel'
@@ -62,7 +63,7 @@ const CALENDAR_ICON = (
 )
 // "+ 새 레포 추가"가 텍스트 "+"만 있어서 뭘 하는 액션인지 한눈에 안 들어왔다 — 폴더+플러스 아이콘으로
 // (Orca 사이드바의 "새 프로젝트" 아이콘 참고).
-// 오버마인드(§control.cjs, 구 "관제") — "그냥 내가 준 이미지 그대로 사용해줘": 손그림 시안 대신
+// 하이브마인드(§control.cjs, 구 오버마인드, 그 전엔 "관제") — "그냥 내가 준 이미지 그대로 사용해줘": 손그림 시안 대신
 // 사용자가 준 레퍼런스 이미지(§ tabIcons.tsx overmindIcon)를 그대로 자산화해서 사이드바·탭·채팅
 // 아바타 전부 같은 이미지로 통일.
 const CONTROL_ICON = <img src={overmindIcon} alt="" width={15} height={15} style={{ borderRadius: '22%', display: 'block' }} />
@@ -147,6 +148,7 @@ export default function SessionShell() {
 	const lang = useUiStore((s) => s.lang)
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const folders = useSessionsStore((s) => s.folders)
+	const foldersLoaded = useSessionsStore((s) => s.loaded)
 	const inbox = useSessionsStore((s) => s.inbox)
 	const notes = useSessionsStore((s) => s.notes)
 	const detailTaskId = useSessionsStore((s) => s.detailTaskId)
@@ -167,6 +169,7 @@ export default function SessionShell() {
 	const archive = useSessionsStore((s) => s.archive)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy)
 	const loadArchive = useSessionsStore((s) => s.loadArchive)
+	const loadTerminalGhostty = useSessionsStore((s) => s.loadTerminalGhostty)
 	const restoreFolder = useSessionsStore((s) => s.restoreFolder)
 	const loadGitStatus = useSessionsStore((s) => s.loadGitStatus)
 	const loadTermStatus = useSessionsStore((s) => s.loadTermStatus)
@@ -213,6 +216,10 @@ export default function SessionShell() {
 	const repoFilters = useSessionsStore((s) => s.repoFilters)
 	const toggleRepoFilter = useSessionsStore((s) => s.toggleRepoFilter)
 	const setRepoFilters = useSessionsStore((s) => s.setRepoFilters)
+	// "도킹패널" — 하이브마인드는 이제 노드를 바꿔치기하지 않고(§ useTabsStore controlDockOpen), 지금
+	// 워크스페이스 오른쪽에 얹는 패널로 열고 닫는다.
+	const controlDockOpen = useTabsStore((s) => s.controlDockOpen)
+	const controlDockWidth = useTabsStore((s) => s.controlDockWidth)
 	const [repoPickerOpen, setRepoPickerOpen] = useState(false)
 	const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
 	const [sidebarQuery, setSidebarQuery] = useState('')
@@ -225,9 +232,27 @@ export default function SessionShell() {
 	const multiRepo = repos.length > 1
 	const rootRef = useRef<HTMLDivElement>(null)
 
+	// "일감 생성 버튼과 모달이 불편해" — 예전엔 사이드바의 작은 + 아이콘을 직접 찾아 눌러야만 열렸다
+	// (Linear의 전역 C, Things 3의 전역 퀵엔트리 참고 — 어디서든 한 번에 캡처). Cmd/Ctrl+N은 이 앱
+	// 메뉴 어디에도 안 쓰이고 있어(§electron/main.cjs buildAppMenu) 충돌 없이 그대로 쓴다.
+	useEffect(() => {
+		function onKey(e: KeyboardEvent) {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+				e.preventDefault()
+				setNewTaskModalOpen(true)
+			}
+		}
+		window.addEventListener('keydown', onKey)
+		return () => window.removeEventListener('keydown', onKey)
+	}, [])
+
 	useEffect(() => {
 		loadArchive()
 	}, [loadArchive])
+
+	useEffect(() => {
+		loadTerminalGhostty()
+	}, [loadTerminalGhostty])
 
 	// "ip address가 달라" — 예전엔 마운트 시 딱 한 번만 불러서, 앱을 켜둔 채 Wi-Fi가 바뀌거나(DHCP
 	// 재임대 등) 잠깐 끊겼다 잡히면 상태바의 LAN IP가 영영 옛 값에 멈춰 있었다. gitStatus 등과 같은
@@ -377,22 +402,18 @@ export default function SessionShell() {
 							{t('캘린더')}
 						</button>
 						<button
-							className={`${styles.navLink} ${styles.navLinkControl}`}
+							className={`${styles.navLink} ${styles.navLinkControl} ${controlDockOpen ? styles.navLinkControlActive : ''}`}
 							type="button"
-							onClick={() => {
-								const s = useTabsStore.getState()
-								if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
-								s.setActiveNode(CONTROL_NODE_ID, 'control')
-							}}
+							onClick={() => useTabsStore.getState().toggleControlDock()}
 						>
 							<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
-							<span style={{ flex: 1, textAlign: 'left' }}>{t('오버마인드')}</span>
+							<span style={{ flex: 1, textAlign: 'left' }}>{t('하이브마인드')}</span>
 							{controlTermStatus?.exists && (
 								<StatusDot
 									color={controlTermStatus.needsAuth ? 'red' : controlTermStatus.waiting || controlStalled ? 'amber' : 'green'}
 									pulse={!!controlTermStatus.working || controlStalled}
 									size={7}
-									title={controlStalled ? t('오버마인드가 한동안 응답이 없습니다 — 확인해보세요') : undefined}
+									title={controlStalled ? t('하이브마인드가 한동안 응답이 없습니다 — 확인해보세요') : undefined}
 								/>
 							)}
 						</button>
@@ -550,7 +571,15 @@ export default function SessionShell() {
 							{displayFolders.map((f) => (
 								<FolderCard key={f.id} folder={f} />
 							))}
-							{displayFolders.length === 0 && <div className={styles.treeEmpty}>{q ? t('검색 결과 없음') : t('진행 중인 작업 없음')}</div>}
+							{displayFolders.length === 0 &&
+								(foldersLoaded ? (
+									<div className={styles.treeEmpty}>{q ? t('검색 결과 없음') : t('진행 중인 작업 없음')}</div>
+								) : (
+									<div className={styles.treeLoading}>
+										<span className={styles.treeLoadingDot} />
+										<span>{t('불러오는 중…')}</span>
+									</div>
+								))}
 						</div>
 					)}
 
@@ -642,6 +671,34 @@ export default function SessionShell() {
 				<main className={styles.workspace}>
 					<TabWorkspace />
 				</main>
+				{/* "도킹패널" — 지금 보던 폴더/태스크 탭은 그대로 두고 옆에 얹는다(§ useTabsStore
+				    controlDockOpen, 노드 스왑 아님). 닫히면 언마운트되지만 대화 자체는 서버(§control.cjs)
+				    세션에 있어 다시 열면 그대로 이어진다 — 여기서 매번 새로 fetch만 할 뿐 안 끊긴다. */}
+				{controlDockOpen && (
+					<aside className={styles.controlDock} style={{ width: controlDockWidth }}>
+						{/* "너무 작아" — 왼쪽 경계를 드래그해 폭을 조절한다(§ useTabsStore controlDockWidth,
+						    닫았다 열어도 마지막 폭 유지). */}
+						<div
+							className={styles.controlDockResizer}
+							onMouseDown={(e) => {
+								e.preventDefault()
+								const startX = e.clientX
+								const startWidth = useTabsStore.getState().controlDockWidth
+								function onMove(ev: MouseEvent) {
+									const next = Math.min(900, Math.max(320, startWidth + (startX - ev.clientX)))
+									useTabsStore.getState().setControlDockWidth(next)
+								}
+								function onUp() {
+									document.removeEventListener('mousemove', onMove)
+									document.removeEventListener('mouseup', onUp)
+								}
+								document.addEventListener('mousemove', onMove)
+								document.addEventListener('mouseup', onUp)
+							}}
+						/>
+						<ControlPane onClose={() => useTabsStore.getState().closeControlDock()} />
+					</aside>
+				)}
 			</div>
 
 			<div className={`m ${styles.statusbar}`}>

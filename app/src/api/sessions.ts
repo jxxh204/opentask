@@ -8,7 +8,7 @@ export function getBoard() {
 export function createFolder(input: { name: string; base?: string | null; autoMerge?: boolean; retryLimit?: number; repoId?: string | null }) {
 	return api.post<Folder>('/api/folders', input)
 }
-export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean; repoId: string | null; ruleTask: string | null }>) {
+export function updateFolder(id: string, patch: Partial<{ name: string; base: string | null; order: number; autoMerge: boolean; repoId: string | null; ruleTask: string | null; hidden: boolean }>) {
 	return api.patch<Folder>(`/api/folders/${id}`, patch)
 }
 export function removeFolder(id: string) {
@@ -230,13 +230,15 @@ export interface Conductor {
 }
 // "업무가 멈추든... 서로가 답장을 주는거야" — notifyConductor가 report/blocked/stalled 세 상태 전부
 // 이 kind로 피드에 남긴다(§ server/orchestrator.cjs notifyConductor).
-export type FeedKind = 'msg' | 'plan' | 'dispatch' | 'result' | 'error' | 'blocked' | 'stalled'
+export type FeedKind = 'msg' | 'plan' | 'dispatch' | 'result' | 'error' | 'blocked' | 'stalled' | 'progress'
 export interface FeedEntry {
 	ts: number
 	from: string
 	to: string
 	text: string
 	kind: FeedKind
+	// 완료(result) 보고에 실제 HTML 리포트가 있으면 서빙 URL — 있으면 대화 로그에서 바로 열 수 있다.
+	reportUrl?: string | null
 }
 export interface OrchestrationState {
 	running: boolean

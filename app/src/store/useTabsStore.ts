@@ -23,7 +23,7 @@ export const TAB_LABEL: Record<TabKind, string> = {
 	cronjobs: '크론잡',
 	modelPolicy: '모델 배정',
 	calendar: '캘린더',
-	control: '오버마인드',
+	control: '하이브마인드',
 	teamRules: '팀 규칙',
 }
 
@@ -98,6 +98,18 @@ interface TabsState {
 	moveTabToLeft(id: string, tabId: string): void
 	setActiveRightTab(id: string, tabId: string): void
 	openTabInRight(id: string, kind: TabKind): void
+
+	// "도킹패널" — 하이브마인드를 사이드바 nav로 열면 지금 보던 폴더의 탭 전체가 다른 노드(__control__)로
+	// 바뀌어 현재 작업 화면이 통째로 사라졌다("새로운 창으로 넘어가는" 느낌). 탭으로 노드를 바꾸는 대신
+	// 지금 워크스페이스 오른쪽에 얹는 독립 패널로 뜯어낸다 — 노드/탭과 무관하게 항상 열고 닫을 수 있다.
+	controlDockOpen: boolean
+	openControlDock(): void
+	closeControlDock(): void
+	toggleControlDock(): void
+	// "너무 작아" — 고정폭 380px이 너무 좁다는 피드백으로 드래그 리사이즈 추가. 폭을 여기 저장해둬야
+	// 패널을 접었다 다시 펴도(재마운트) 마지막으로 맞춘 크기가 유지된다.
+	controlDockWidth: number
+	setControlDockWidth(width: number): void
 }
 
 export const useTabsStore = create<TabsState>()((set, get) => ({
@@ -109,6 +121,8 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 	closedByNode: {},
 	claudeSessionByTab: {},
 	claudeModelByTab: {},
+	controlDockOpen: false,
+	controlDockWidth: 520,
 
 	setActiveNode: (id, defaultTab) => {
 		set((s) => {
@@ -277,4 +291,9 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 			}
 		})
 	},
+
+	openControlDock: () => set({ controlDockOpen: true }),
+	closeControlDock: () => set({ controlDockOpen: false }),
+	toggleControlDock: () => set((s) => ({ controlDockOpen: !s.controlDockOpen })),
+	setControlDockWidth: (width) => set({ controlDockWidth: Math.round(width) }),
 }))

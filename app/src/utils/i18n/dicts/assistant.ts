@@ -6,14 +6,14 @@ const dict: Record<string, string> = {
 	'세션 생성 실패': 'Failed to create session',
 	'이미지 업로드 실패': 'Image upload failed',
 	'[이미지 첨부: {path}]': '[Image attached: {path}]',
-	오버마인드: 'Overmind',
+	하이브마인드: 'Hivemind',
 	재시작: 'Restart',
-	'오버마인드에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.':
-		'Ask the Overmind in natural language to create tasks, adjust schedules, set up cron jobs, and more.',
+	'하이브마인드에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.':
+		'Ask the Hivemind in natural language to create tasks, adjust schedules, set up cron jobs, and more.',
 	'이미지 업로드 중…': 'Uploading image…',
-	'오버마인드에게 메시지… (이미지 붙여넣기 가능)': 'Message the Overmind… (you can paste images)',
+	'하이브마인드에게 메시지… (이미지 붙여넣기 가능)': 'Message the Hivemind… (you can paste images)',
 	'보내기 (Enter)': 'Send (Enter)',
-	'오버마인드 세션 시작 중…': 'Starting Overmind session…',
+	'하이브마인드 세션 시작 중…': 'Starting Hivemind session…',
 
 	// ServerPane.tsx
 	'✓ 저장 완료 · {target} 재시작됨': '✓ Saved · {target} restarted',
@@ -34,9 +34,9 @@ const dict: Record<string, string> = {
 	'브랜치 네이밍, 사전 문서 작성 같은 팀마다 다른 개발 관행을 자연어로 적어둔다. 레포별로 따로 저장되고, 네 칸을 전부 비워두면 지금과 완전히 동일하게 동작한다.':
 		'Write down team-specific conventions in natural language — branch naming, doc-first requirements, etc. Saved per repo; leaving all four fields blank keeps current behavior unchanged.',
 	'이 태스크만의 규칙 — "{name}"': 'Rules unique to this task — "{name}"',
-	'오버마인드에게 물어보면서 채우기': 'Fill in by asking the Overmind',
-	'오버마인드 여는 중…': 'Opening Overmind…',
-	'✦ 오버마인드에게 물어보기': '✦ Ask the Overmind',
+	'하이브마인드에게 물어보면서 채우기': 'Fill in by asking the Hivemind',
+	'하이브마인드 여는 중…': 'Opening Hivemind…',
+	'✦ 하이브마인드에게 물어보기': '✦ Ask the Hivemind',
 	'같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.':
 		"Exceptions/quirks unique to this task, not used by other tasks in the same repo. Applied before the team rules below.",
 	'예: 이 작업은 A/B 테스트 플래그로 감싸서 배포한다.': 'e.g. Deploy this work behind an A/B test flag.',

@@ -9,8 +9,8 @@ const dict: Record<string, string> = {
 	'버전 {version} 릴리스 노트/다운로드 열기': 'Open release notes/download for version {version}',
 	'🔔 새 버전 v{version}': '🔔 New version v{version}',
 
-	// SessionShell.tsx — 오버마인드 침묵형 막힘 표시(§ control.cjs checkStalled)
-	'오버마인드가 한동안 응답이 없습니다 — 확인해보세요': "Overmind hasn't responded for a while — please check",
+	// SessionShell.tsx — 하이브마인드 침묵형 막힘 표시(§ control.cjs checkStalled)
+	'하이브마인드가 한동안 응답이 없습니다 — 확인해보세요': "Hivemind hasn't responded for a while — please check",
 
 	// FolderCard.tsx — 지휘자 침묵형 막힘 표시(§ orchestrator.cjs checkStalledSubtasks conductorStalled)
 	'지휘자가 한동안 응답이 없습니다 — 확인해보세요': "The conductor hasn't responded for a while — please check",
@@ -47,7 +47,7 @@ const dict: Record<string, string> = {
 	'날짜 없음': 'No date',
 	크론잡: 'Cron Jobs',
 	캘린더: 'Calendar',
-	오버마인드: 'Overmind',
+	하이브마인드: 'Hivemind',
 	검색: 'Search',
 	'레포 관리': 'Manage repos',
 	'새 레포 추가': 'Add new repo',
@@ -79,6 +79,8 @@ const dict: Record<string, string> = {
 		'If judged clean, merges automatically without human confirmation (right-click to turn off)',
 	'다시 누르면 보관함으로 이동합니다': 'Click again to move to Archive',
 	'완료된 태스크를 보관함으로 이동': 'Move completed task to Archive',
+	'흐리게 표시해 눈에 덜 띄게 합니다 (다시 누르면 원래대로)': 'Dim it so it stands out less (click again to restore)',
+	'다시 누르면 원래 밝기로 돌아옵니다': 'Click again to restore full brightness',
 	'이름 변경': 'Rename',
 	서브태스크: 'Subtask',
 	'서브태스크 추가': 'Add subtask',

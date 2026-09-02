@@ -155,6 +155,10 @@ export interface Folder {
 	updated_at: number
 	archived: 0 | 1
 	archived_at: number | null
+	// "태스크 숨기기" — 완료/보관과 무관하게 사이드바 트리에서 안 보이게(§ db.cjs v27), 캘린더에서도
+	// 안 보이게(§ CalendarPane.tsx allTasks — "눈모양으로 안보이게 표시하면 캘린더에서도 안보이게해줘").
+	hidden: 0 | 1
+	hidden_at: number | null
 	// merge 게이트(§12) — 기본 꺼짐(Merge-ready: 자동 approve만, merge는 사람). 켜면 클린 판정 시 실제 merge까지 자동.
 	auto_merge: 0 | 1
 	// 레포는 폴더 단위로 하나만 — 서브태스크(Task.repo_id)는 폴더 생성 시 이 값을 물려받고 이후로도

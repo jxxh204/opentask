@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
-import { useTabsStore, CONTROL_NODE_ID } from '../../store/useTabsStore'
+import { useTabsStore } from '../../store/useTabsStore'
 import { askControl } from '../../api/control'
 import type { Repo, Folder } from '../../store/types'
 import RepoSelect from './RepoSelect'
@@ -201,9 +201,9 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 			const port = window.location.port || '18771'
 			const prompt = `"${repo.name}" 레포의 "${slot.title}"을(를) 정하려고 해. ${slot.askFor}에 대해 나한테 하나씩 물어봐서 답을 받고, 답변이 다 모이면 그걸 자연스러운 한국어 규칙 문장으로 정리해서 나한테 먼저 보여주고 확정받아. 확정되면 이 curl로 저장해: curl -s -X PATCH http://localhost:${port}/api/repos/${repo.id} -H 'Content-Type: application/json' -d '{"${slot.patchKey}":"<확정된 규칙 텍스트>"}'`
 			await askControl(prompt)
-			const s = useTabsStore.getState()
-			if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
-			s.setActiveNode(CONTROL_NODE_ID, 'control')
+			// "도킹패널" — 예전엔 화면 전체를 __control__ 노드로 바꿔서 지금 만지던 팀 규칙 화면이
+			// 사라졌다. 패널만 옆에 열어서 이 화면에 그대로 머무는 채로 대화를 볼 수 있게 한다.
+			useTabsStore.getState().openControlDock()
 		} finally {
 			setAsking(null)
 		}
@@ -216,9 +216,9 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 			const port = window.location.port || '18771'
 			const prompt = `"${folder.name}" 태스크만의 특별 규칙(같은 레포의 다른 태스크엔 안 쓰이는 이 태스크만의 예외/특이사항)을 정하려고 해. 뭐가 있는지 나한테 하나씩 물어봐서 답을 받고, 답변이 다 모이면 자연스러운 한국어 문장으로 정리해서 먼저 보여주고 확정받아. 확정되면 이 curl로 저장해: curl -s -X PATCH http://localhost:${port}/api/folders/${folder.id} -H 'Content-Type: application/json' -d '{"ruleTask":"<확정된 규칙 텍스트>"}'`
 			await askControl(prompt)
-			const s = useTabsStore.getState()
-			if (!s.tabsByNode[CONTROL_NODE_ID]?.length) s.openTab(CONTROL_NODE_ID, 'control')
-			s.setActiveNode(CONTROL_NODE_ID, 'control')
+			// "도킹패널" — 예전엔 화면 전체를 __control__ 노드로 바꿔서 지금 만지던 팀 규칙 화면이
+			// 사라졌다. 패널만 옆에 열어서 이 화면에 그대로 머무는 채로 대화를 볼 수 있게 한다.
+			useTabsStore.getState().openControlDock()
 		} finally {
 			setAsking(null)
 		}
@@ -246,8 +246,8 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 					<div className={styles.slotHead}>
 						<span className={styles.slotIcon}>🎯</span>
 						<span className={styles.slotTitle}>{tp('이 태스크만의 규칙 — "{name}"', { name: folder.name })}</span>
-						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title={t('오버마인드에게 물어보면서 채우기')}>
-							{asking === 'task' ? t('오버마인드 여는 중…') : t('✦ 오버마인드에게 물어보기')}
+						<button type="button" className={styles.askBtn} disabled={asking === 'task'} onClick={askAboutTask} title={t('하이브마인드에게 물어보면서 채우기')}>
+							{asking === 'task' ? t('하이브마인드 여는 중…') : t('✦ 하이브마인드에게 물어보기')}
 						</button>
 					</div>
 					<p className={styles.slotHint}>{t('같은 레포의 다른 태스크에는 안 쓰이는, 이 태스크만의 예외·특이사항. 아래 팀 규칙보다 먼저 적용된다.')}</p>
@@ -277,8 +277,8 @@ export default function TeamRulesPane({ initialRepoId, folderId }: { initialRepo
 									<span className={styles.slotIcon}>{slot.icon}</span>
 									<span className={styles.slotTitle}>{t(slot.title)}</span>
 									<span className={styles.slotWhere}>{t(slot.where)}</span>
-									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title={t('오버마인드에게 물어보면서 채우기')}>
-										{asking === slot.key ? t('오버마인드 여는 중…') : t('✦ 오버마인드에게 물어보기')}
+									<button type="button" className={styles.askBtn} disabled={asking === slot.key} onClick={() => askAbout(slot)} title={t('하이브마인드에게 물어보면서 채우기')}>
+										{asking === slot.key ? t('하이브마인드 여는 중…') : t('✦ 하이브마인드에게 물어보기')}
 									</button>
 								</div>
 								<p className={styles.slotHint}>{t(slot.hint)}</p>

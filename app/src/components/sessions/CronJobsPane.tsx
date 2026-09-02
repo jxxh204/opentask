@@ -209,7 +209,7 @@ function NewJobForm({ repos, onCreated, onCancel }: { repos: Repo[]; onCreated: 
 			)}
 			{actionType === 'run_instruction' && (
 				<div className={styles.formHint} style={{ marginLeft: 116 }}>
-					{t('이 시각이 되면 이 문장을 오버마인드에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.')}
+					{t('이 시각이 되면 이 문장을 하이브마인드에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.')}
 				</div>
 			)}
 			{error && <div className={styles.formError}>{error}</div>}

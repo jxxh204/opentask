@@ -212,6 +212,30 @@
 	background: var(--atint);
 	color: var(--amber);
 }
+/* "자잘한 업무도 대화하는게 보여야 신뢰가 가니까" — 완료(result=blue)와 구분되는, 진행 중 체크인
+   전용 색(green=진행, 시맨틱 컬러 규칙과 동일). */
+.kind_progress {
+	background: var(--gtint);
+	color: var(--green);
+}
+/* "그건 나와 태스크매니저가 같이 봐야해" — 완료 보고 말풍선에서 바로 여는 리포트 버튼(§
+   SubtaskDetailPanel .metaClear와 같은 무게의 보조 버튼). */
+.chatReportBtn {
+	display: inline-block;
+	margin-top: 6px;
+	font-size: 10.5px;
+	font-weight: 600;
+	padding: 3px 9px;
+	border-radius: var(--radius-chip);
+	border: 1px solid var(--line2);
+	background: var(--card);
+	color: var(--blue);
+	cursor: pointer;
+}
+.chatReportBtn:hover {
+	border-color: var(--blue);
+	background: var(--btint);
+}
 .chatTime {
 	font-size: 9.5px;
 	color: var(--t3);

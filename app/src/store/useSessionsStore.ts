@@ -6,6 +6,7 @@ import { detectLink, LINK_LABEL } from '../utils/linkDetect'
 import { translate, translateP } from '../utils/i18n'
 import { listTerm } from '../api/term'
 import type { TermStatus } from '../api/term'
+import { getSetupStatus } from '../api/setup'
 import { useReviewStore } from './useReviewStore'
 import { useTabsStore } from './useTabsStore'
 
@@ -73,6 +74,10 @@ export interface SessionsState {
 	archive: Folder[]
 	archiveLoaded: boolean
 	archiveBusy: string | null
+	// "고스티도 tmux도 설정 토글로 제공해야해" — XTerm.tsx의 "고스티에서 열기" 버튼을 보여줄지 결정하는
+	// 전역 설정값. 여러 터미널 탭이 동시에 떠도 한 번만 불러오면 되므로 SessionShell에서 loadArchive와
+	// 같은 패턴으로 한 번만 로드한다(§ loadTerminalGhostty).
+	terminalGhostty: boolean
 	// "메인 태스크 오른쪽 마우스 클릭하면 삭제" — archiveBusy와 같은 패턴, 별도 필드(동시에 두 동작이
 	// 겹칠 일은 없지만 의미를 분리해두는 게 나음).
 	deleteBusy: string | null
@@ -145,6 +150,7 @@ export interface SessionsState {
 	createTaskInFolder(folderId: string | null, name: string): Promise<string | null>
 	renameFolder(id: string, name: string): Promise<void>
 	setFolderAutoMerge(id: string, on: boolean): Promise<void>
+	setFolderHidden(id: string, hidden: boolean): Promise<void>
 	renameTask(id: string, name: string): Promise<void>
 	updateTaskDesc(id: string, desc: string): Promise<void>
 	updateTaskRepo(id: string, repoId: string | null): Promise<void>
@@ -215,6 +221,7 @@ export interface SessionsState {
 
 	// 보관함 — 완료된 폴더를 지우지 않고 archived로만 표시, 날짜별로 보존
 	loadArchive(): Promise<void>
+	loadTerminalGhostty(): Promise<void>
 	loadGitStatus(): Promise<void>
 	loadTermStatus(): Promise<void>
 	loadHealth(): Promise<void>
@@ -256,6 +263,7 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 	blockedPeriods: [],
 	blockedPeriodsLoaded: false,
 	archive: [],
+	terminalGhostty: false,
 	archiveLoaded: false,
 	archiveBusy: null,
 	deleteBusy: null,
@@ -516,6 +524,17 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		set((s) => ({ folders: s.folders.map((f) => (f.id === id ? { ...f, auto_merge: on ? 1 : 0 } : f)) }))
 		try {
 			await SessionsApi.updateFolder(id, { autoMerge: on })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// "태스크 숨기기 기능있으면 좋겠다. 다 보여서 힘들어" — archiveFolder(완료 전용, 복원 확인 절차)와
+	// 달리 언제든 가볍게 켜고 끌 수 있어야 해서 확인 절차 없이 바로 토글.
+	setFolderHidden: async (id, hidden) => {
+		set((s) => ({ folders: s.folders.map((f) => (f.id === id ? { ...f, hidden: hidden ? 1 : 0, hidden_at: hidden ? Date.now() : null } : f)) }))
+		try {
+			await SessionsApi.updateFolder(id, { hidden })
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
 			await get().loadBoard()
@@ -980,6 +999,18 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}
 	},
 
+	// "고스티도 tmux도 설정 토글로 제공해야해" — SettingsModal이 값을 바꾸는 동안 이 store는 낡은 값을
+	// 들고 있을 수 있지만(설정 모달을 닫을 때까지), 다음 세션 생성부터만 영향을 주는 값이라 실시간
+	// 동기화가 아쉽지 않다 — 앱 시작 시 한 번만 불러온다(§ SessionShell 초기 useEffect).
+	loadTerminalGhostty: async () => {
+		try {
+			const { appConfig } = await getSetupStatus()
+			set({ terminalGhostty: !!appConfig.terminalGhostty })
+		} catch (_) {
+			/* 조용히 무시 — 버튼을 안 보여주는 쪽으로 안전하게 폴백 */
+		}
+	},
+
 	// /api/cockpit는 stale-while-revalidate 캐시(15초 fresh)라 자주 불러도 서버에 부담 없음 — 실패해도
 	// 조용히 무시(PR 배지·상태바 요약은 있으면 좋은 부가 정보지, 실패했다고 보드 전체를 에러로 만들
 	// 정도는 아님).
@@ -1142,6 +1173,27 @@ export function openTaskOrFolderDetail(taskId: string) {
 		useTabsStore.getState().openOrFocusTab(task.folder_id, 'detail')
 	} else {
 		s.openTaskDetail(taskId)
+	}
+}
+
+// 하이브마인드 컨텍스트 캔버스(§ ControlPane.tsx CanvasCard) 클릭용 — 서브태스크 id 하나만 갖고 있고
+// 어느 폴더/태스크 소속인지는 모르는 상황(비서의 tool_use 응답엔 subtask id만 들어있다)에서, 전체
+// folders 트리를 훑어 openSubtaskTab에 필요한 folderId·parentTaskId를 역으로 찾아낸다. 못 찾으면(그
+// 사이 삭제됐거나 아직 폴더 목록이 안 실렸으면) 조용히 아무 일도 안 한다 — 클릭 한 번의 결과로 에러를
+// 띄울 만큼 중요한 실패가 아니다.
+// 이름을 openSubtaskDetail로 지었다가 스토어의 기존 액션(§ 위 openSubtaskDetail: (subtaskId,
+// parentTaskId) => set(...) — 상세 드로어를 여는 전혀 다른 함수)과 이름이 겹쳐서 focusSubtaskTab으로
+// 바꿨다. 같은 모듈이라 문법 충돌은 없었지만 import 시 어느 쪽인지 헷갈릴 뻔했다.
+export function focusSubtaskTab(subtaskId: string) {
+	const s = useSessionsStore.getState()
+	for (const f of s.folders) {
+		for (const t of f.tasks) {
+			const st = t.subtasks.find((x) => x.id === subtaskId)
+			if (st) {
+				useTabsStore.getState().openSubtaskTab(f.id, st.id, t.id, st.name)
+				return
+			}
+		}
 	}
 }
 

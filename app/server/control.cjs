@@ -74,7 +74,7 @@ function registerControlMcp(cwd) {
 function controlSeed(extra) {
 	const port = process.env.OPENRM_PORT || 8770
 	const operator = Settings.operatorName()
-	return `[역할: OpenTask 오버마인드] 너는 특정 태스크가 아니라 OpenTask 앱 전체를 대화로 조작하는 오버마인드야. ${operator}가 너와 직접 대화한다. 바로 실행하지 말고 계획부터 보고하고 승인받아.
+	return `[역할: OpenTask 하이브마인드] 너는 특정 태스크가 아니라 OpenTask 앱 전체를 대화로 조작하는 하이브마인드야. ${operator}가 너와 직접 대화한다. 바로 실행하지 말고 계획부터 보고하고 승인받아.
 
 ■ 언어: ${operator}가 쓰는 언어에 맞춰 답변해라 — 영어로 물으면 영어로, 한국어로 물으면 한국어로. 대화
 도중 상대가 언어를 바꾸면 너도 바로 그 언어로 전환한다.
@@ -87,14 +87,15 @@ function controlSeed(extra) {
   create_task에 repo를 안 채웠으면 start_task 전에 반드시 사람에게 레포를 물어봐서 채워라 — "자동으로
   알아서 배정될 거예요" 같은 말은 절대 하지 마라.
 - reschedule_task: 태스크 마감일(캘린더 날짜)만 빠르게 변경
-- create_subtask / update_subtask / delete_subtask: 태스크 하나를 개발/개발자테스트/QA/배포 같은 단계로 쪼갠 서브태스크 관리(각자 자기 설명·예정일·기간을 가짐). 실제 워크트리+클로드 세션을 띄우는 건 이 툴셋에 없다 — 그건 태스크 상세페이지에서 사람이 직접 하는 무거운 동작이라 오버마인드가 대신하지 않는다.
+- dispatch_to_task: 이미 시작된 태스크의 지휘자(태스크 매니저) 세션에 직접 지시를 전달. 운영 모드 점검 중 방향 수정·재촉·막힘 해소 지시에 쓴다 — 아직 시작 안 된(일감함) 태스크엔 지휘자가 없어 못 쓴다.
+- create_subtask / update_subtask / delete_subtask: 태스크 하나를 개발/개발자테스트/QA/배포 같은 단계로 쪼갠 서브태스크 관리(각자 자기 설명·예정일·기간을 가짐). 실제 워크트리+클로드 세션을 띄우는 건 이 툴셋에 없다 — 그건 태스크 상세페이지에서 사람이 직접 하는 무거운 동작이라 하이브마인드가 대신하지 않는다.
 - list_blocked_periods / create_blocked_period / delete_blocked_period: 캘린더 차단 기간(예: "QA 기간") 관리 — 만들면 겹치는 기존 일정이 자동으로 뒤로 밀린다.
 - list_cron_jobs / create_cron_job / update_cron_job / delete_cron_job / run_cron_job_now: 크론잡(자동화) 관리
 - read_settings / update_setting: 운영 설정 조회·변경 (경로/앱/배포/웹훅 등만 — GitHub 토큰, DB 연결문자열 같은 비밀값은 이 툴로 못 건드린다. 그건 설정 화면에서 사람이 직접 해야 함)
 
 MCP 툴이 안 보이거나 호출이 실패하면 curl로 폴백: curl -s http://localhost:${port}/api/... (엔드포인트는 OpenTask 서버 코드 기준)
 
-■ 오버마인드답게 — "태스크 만들어줘"처럼 이름만 던져주고 끝나는 요청이 흔하다. 설명·마감일·기간·레포처럼
+■ 하이브마인드답게 — "태스크 만들어줘"처럼 이름만 던져주고 끝나는 요청이 흔하다. 설명·마감일·기간·레포처럼
 뭘 만들지에 실제로 영향을 주는 정보가 비어있으면 추측해서 그냥 만들지 말고, 짧게 하나씩 물어봐서
 채운 뒤에 만들어라(팀 규칙 빈칸을 물어보며 채우는 것과 같은 태도). 사소한 값(색상 등)까지 전부 캐물어
 피곤하게 만들 필요는 없다 — 실제로 판단이 갈리는 것만.
@@ -102,22 +103,27 @@ MCP 툴이 안 보이거나 호출이 실패하면 curl로 폴백: curl -s http:
 ■ 원칙: 요청을 이해하고, 뭘 할지 먼저 ${operator}에게 확인받은 뒤 실행해. 완료하면 뭘 했는지 요약해서 보고해.${extra ? `\n\n■ 지금 바로 이걸 도와줘:\n${extra}` : ''}`
 }
 
-// tmux가 있으면 오버마인드용 세션 이름을 포트별로 고정 — 여러 인스턴스(포트 다른 실행/데모)가 같은
+// tmux가 있으면 하이브마인드용 세션 이름을 포트별로 고정 — 여러 인스턴스(포트 다른 실행/데모)가 같은
 // tmux 세션을 두고 다투지 않게 CONTROL_CWD와 같은 포트-스코프 규칙을 그대로 따른다.
 const TMUX_SESSION = `opentask-control-${process.env.OPENRM_PORT || 8770}`
 
+// "유저가 직접 확인하는 것도 쉬워야하는데" — 운영 모드가 실제로 살아 돌고 있는지 채팅을 스크롤하지
+// 않고도 한눈에 알 수 있게, 마지막으로 점검이 실행된 시각을 getState에 얹는다(헤더에 "마지막 점검:
+// HH:MM"으로 표시 — § ControlPane.tsx). opsMode 자체는 설정(Settings.opsMode)이 단일 진실 소스.
+let lastOpsTickAt = null
 async function getState() {
-	if (!state) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux() }
+	const opsMode = !!Settings.get('opsMode')
+	if (!state) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux(), opsMode, lastOpsTickAt }
 	const live = await Term.list().catch(() => [])
 	if (!isLive(live, state.session)) {
 		state = null
-		return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux() }
+		return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux(), opsMode, lastOpsTickAt }
 	}
-	return { running: true, stalled: !!controlStalled, persistent: Term.hasTmux(), ...state }
+	return { running: true, stalled: !!controlStalled, persistent: Term.hasTmux(), opsMode, lastOpsTickAt, ...state }
 }
 
 // "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — orchestrator.cjs checkStalledSubtasks의
-// 지휘자·서브태스크용 안전망과 같은 개념을 오버마인드에도 그대로 적용한다. 오버마인드는 폴더 하나에
+// 지휘자·서브태스크용 안전망과 같은 개념을 하이브마인드에도 그대로 적용한다. 하이브마인드는 폴더 하나에
 // 묶이지 않는 전역 세션이라 맵이 아니라 모듈 전역 불리언 하나로 충분하다.
 const STALLED_THRESHOLD_MS = 3 * 60 * 1000
 let controlStalled = false
@@ -140,7 +146,7 @@ async function checkStalled() {
 	if (Date.now() - last < STALLED_THRESHOLD_MS || controlStalled) return
 	controlStalled = true
 	const mins = Math.round((Date.now() - last) / 60000)
-	Notify.notifyEscalation('💤 오버마인드 응답 없음', `${mins}분째 조용합니다.`)
+	Notify.notifyEscalation('💤 하이브마인드 응답 없음', `${mins}분째 조용합니다.`)
 }
 
 // "비서 세션이 자꾸 초기화돼" — term.cjs 세션은 이 서버 프로세스의 자식이라 서버 재시작마다(코드
@@ -183,9 +189,32 @@ async function stop() {
 	return { ok: true }
 }
 
+// "세션을 초기화하는거나.. 하이브마인드를 자주사용해서 사용성 개선이 필요해" — 기존 "재시작"
+// 버튼(restart, ControlPane.tsx)은 사실 claude --continue라 같은 대화를 그대로 이어받는다(tmux만
+// 새로 뜸, § start()) — 대화가 꼬였거나 너무 길어졌을 때 진짜 새로 시작할 방법이 없었다. 이건
+// stop()과 같은 방식으로 완전히 죽인 뒤, --continue 없이 맨 claude를 새로 띄운다 — 예전 대화의
+// jsonl 파일은 디스크에 그대로 남지만(삭제 안 함) 다시 이어받지 않는다, 진짜 빈 대화로 시작.
+async function reset(extra) {
+	if (state) await Term.kill(state.session).catch(() => {})
+	if (Term.hasTmux()) {
+		try {
+			execFileSync('tmux', ['kill-session', '-t', TMUX_SESSION], { stdio: 'ignore' })
+		} catch (_) {}
+	}
+	state = null
+	registerControlMcp(CONTROL_CWD)
+	const model = Settings.modelFor('control')
+	const command = Term.hasTmux() ? `tmux new-session -A -s ${TMUX_SESSION} -c "${CONTROL_CWD}" "claude"` : 'claude'
+	const t = await Term.create({ cwd: CONTROL_CWD, command, label: 'control', model, seed: controlSeed(extra) })
+	if (!t.ok) return { ok: false, error: t.error }
+	const modelLabel = Settings.modelLabelFor('control')
+	state = { session: t.name, model, modelLabel, startedAt: Date.now(), cwd: CONTROL_CWD }
+	return { ok: true, ...state }
+}
+
 // "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(stop과 다름), 지금 생성 중인 응답만 ESC로 끊는다.
 async function interrupt() {
-	if (!state) return { ok: false, error: '오버마인드 세션이 없습니다.' }
+	if (!state) return { ok: false, error: '하이브마인드 세션이 없습니다.' }
 	return Term.interrupt(state.session)
 }
 
@@ -205,4 +234,150 @@ async function ask(text) {
 	return await start(text)
 }
 
-module.exports = { getState, start, stop, ask, interrupt, checkStalled, CONTROL_CWD }
+// "하이브마인드 전체 운영 모드... 전체 태스크 그래프를 그리고 태스크 업무 방향성 확인과 지시. 기간내에
+// 끝낼 수 있도록 지속적인 추적과 멈춤을 확인하고 지시 이행" — 새 알고리즘을 따로 짜는 대신, 이미 대화
+// 중인 하이브마인드 자신에게 주기적으로 같은 점검 프롬프트를 다시 넣어 스스로(list_tasks로 전체 그래프
+// 확인 → dispatch_to_task로 지휘자에게 지시) 판단·행동하게 한다 — 하이브마인드가 이미 가진 도구·판단력을
+// 그대로 재사용(§ mcpControl.cjs dispatch_to_task).
+//
+// "명시도 해줘" — 이 프롬프트는 사람이 친 게 아니라 시스템이 넣은 거라는 걸 채팅에서 구분할 수 있어야
+// 한다. 고정 마커로 시작해서 넣고, transcript.cjs가 이 마커를 보고 그 턴을 auto:true로 표시해
+// ControlPane.tsx가 일반 사용자 말풍선과 다르게(자동 점검 배지) 그린다 — 새 UI 표면을 안 만들고 이미
+// 보고 있는 채팅 안에서 바로 구분되게.
+const OPS_TICK_MARKER = '[운영 모드 자동 점검]'
+async function runOpsModeTick() {
+	if (!Settings.get('opsMode')) return { ok: true, skipped: 'off' }
+	if (!state) return { ok: true, skipped: 'not-running' }
+	const live = await Term.list().catch(() => [])
+	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
+	if (!match) return { ok: true, skipped: 'no-session' }
+	// 바쁘면(생성 중이거나 다른 질문 대기 중) 끼어들지 않고 다음 15분 tick에 다시 시도한다 — injectSeed가
+	// 지금 타이핑 중인 걸 덮어쓰거나 응답 도중에 새 지시가 섞여 들어가는 걸 막는다.
+	const status = await Term.status(match.name).catch(() => null)
+	if (!status || status.working || status.waiting) return { ok: true, skipped: 'busy' }
+	const prompt = `${OPS_TICK_MARKER} list_tasks로 전체 태스크 그래프를 확인하고, 각 태스크가 기한 안에 끝날 방향으로 가고 있는지 점검해라. 멈췄거나(막힘·응답없음) 방향이 어긋난 게 있으면 dispatch_to_task로 해당 태스크의 지휘자에게 구체적으로 지시해라. 전부 정상이면 지시 없이 짧게 "이상 없음"이라고만 보고해라. 판단이 필요한 애매한 사안이면 지시하지 말고 사람에게 물어봐라.`
+	const oneLine = prompt.replace(/[\r\n]+/g, ' ')
+	await Term.injectSeed(match.name, oneLine).catch(() => {})
+	lastOpsTickAt = Date.now()
+	return { ok: true }
+}
+
+// "이걸 UI로 풀어줘 답변할 수 없어. AskUserQuestion를 UI로 표현해서 마우스로 클릭 가능하도록" →
+// 처음엔 대화 기록(jsonl) 폴링에서 "tool_use는 있는데 result가 아직 null"인 순간을 붙잡아 그 input을
+// 그대로 파싱해 버튼으로 그리는 방식으로 만들었다("질문이 안왔는데?"로 실패가 드러남) — 실제로 그
+// jsonl 파일을 떠 있는 세션 것으로 직접 열어보니, AskUserQuestion의 tool_use 레코드 자체가 **사람이
+// 답하기 전까진 파일에 전혀 안 쓰인다**(2026-09-01 실측: 화면엔 질문이 떠 있는데 jsonl 마지막 줄은
+// 그 이전 Bash 호출의 결과였다). 그래서 대화 기록 폴링으론 "지금 질문이 떠 있다" 자체를 원천적으로
+// 감지할 수 없다 — 그 상태가 jsonl에 나타나는 유일한 순간은 이미 답변까지 끝난 뒤뿐이다.
+//
+// 대신 살아있는 pty 화면을 직접 읽는다(§term.cjs capturePane — xterm.js 헤드리스 버퍼라 tmux 유무와
+// 무관하게 항상 동작, status()가 stalled 판정에 쓰던 것과 같은 소스). 화면 텍스트를 파싱해 옵션
+// 목록·멀티선택 여부·체크 상태까지 뽑아낸다 — AskUserQuestion 렌더링에만 고정으로 붙는 "Type
+// something" 옵션 줄을 트리거로 삼는다(다른 프롬프트엔 안 나옴, 실측 확인). 키 시퀀스 자체는 여전히
+// 실측(§ 이전 buildAnswerKeys 실험)대로지만, 이제 한 번에 여러 질문을 미리 계산해 배치로 쏘지 않고
+// **클릭 하나 = 지금 화면에 보이는 것 그대로 키 하나**로 좁혔다 — 그 편이 옵션 인덱스가 화면과
+// 어긋날 위험이 아예 없다(항상 방금 파싱한 실제 화면 기준으로만 키를 계산).
+const ASK_TRIGGER_RE = /Type something/
+function parseLivePrompt(text) {
+	if (!text) return null
+	// Review 화면 — 여러 질문에 다 답한 뒤 최종 확인. "1. Submit answers"가 항상 첫 항목이라 옵션
+	// 파싱 없이도 action 'submit'/'cancel' 두 가지로 고정.
+	if (/Ready to submit your answers\?/.test(text)) {
+		const m = text.match(/Review your answers\s*\n([\s\S]*?)\n\s*Ready to submit your answers\?/)
+		return { kind: 'review', summary: (m ? m[1] : '').trim() }
+	}
+	if (!ASK_TRIGGER_RE.test(text)) return null
+	const lines = text.split('\n')
+	// "❯ 1. Red" / "  2. [ ] Cheese" 형태 — 체크박스는 멀티선택일 때만 붙는다.
+	const optionRe = /^\s*❯?\s*(\d+)\.\s*(\[[ x✔]\]\s*)?(.+?)\s*$/
+	let firstOptionIdx = -1
+	for (let i = 0; i < lines.length; i++) {
+		const m = lines[i].match(optionRe)
+		if (m && m[1] === '1') {
+			firstOptionIdx = i
+			break
+		}
+	}
+	if (firstOptionIdx < 0) return null
+	// 질문 텍스트는 옵션 목록 바로 위, 첫 비어있지 않은 줄 — 화면이 짧아 이 줄이 스크롤 밖이면
+	// 그냥 빈 문자열(옵션 파싱 자체는 그 줄과 무관하게 항상 성공한다).
+	let question = ''
+	for (let j = firstOptionIdx - 1; j >= 0; j--) {
+		const t = lines[j].trim()
+		if (!t) continue
+		question = t
+		break
+	}
+	const options = []
+	let multiSelect = false
+	let n = 1
+	for (let i = firstOptionIdx; i < lines.length; i++) {
+		const m = lines[i].match(optionRe)
+		if (!m) continue
+		if (Number(m[1]) !== n) break // 번호가 끊기면(예: 다음 탭·"Chat about this") 실제 옵션 끝
+		const label = m[3].replace(/\.$/, '').trim()
+		if (/^Type something$/i.test(label)) break // 자유 입력 슬롯 — 이 버튼 UI 범위 밖
+		if (m[2]) multiSelect = true
+		options.push({ label, checked: !!(m[2] && /[x✔]/.test(m[2])) })
+		n++
+	}
+	if (!options.length) return null
+	return { kind: 'question', question, multiSelect, options }
+}
+
+// 지금 화면이 AskUserQuestion류 프롬프트를 보여주고 있는지 + (파싱되면) 그 구조까지 함께 돌려준다.
+// prompt가 null인데 waiting만 true면(예: 파싱 못 한 다른 형태의 인터랙티브 프롬프트) 프론트가
+// raw XTerm 폴백으로 물러난다 — status()의 waiting 판정(§term.cjs)을 그대로 재사용해 최소한
+// "뭔가 사람 입력을 기다리고 있다"는 신호는 항상 놓치지 않는다.
+// "멈추기도 동작안하고 채팅창도 꺠져" — ControlPane.tsx의 "지금 생성 중인가"는 예전엔 오직 대화
+// 기록(jsonl) 모양(마지막 턴이 assistant/text로 안 끝났으면 생성 중)으로만 추측했다. /compact 같은
+// 로컬 명령은 그 자체로 끝 — 뒤이어 assistant 응답이 절대 안 온다(§ transcript.cjs isSyntheticUserContent
+// 주석과 같은 발견) — 그러면 마지막 턴이 영원히 user로 남아 "생성 중"으로 오판, 점 3개가 안 꺼지고
+// 정지 버튼을 눌러도(ESC 전송) 정작 CLI는 이미 유휴 상태라 아무 일도 안 일어난다(실측, 2026-09-02).
+// 대화 기록 대신 실제 pty의 working 신호(§term.cjs status — "esc to interrupt" 등 실측된 판정, stalled
+// 감지에도 쓰는 바로 그것)를 함께 돌려줘 프론트가 이걸 진짜 기준으로 삼게 한다.
+// status().working은 "esc to interrupt"/"…(…tokens" 같은 고정 문구가 화면에 보일 때만 잡는다 —
+// 실측(2026-09-02)해보니 긴 응답이 빠르게 줄줄 스트리밍되는 동안엔 그 문구 자체가 화면에 아예 안
+// 뜨는 구간이 있다(토큰이 실제로 계속 찍히고 있는데도 status.working=false). 그래서 1초 폴링
+// 주기와 맞춰, 직전 스냅샷과 화면 전체가 달라졌는지도 같이 본다 — 어디가 달라졌든 뭔가 계속 그려지고
+// 있다는 뜻이라 그 자체로 "생성 중"의 더 일반적인 증거다. 세션당 마지막 스냅샷만 들고 있으면 충분
+// (다음 폴링 tick의 비교 대상).
+const lastCaptureBySession = new Map()
+async function getLivePrompt() {
+	if (!state) return { ok: true, waiting: false, working: false, prompt: null }
+	const live = await Term.list().catch(() => [])
+	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
+	if (!match) return { ok: true, waiting: false, working: false, prompt: null }
+	const [status, text] = await Promise.all([Term.status(match.name).catch(() => null), Promise.resolve(Term.capturePane(match.name) || '')])
+	const prompt = parseLivePrompt(text)
+	const prevText = lastCaptureBySession.get(match.name)
+	lastCaptureBySession.set(match.name, text)
+	const changedSinceLastPoll = prevText !== undefined && prevText !== text
+	return { ok: true, waiting: !!(prompt || (status && status.waiting)), working: !!((status && status.working) || changedSinceLastPoll), prompt }
+}
+
+// action: { type: 'select'|'toggle', index: number } | { type: 'next' } | { type: 'submit' } | { type: 'cancel' }
+// — 전부 지금 화면 기준으로 프론트가 직접 고른 것(§ ControlPane.tsx LivePromptPanel)을 그대로 키
+// 하나로 옮긴다. select/toggle의 index는 parseLivePrompt가 돌려준 options의 0-based 인덱스.
+function keyForAction(action) {
+	if (!action || typeof action !== 'object') return null
+	if ((action.type === 'select' || action.type === 'toggle') && Number.isInteger(action.index) && action.index >= 0) {
+		return String(action.index + 1)
+	}
+	if (action.type === 'next') return '\x1b[C' // → (오른쪽 화살표) — xterm.js가 실제 키보드 입력 때 보내는 것과 같은 표준 CSI 시퀀스.
+	if (action.type === 'submit') return '1' // Review 화면의 "1. Submit answers"
+	if (action.type === 'cancel') return '2' // Review 화면의 "2. Cancel"
+	return null
+}
+async function sendLiveAction(action) {
+	if (!state) return { ok: false, error: '하이브마인드 세션이 없습니다.' }
+	const key = keyForAction(action)
+	if (key == null) return { ok: false, error: '알 수 없는 동작' }
+	const live = await Term.list().catch(() => [])
+	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
+	if (!match) return { ok: false, error: '하이브마인드 세션이 살아있지 않습니다.' }
+	Term.write(match.name, key)
+	return { ok: true }
+}
+
+module.exports = { getState, start, stop, reset, ask, interrupt, getLivePrompt, sendLiveAction, runOpsModeTick, checkStalled, CONTROL_CWD, OPS_TICK_MARKER }

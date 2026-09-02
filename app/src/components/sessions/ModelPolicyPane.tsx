@@ -9,7 +9,7 @@ import styles from './ModelPolicyPane.module.css'
 const MODEL_ACTIONS: { id: string; label: string }[] = [
 	{ id: 'design', label: '설계·아키텍처' },
 	{ id: 'orchestrator', label: '태스크 매니저(서브태스크 체인 조율)' },
-	{ id: 'control', label: '오버마인드(캘린더·크론잡·설정)' },
+	{ id: 'control', label: '하이브마인드(캘린더·크론잡·설정)' },
 	{ id: 'dev', label: '▶진행 제품 코딩' },
 	{ id: 'review', label: 'PR 코드 리뷰' },
 	{ id: 'improve', label: '리뷰대로 코드 개선' },

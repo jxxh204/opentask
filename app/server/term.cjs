@@ -21,6 +21,9 @@ const { Terminal } = require('@xterm/headless')
 const { SerializeAddon } = require('@xterm/addon-serialize')
 const Worktrees = require('./worktrees.cjs') // dev 시작 시 node_modules/env 보장용 (worktrees→collector, 순환 없음)
 const Settings = require('./settings.cjs')
+// index.cjs와 같은 별칭(AppCfg) — 위 Settings(모델 배정용 server/settings.cjs)와는 다른 모듈이라
+// 이름이 겹치면 안 된다. terminalTmux 전역 토글을 읽기 위해서만 쓴다(§ create()의 tmux 자동 래핑).
+const AppCfg = require('./store/settings.cjs')
 
 // claude가 한 번도 안 본 cwd에서는 "이 폴더를 신뢰하시겠습니까?" 1회성 확인 다이얼로그가 뜨는데,
 // 이게 뜨면 주입한 seed가 다이얼로그 위에 얹혀 채팅으로 전달되지 못하고 유실된다 —
@@ -186,7 +189,7 @@ const CLAUDE_IDENTITY_ENV_KEYS = [
   'ORCA_WORKTREE_ID',
   'ORCA_WORKSPACE_ID',
 ]
-// "계속 유지(백그라운드 실행 & 하나의 세션)" — 오버마인드 전용, tmux가 있으면 control.cjs가 pty에
+// "계속 유지(백그라운드 실행 & 하나의 세션)" — 하이브마인드 전용, tmux가 있으면 control.cjs가 pty에
 // 타이핑해 넣는 명령을 `claude --continue` 대신 `tmux new-session -A ...`로 바꿔, 서버가 재시작돼도
 // (§ 파일 상단 "⚠️ 트레이드오프" 주석) 실제 claude 프로세스는 tmux 데몬 밑에서 안 죽는다. tmux는
 // npm 패키지가 아니라 시스템 바이너리라(패키징된 앱을 받는 다른 팀원 맥엔 없을 수 있음) 있을 때만
@@ -205,6 +208,121 @@ function hasTmux() {
   return _hasTmux
 }
 
+// "orm-control pane이 general-purpose 서브에이전트 pane 15개에 짓눌려 2칸 폭으로 찌부러짐" — 실제
+// 재현·원인 확인(2026-09-01): Task 서브에이전트가 tmux 안에서 돌 때마다 새 pane을 열고, 끝나도
+// 자동으로 안 닫힌다(claude CLI 자체 동작 — 이 앱 코드가 pane을 만드는 게 아니라 손쓸 수 없다). 창
+// 하나에 빈 pane이 계속 쌓이면 tmux 레이아웃이 기존 pane들을 계속 눌러, 결국 진짜 대화가 오가는
+// pane 0까지 몇 칸 폭으로 짜부라지고(실측: 2x29) 그 안 텍스트가 한두 글자씩 줄바꿈되어 완전히 못
+// 읽는 화면이 된다 — 맨 처음 보고된 "orm-control" 스크린샷이 정확히 이 모양이었다. 사람이 매번
+// 발견해서 수동으로 kill-pane 하는 대신 여기서 주기적으로 정리한다.
+//
+// 우리가 만든 세션만 건드린다 — 세션 이름 규칙이 둘이다: orm-<slug>(오케스트레이터/서브태스크/컨덕터,
+// create()가 스스로 이 이름으로 tmux -s를 감쌈 — Term 이름이 곧 실제 tmux 세션명) 또는
+// opentask-control-<port>(하이브마인드, control.cjs가 직접 조립한 tmux 명령이라 Term 쪽 이름
+// "orm-control"과 실제 tmux 세션명이 다르다 — 여기서는 실제 tmux 세션명 기준으로 걸러야 한다).
+const MANAGED_TMUX_SESSION_RE = /^(orm-|opentask-control-)/
+function tmuxRun(args) {
+  return new Promise((resolve) => {
+    execFile('tmux', args, { timeout: 5000 }, (err, stdout) => resolve(err ? '' : stdout))
+  })
+}
+function tmuxLines(out) {
+  return out
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+// pane 0(그 세션의 실제 대화 pane)은 절대 안 건드린다 — 그 외 pane 중 화면 내용이 완전히 빈 것만
+// 정리한다(뭔가 찍혀 있으면 지금 뭘 하고 있는 중일 수 있어 그냥 둔다 — 오탐보다 안 지우는 쪽이 안전).
+async function cleanupStalePanes() {
+  if (!hasTmux()) return { ok: true, cleaned: 0 }
+  const sessions_ = tmuxLines(await tmuxRun(['list-sessions', '-F', '#{session_name}'])).filter((s) => MANAGED_TMUX_SESSION_RE.test(s))
+  let cleaned = 0
+  for (const sess of sessions_) {
+    const windows = tmuxLines(await tmuxRun(['list-windows', '-t', sess, '-F', '#{window_index}']))
+    for (const win of windows) {
+      const paneIdxs = tmuxLines(await tmuxRun(['list-panes', '-t', `${sess}:${win}`, '-F', '#{pane_index}']))
+      if (paneIdxs.length <= 1) continue // pane 하나뿐이면(정상) 볼 것도 없음
+      // 큰 인덱스부터 처리 — kill-pane 한 번이면 tmux가 남은 pane을 그 자리로 당겨 재번호를 매긴다
+      // (실측 확인: pane 1을 지우면 pane 2가 곧바로 pane 1이 됨). 작은 인덱스부터 지우면 아직 안 본
+      // 더 큰 인덱스가 그 사이에 통째로 밀려 엉뚱한 pane을 잡을 수 있다 — 큰 것부터면 아직 처리 안 한
+      // 더 작은 인덱스들은 이 kill의 영향을 절대 안 받는다(그 위로 당겨올 pane 자체가 없으므로).
+      const descending = paneIdxs.filter((pi) => pi !== '0').sort((a, b) => Number(b) - Number(a))
+      for (const pi of descending) {
+        const target = `${sess}:${win}.${pi}`
+        const content = await tmuxRun(['capture-pane', '-t', target, '-p'])
+        if (content.trim()) continue
+        await tmuxRun(['kill-pane', '-t', target])
+        cleaned++
+      }
+    }
+  }
+  if (cleaned) console.log(`[term] 빈 서브에이전트 pane ${cleaned}개 정리함`)
+  return { ok: true, cleaned }
+}
+
+// "고스티도 tmux도 설정 토글로 제공해야해. 둘다 안깔려있는사람은 비활성화하고 경고표기" — Ghostty는
+// 시스템 바이너리가 아니라 .app 번들이라 hasTmux()의 execFileSync 방식이 아니라 설치 경로 존재
+// 여부로 확인한다(둘 다 흔한 설치 위치 — Homebrew cask도 /Applications에 심음). hasTmux()와 같은
+// 캐시 패턴: 프로세스 도중 설치 여부가 바뀔 일은 없다.
+let _hasGhostty = null
+function hasGhostty() {
+  if (_hasGhostty === null) {
+    try {
+      _hasGhostty = fs.existsSync('/Applications/Ghostty.app') || fs.existsSync(path.join(os.homedir(), 'Applications', 'Ghostty.app'))
+    } catch (_) {
+      _hasGhostty = false
+    }
+  }
+  return _hasGhostty
+}
+
+// AppleScript 문자열 리터럴 안에 넣을 값 이스케이프 — 백슬래시 먼저, 그다음 큰따옴표(순서 중요).
+function asEscape(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+// Ghostty 자체 AppleScript 사전(https://ghostty.org/docs/features/applescript) — macOS에서 `-e`
+// 플래그가 막혀 있어(실행 확인 다이얼로그 이슈) 대신 새 창을 만들고 텍스트를 타이핑해 넣는다.
+// "터미널을 고스티로 열수는 없는거야?" — 실측(2026-09-02): 예전 `send key return to term`이 이 Ghostty
+// 버전에서 "Unknown key name: \r (-1700)"으로 실패했다(AppleScript 문자열 리터럴엔 \n 이스케이프가 없어서
+// 입력·제출을 두 단계로 나눴던 이유 자체는 맞지만, 그 제출 수단이 깨짐). `& return`(AppleScript의 CR
+// 문자 상수를 문자열에 이어붙이는 표준 관용구)으로 입력과 제출을 한 번의 `input text`로 합쳐 그 서브
+// 커맨드 자체를 안 쓴다.
+function ghosttyScript(cwd, command) {
+  const lines = ['tell application "Ghostty"', '  set cfg to new surface configuration', `  set initial working directory of cfg to "${asEscape(cwd)}"`, '  set win to new window with configuration cfg']
+  if (command) {
+    lines.push('  set term to focused terminal of selected tab of win')
+    lines.push(`  input text ("${asEscape(command)}" & return) to term`)
+  }
+  lines.push('end tell')
+  return lines.join('\n')
+}
+
+// "둘 다 설정 토글로... 고스티에서 열기" — 이 세션이 tmuxWrapped면 tmux attach로 지금 대화 그대로
+// 붙고(§ create()), 아니면 그 워크트리 경로에서 새 셸만 연다.
+// "터미널을 고스티로 열수는 없는거야?" — name(Term 자신의 북키핑 키)이 항상 실제 tmux 세션명인 건
+// 아니다: create()가 스스로 tmux로 감쌀 때는 -s name이라 같지만, 호출부가 이미 완성된 tmux 명령을
+// 통째로 넘긴 경우(예: control.cjs 하이브마인드 — name은 "orm-control"인데 실제 세션은
+// "opentask-control-<port>")는 다르다(실측: 2026-09-02, `tmux attach -t orm-control` 자체가 존재하지
+// 않는 세션이라 실패). tmuxWrapped인데 그 원본 명령 문자열 안에 -s 값이 있으면(=호출부가 직접 조립)
+// 그걸 우선하고, 없으면(=create() 자신이 감쌈) name 그대로.
+function openExternal(name) {
+  const entry = sessions.get(name)
+  if (!entry) return Promise.resolve({ ok: false, error: '세션을 찾을 수 없습니다' })
+  if (!hasGhostty()) return Promise.resolve({ ok: false, error: 'Ghostty가 설치되어 있지 않습니다' })
+  const preWrappedMatch = entry.tmuxWrapped && String(entry.command || '').match(/-s\s+(\S+)/)
+  const tmuxSessionName = preWrappedMatch ? preWrappedMatch[1] : name
+  const command = entry.tmuxWrapped ? `tmux attach -t ${tmuxSessionName}` : null
+  const script = ghosttyScript(entry.cwd, command)
+  return new Promise((resolve) => {
+    execFile('osascript', ['-e', script], { timeout: 15000 }, (err) => {
+      if (err) resolve({ ok: false, error: String(err.message || err) })
+      else resolve({ ok: true, attached: !!command })
+    })
+  })
+}
+
 function spawnEnv() {
   const env = {
     ...process.env,
@@ -214,7 +332,7 @@ function spawnEnv() {
     // 이 순간 oh-my-zsh의 "Would you like to update? [Y/n]" 대화형 프롬프트가 로그인 셸 초기화 중
     // 떠 있으면 그 입력을 가로채 앞글자를 먹어버린다(실측: "claude --continue"가 "laude --continue"로
     // 잘려 "command not found"로 조용히 실패, 아무 에러 표시 없이 그냥 빈 셸에 멈춰있다 — Term.list()는
-    // 셸 프로세스 자체는 살아있다고 보고해 겉으로는 "실행 중"으로 보인다). 오버마인드뿐 아니라 이 함수를
+    // 셸 프로세스 자체는 살아있다고 보고해 겉으로는 "실행 중"으로 보인다). 하이브마인드뿐 아니라 이 함수를
     // 거치는 모든 pty(지휘자·서브태스크·즉석 세션)가 같은 경합에 노출돼 있었다 — 업데이트 프롬프트 자체를
     // 꺼서 경합의 원인을 없앤다(oh-my-zsh 공식 변수).
     DISABLE_UPDATE_PROMPT: 'true',
@@ -298,6 +416,14 @@ async function exists(name) {
 // 아무 지시도 안 들어간 실버그 — 오케스트레이션 "시작"이 아무 반응 없는 것처럼 보이는 원인이었다).
 // `❯` 프롬프트 렌더 여부는 스플래시 화면에도 이미 떠 있어 신호가 못 됐다 — 대신 "방금 타이핑한 텍스트가
 // 실제로 화면에 반영됐는지"로 검증한다. 매 시도 전엔 Ctrl-U로 이전 시도의 잔여 입력을 지운다.
+// 화면 텍스트에서 줄바꿈만 무시하고 비교(공백류를 전부 지운 뒤 부분일치) — 좁은 pty에서 marker
+// 자체가 한글 한두 글자씩 줄 경계에 걸려 쪼개지면(§ 위 MIN_PTY_COLS 주석의 사고) 원래는
+// `screen.includes(marker)`가 절대 매치하지 않아, 제출을 위한 Enter 재시도 루프 자체가 시작도
+// 안 되고 60초 뒤 조용히 포기해 텍스트만 입력창에 남는다(2026-09-01 실측 — MIN_PTY_COLS로 pty가
+// 그렇게까지 좁아지는 경로는 막았지만, 그거와 별개로 이 매칭 자체도 더 튼튼하게 고쳐둔다).
+function containsIgnoringWhitespace(screen, needle) {
+  return screen.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''))
+}
 async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 } = {}) {
   const marker = oneLine.slice(0, 12)
   const start = Date.now()
@@ -308,7 +434,7 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
     entry.proc.write(oneLine)
     await new Promise((res) => setTimeout(res, 400))
     const screen = capturePane(name) || ''
-    if (screen.includes(marker)) {
+    if (containsIgnoringWhitespace(screen, marker)) {
       // 텍스트가 화면에 꽂힌 것과 그 순간 Enter를 "제출"로 처리할 준비가 된 것은 다르다(claude
       // TUI 버전에 따라 렌더링↔입력 처리 타이밍이 어긋날 수 있음 — 실측: Enter 한 번으로도, 600ms
       // 후 재확인+한 번 더로도 씹혀서 프롬프트에 텍스트만 남고 제출 안 된 채 멈추는 케이스 확인됨,
@@ -318,7 +444,7 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
         entry.proc.write('\r')
         await new Promise((res) => setTimeout(res, 1200))
         const after = capturePane(name) || ''
-        if (!after.includes(marker)) break // marker가 화면에서 사라짐 = 제출됨
+        if (!containsIgnoringWhitespace(after, marker)) break // marker가 화면에서 사라짐 = 제출됨
       }
       return true
     }
@@ -424,11 +550,22 @@ async function create({ cwd, command, label, seed, model, mcpFolderId, continueF
   }
   if (cmd && /\bclaude\b/.test(String(cmd))) trustFolder(cwd, mcpFolderId)
 
+  // "고스티도 tmux도 설정 토글로 제공해야해" — 전역 설정이 켜져 있고 tmux가 실제로 깔려 있으면, 이
+  // 세션의 진짜 셸에 심는 명령을 tmux new-session -A로 감싼다(§ control.cjs의 하이브마인드 전용
+  // 패턴을 전체 세션으로 일반화). 이미 tmux로 시작하는 명령(예: control.cjs 자체 조립)은 다시 안
+  // 감싼다 — 세션명(name)이 곧 tmux 세션명이라 "이 세션이 외부에서 attach 가능한지" 판단에 별도
+  // 매핑이 필요 없다(§ openExternal).
+  if (cmd && !/^tmux\s/.test(String(cmd).trim()) && hasTmux() && AppCfg.getAppConfig().terminalTmux) {
+    const esc = (s) => String(s).replace(/(["\\$`])/g, '\\$1')
+    cmd = `tmux new-session -A -s ${name} -c "${esc(cwd)}" "${esc(cmd)}"`
+  }
+
   const entry = spawnEntry(name, cwd)
   entry.command = command || null
   entry.label = label || name.slice(PREFIX.length)
   entry.model = model || null
   entry.kind = kindOf(command)
+  entry.tmuxWrapped = /^tmux\s/.test(String(cmd || '').trim())
 
   if (cmd && String(cmd).trim()) {
     // 갓 스폰한 로그인 셸이 아직 입력을 받을 준비가 되기 전에 들어온 첫 바이트를 먹어버릴 때가
@@ -468,13 +605,29 @@ function ensureNamed(name, cwd) {
 // tmux attach가 기존 화면을 그대로 보여주던 것과 동일 효과)하고, 이후 실시간 출력을 계속 전달한다.
 // 여러 WS가 동시에 붙을 수 있고(다른 사람이 같이 보는 것도 tmux 시절처럼 가능), 하나가 끊겨도(반환된
 // detach 호출) 세션 자체(node-pty 프로세스)는 안 죽는다 — 이게 "닫아도 세션은 산다" 요구의 핵심.
+// "질문이 안왔는데?" 조사 중 발견한 별개 사고: 이 pty는 화면에 보여주는 용도(XTerm 위젯 — 좁은
+// 도킹 패널에 끼워 넣힐 때도 있다, § ControlPane.tsx LivePromptPanel의 raw 폴백)와 상태 판정의
+// 데이터 소스(capturePane — status()/parseLivePrompt가 읽는 바로 그 화면) 둘 다로 동시에 쓰인다.
+// 위젯이 작은 컨테이너에 맞춰 resize()를 부르면 그 좁은 크기가 pty 자체를 줄여버려서(실측: 27열까지)
+// 데이터 소스 쪽도 같이 망가진다 — 텍스트가 한두 글자씩 줄바꿈되고, injectSeed의 marker 매칭이
+// 그 줄바꿈에 걸려 제출이 씹히는 사고로까지 이어졌다(2026-09-01 실측: 처음 보고된 "orm-control"
+// 스크린샷의 깨진 화면도 결국 이 경로 — 좁은 뷰포트가 이 pty를 실제로 줄여놓은 상태였다). 화면
+// 위젯은 자기보다 넓은 pty를 스크롤해서 보여주면 그만이라 표시 목적으로 이보다 더 좁힐 이유가
+// 없다 — 요청 크기와 무관하게 이 바닥 밑으로는 절대 안 내려가게 못박는다.
+const MIN_PTY_COLS = 80
+const MIN_PTY_ROWS = 24
+function clampSize(cols, rows) {
+  return [Math.max(cols, MIN_PTY_COLS), Math.max(rows, MIN_PTY_ROWS)]
+}
+
 function attachWs(name, ws, { cols, rows } = {}) {
   const entry = sessions.get(name)
   if (!entry) return () => {}
   if (cols && rows) {
     try {
-      entry.proc.resize(cols, rows)
-      entry.term.resize(cols, rows)
+      const [c, r] = clampSize(cols, rows)
+      entry.proc.resize(c, r)
+      entry.term.resize(c, r)
     } catch (_) {}
   }
   try {
@@ -498,8 +651,9 @@ function resize(name, cols, rows) {
   const entry = sessions.get(name)
   if (entry && !entry.exited) {
     try {
-      entry.proc.resize(cols, rows)
-      entry.term.resize(cols, rows)
+      const [c, r] = clampSize(cols, rows)
+      entry.proc.resize(c, r)
+      entry.term.resize(c, r)
     } catch (_) {}
   }
 }
@@ -566,21 +720,30 @@ async function status(name) {
   const entry = sessions.get(name)
   if (!entry || entry.exited) return { exists: false }
   const text = capturePane(name) || ''
+  // "이미 답한 질문인데 또 떴다고 나옴" — working/waiting/needsAuth/needsResume는 전부 "지금 화면에
+  // 뭐가 떠 있나"를 묻는 판정인데, 예전엔 capturePane 전체(스크롤백까지 포함해 최대 rows줄, 기본
+  // 50줄)를 그대로 정규식에 넣었다. 이미 끝난 대화 속 문장(예: AskUserQuestion에 실제로 있던 질문
+  // 문구 "진행할까요?")이 화면 위쪽에 그대로 남아있으면 그 문구가 waiting 정규식과 우연히 겹쳐
+  // "아직 대기 중"으로 오판했다(실측, 2026-09-01 — control.cjs getLivePrompt가 이 오탐을 그대로
+  // 물려받아 이미 답변까지 끝난 질문을 raw 터미널로 다시 띄우는 버그로 드러남). 실제 살아있는
+  // 상태 신호(상태줄·인터랙티브 프롬프트 박스)는 항상 화면 맨 아래(커서 근처)에만 나타나므로,
+  // 마지막 24줄만 보고 판정한다 — AskUserQuestion 박스(실측 최대 18줄 안팎)도 여유 있게 들어간다.
+  const recent = text.split('\n').slice(-24).join('\n')
   // "서브태스크에 로딩이 안생기는" — 실측: 서버가 뜬 순간(lastWorkingAt) 이후로 실제 작업 중인 세션도
   // 'esc to interrupt'가 한 번도 안 잡혀 42분째 그 값 그대로였다(→ 15분 임계값을 넘겨 stalled로 오판,
   // subChainDot이 stalled를 alive보다 우선해 초록 스피너가 영영 안 뜸). 현재 CLI 상태줄은
   // "Lollygagging… (6m 18s · ↓ 24.4k tokens)"처럼 'esc to interrupt' 없이 "…(…tokens" 꼴로만 뜨는
   // 경우가 실측됨 — 완료 요약줄("Brewed for 8m 57s · done 11:36 AM")은 말줄임표가 없어 안 겹친다.
-  const working = /esc to interrupt/i.test(text) || /…\s*\([^)]*tokens?/i.test(text)
-  const needsAuth = /MFA|ExpiredToken|재인증|인증.*만료|AccessDenied|권한.*요청/i.test(text)
+  const working = /esc to interrupt/i.test(recent) || /…\s*\([^)]*tokens?/i.test(recent)
+  const needsAuth = /MFA|ExpiredToken|재인증|인증.*만료|AccessDenied|권한.*요청/i.test(recent)
   // ❯ 단독/'to manage'/'for agents'는 claude가 유휴 상태(다음 지시 기다림)일 때도 항상 떠 있는 UI 껍데기라
   // '질문 대기'로 오판(거의 항상 true)했음 — 실제 결정 필요한 프롬프트에서만 뜨는 문구로 좁힌다.
   // ☐(빈 체크박스)는 AskUserQuestion류 구조화 질문(단답/스테퍼 폼) 헤더에서만 관측됨 — 실사용 세션 전수 확인.
-  const waiting = !working && /Do you want|계속할까|진행할까|\(y\/n\)|Enter to select|to navigate|Esc to cancel|☐/i.test(text)
+  const waiting = !working && /Do you want|계속할까|진행할까|\(y\/n\)|Enter to select|to navigate|Esc to cancel|☐/i.test(recent)
   // watchContinueFallback이 보통 이 화면을 Enter로 자동 확정하지만, 그 워처는 세션 생성 직후 60초만
   // 지켜본다 — 그 창을 놓치면(예: 앱이 오래 떠 있다가 뒤늦게 이 화면이 뜨는 경우) waiting에도 걸리긴
   // 하지만 원인이 뭉뚱그려진다. 재개 확인 메뉴라는 걸 구체적으로 알 수 있게 따로 뗀다.
-  const needsResume = RESUME_PROMPT_RE.test(text)
+  const needsResume = RESUME_PROMPT_RE.test(recent)
   const isClaude = /esc to interrupt|to manage|for agents|claude|tokens|⏵⏵/i.test(text)
   const tail = text
     .split('\n')
@@ -785,9 +948,18 @@ module.exports = {
   gitRoot,
   ensureOwnGitRoot,
   hasTmux,
+  hasGhostty,
+  openExternal,
   // WS 브리지(index.cjs) 전용 — 세션 레지스트리에 직접 접근.
   ensureNamed,
   attachWs,
   write,
   resize,
+  // "질문이 안왔는데?" — AskUserQuestion류 인터랙티브 프롬프트는 사람이 답하기 전까진 jsonl 대화
+  // 기록에 아예 안 쓰인다(실측 확인, § control.cjs parseLivePrompt). 대화 기록 폴링으론 원천적으로
+  // 못 잡으니, 살아있는 pty 화면(xterm.js 헤드리스 버퍼 — tmux 유무와 무관하게 항상 동작)을 직접
+  // 읽어야 한다. status()가 이미 내부적으로 쓰던 걸 control.cjs에서도 쓸 수 있게 노출한다.
+  capturePane,
+  // "orm-control pane이 짜부라짐" 안전망(§ 위 cleanupStalePanes 주석) — index.cjs가 주기적으로 호출.
+  cleanupStalePanes,
 }

@@ -50,6 +50,12 @@ const APP_CONFIG_DEFAULTS = {
 	deployRepo: null, // 정기배포 브랜치 대상 레포 — deploy.cjs
 	deployBase: null, // 정기배포 브랜치의 기준 브랜치(기본 develop)
 	githubOAuthClientId: null, // GitHub OAuth App Client ID — Device Flow 연동(githubConnect.cjs)용, secret 아님
+	// "고스티도 tmux도 설정 토글로 제공해야해. 기본은 터미널이고" — 둘 다 기본 꺼짐(=지금처럼 내장
+	// 터미널만). term.cjs의 create()가 terminalTmux를 읽어 새 세션 명령을 tmux로 감쌀지 결정하고,
+	// terminalGhostty는 프론트가 "고스티에서 열기" 버튼을 보여줄지만 결정한다(설치 여부와는 별개 —
+	// 설치 안 돼 있으면 프론트가 이 값과 무관하게 토글 자체를 막는다, § /api/setup/terminal-capabilities).
+	terminalGhostty: false,
+	terminalTmux: false,
 }
 
 function getAppConfig() {

@@ -96,11 +96,37 @@ server.registerTool(
 // 작업은 이제 항상 태스크 하나의 서브태스크 체인 안에서 일어난다(orchestrator.cjs launchSubtask 등).
 // 지휘자는 이 셋으로 그 체인을 직접 시작·확인·진행시킬 수 있다 — 폴더 스코프가 필요 없어 taskId만
 // 받는다(자기 산하 태스크의 id는 conductorSeed()가 프롬프트에 이미 알려준다).
+// "태스크 매니저도 서브태스크를 만들 수 있어야해. 하이브마인드 > 태스크매니저 > 서브태스크 순이야" —
+// 예전엔 지휘자에게 create_subtask 권한이 아예 없어서(§ dispatch_subtask 주석 "새 서브태스크를 직접
+// 만드는 권한은 주지 않는다"), 서브태스크가 하나도 없을 때 오직 start_subtask_work의 자동 생성
+// (AI 검토 workUnits 또는 태스크 통짜 복사 폴백)에만 기댔다. PO가 백로그를 직접 못 쪼개는 셈이라
+// 계층 구조(하이브마인드=대표 > 태스크매니저=PO > 서브태스크=개발자)와 안 맞았다 — PO는 원래 작업을
+// 단위로 나눠 개발자에게 맡기는 역할이다. 기준은 prompts.cjs의 workUnits 기준과 반드시 통일한다 —
+// "개발/QA/배포 단계"로 쪼개는 게 아니라(§ mcpControl.cjs create_subtask에 있던 서로 다른 기준,
+// 같은 이유로 그쪽도 이 기준으로 맞춤) "독립적으로 커밋·PR 가능한 단위인가"가 유일한 판단선이다.
+server.registerTool(
+	'create_subtask',
+	{
+		title: '서브태스크 생성',
+		description:
+			'이 태스크를 실제로 처리할 서브태스크를 만든다(생성만 — 워크트리·세션은 start_subtask_work가 나중에 띄운다). 기준은 개수가 아니라 "각각 독립적으로 커밋·PR 가능한 단위인가"다 — 그 자체로 완결된 작은 업무 단위로 나눠라(예: "결제 API 연동", "웹뷰 호스트 화면 구현"). 세부 실행 단계를 그대로 베끼거나 개발/개발자테스트/QA/배포 같은 파이프라인 단계로 쪼개지 마라 — 너무 잘게 쪼개거나 서로 강하게 얽힌 걸 억지로 나누지도 마라. 보통 2~5개. 각 서브태스크는 순서대로(체이닝) 처리되며 자기만의 git worktree·브랜치를 갖는다. 여러 번 불러 순서대로 쌓으면 그 순서 그대로 체이닝된다.',
+		inputSchema: {
+			taskId: z.string(),
+			name: z.string().describe('8~16자 내외, 그 업무 단위를 표현하는 이름'),
+			desc: z.string().optional().describe('그 업무에서 구체적으로 뭘 하는지 1~2문장'),
+		},
+	},
+	async ({ taskId, name, desc }) => {
+		const r = await apiPost(`/api/tasks/${taskId}/subtasks`, { name, desc })
+		return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: r.ok === false }
+	},
+)
+
 server.registerTool(
 	'get_subtask_chain',
 	{
 		title: '서브태스크 체인 상태 확인',
-		description: '이 태스크의 서브태스크 체인 전체를 순서대로 보여준다 — 각 서브태스크의 시작 여부, 세션 생존 여부, 워크트리·브랜치. 다음에 뭘 해야 할지(시작할지/진행시킬지) 판단하기 전에 먼저 확인해라.',
+		description: '이 태스크의 서브태스크 체인 전체를 순서대로 보여준다 — 각 서브태스크의 시작 여부, 세션 생존 여부, 워크트리·브랜치. 다음에 뭘 해야 할지(직접 만들지/시작할지/진행시킬지) 판단하기 전에 먼저 확인해라.',
 		inputSchema: { taskId: z.string() },
 	},
 	async ({ taskId }) => {
@@ -113,7 +139,7 @@ server.registerTool(
 	'start_subtask_work',
 	{
 		title: '서브태스크 체인 시작',
-		description: '이 태스크의 첫 서브태스크에 실제 워크트리+클로드 세션을 만들어 개발을 시작한다. 서브태스크가 아직 하나도 없으면(AI 검토 workUnits가 있으면 그걸로, 없으면 태스크 자신으로) 자동 생성한 뒤 시작한다. 이미 진행 중인 서브태스크가 있으면 아무것도 새로 만들지 않고(already:true) 그 상태만 알려준다.',
+		description: '이 태스크의 첫 서브태스크에 실제 워크트리+클로드 세션을 만들어 개발을 시작한다. 서브태스크가 아직 하나도 없으면, 네가 create_subtask로 미리 계획해둔 게 있으면 그 순서 그대로 시작하고, 하나도 안 만들어뒀으면 AI 검토 workUnits(있으면) 또는 태스크 통짜 복사(없으면)로 자동 생성한 뒤 시작한다 — 웬만하면 자동 생성에 기대지 말고 create_subtask로 먼저 직접 계획해라. 이미 진행 중인 서브태스크가 있으면 아무것도 새로 만들지 않고(already:true) 그 상태만 알려준다.',
 		inputSchema: { taskId: z.string() },
 	},
 	async ({ taskId }) => {

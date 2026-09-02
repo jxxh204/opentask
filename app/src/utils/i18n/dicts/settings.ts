@@ -17,6 +17,14 @@ const dict: Record<string, string> = {
 		'By default the backend keeps running when you quit the app, so sessions continue. Turn on "Full quit" to shut the backend down with the app too (frees the port).',
 	유지: 'Keep running',
 	'완전 종료': 'Full quit',
+	'Ghostty로 보기': 'View in Ghostty',
+	'Ghostty가 설치되어 있지 않습니다 — 설치 후 다시 열면 켤 수 있습니다.': 'Ghostty isn\'t installed — reopen this after installing it to turn this on.',
+	'켜면 터미널 탭에 "고스티에서 열기" 버튼이 생깁니다. GPU 렌더링이라 내장 패널보다 무거운 출력에서 빠릅니다.':
+		'Adds an "Open in Ghostty" button to the terminal tab. GPU rendering makes it faster than the built-in panel for heavy output.',
+	'tmux로 세션 유지': 'Keep sessions alive with tmux',
+	'tmux가 설치되어 있지 않습니다 — 설치 후 다시 열면 켤 수 있습니다.': "tmux isn't installed — reopen this after installing it to turn this on.",
+	'켜면 서버 재시작에도 세션이 안 죽습니다. 이후 만드는 세션부터 적용됩니다.': 'Sessions survive a server restart. Applies to sessions created from now on.',
+	'꺼짐 (기본)': 'Off (default)',
 	'팀 규칙 →': 'Team rules →',
 	'레포별 브랜치·문서 규칙을 탭에서 확인하고 바꿉니다.': 'View and edit per-repo branch/doc rules in a tab.',
 	'모델 배정 →': 'Model assignment →',
@@ -30,7 +38,7 @@ const dict: Record<string, string> = {
 	'불러오는 중…': 'Loading…',
 	'설계·아키텍처': 'Design & architecture',
 	'태스크 매니저(서브태스크 체인 조율)': 'Task Manager (subtask chain orchestration)',
-	'오버마인드(캘린더·크론잡·설정)': 'Overmind (calendar, cron jobs, settings)',
+	'하이브마인드(캘린더·크론잡·설정)': 'Hivemind (calendar, cron jobs, settings)',
 	'▶진행 제품 코딩': '▶ Active product coding',
 	'PR 코드 리뷰': 'PR code review',
 	'리뷰대로 코드 개선': 'Code fixes per review',
@@ -57,9 +65,9 @@ const dict: Record<string, string> = {
 	'태스크 매니저가 자동으로 지휘': 'The Task Manager conducts automatically',
 	'별도 시작 버튼이 없습니다 — 서브태스크가 생기면 곧바로 순차 웨이브로 지휘를 시작하고, 라이브 터미널과 계획·지시·보고 로그를 함께 보여줍니다.':
 		"There's no separate start button — as soon as a subtask appears, it starts directing work in sequential waves, showing the live terminal alongside plan/instruction/report logs.",
-	'오버마인드에게 말해보세요': 'Talk to the Overmind',
-	'사이드바 "오버마인드"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
-		'Open "Overmind" in the sidebar and the conversation starts right away, no button needed. Try something like "block off next Tue–Thu as a QA period" — it\'s a top-level agent that controls the whole app in natural language, not just a single task, including the calendar, cron jobs, and settings.',
+	'하이브마인드에게 말해보세요': 'Talk to the Hivemind',
+	'사이드바 "하이브마인드"를 열면 버튼 없이 바로 대화가 시작돼요. "다음 주 화요일부터 목요일까지 QA 기간으로 막아줘"처럼 시켜보세요 — 태스크 하나가 아니라 캘린더·크론잡·설정까지 앱 전체를 자연어로 조작하는 최상위 에이전트입니다.':
+		'Open "Hivemind" in the sidebar and the conversation starts right away, no button needed. Try something like "block off next Tue–Thu as a QA period" — it\'s a top-level agent that controls the whole app in natural language, not just a single task, including the calendar, cron jobs, and settings.',
 	'캘린더 · 크론잡': 'Calendar · Cron jobs',
 	'캘린더로 일정을 잡고 드래그로 재조정하세요. 크론잡으로 반복 업무를 예약하면 정해진 시각에 실제로 새 태스크가 만들어집니다.':
 		'Schedule with the calendar and drag to reschedule. Set up recurring work with cron jobs and a real new task gets created right on schedule.',

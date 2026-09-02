@@ -204,7 +204,12 @@ async function launchSubtask(task, subtask) {
 	// "막힘" 보고 경로. 혼자 못 푸는 결정(정책 판단, 크리덴셜, 애매한 요구사항 등)을 만나면 조용히 멈추는
 	// 대신 이 curl로 바로 지휘자를 깨운다 — 세션 자체는 안 죽는다, 응답 기다리며 계속 살아있어도 된다.
 	const blockedLine = `■ 혼자 판단 못 할 결정이나 막힘(정책·크리덴셜·애매한 요구사항 등)을 만나면 조용히 멈추지 말고 바로 이 curl로 보고해라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/report-blocked -H 'Content-Type: application/json' -d '{"reason":"<막힌 이유를 한두 문장으로>"}' (세션은 안 죽는다 — 응답 기다리며 계속 작업 가능하면 이어서 해도 된다)`
-	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '') + `\n\n${advanceLine}\n\n${blockedLine}`
+	// "자잘한 업무도 대화하는게 보여야 더 신뢰가 가니까" — 완료/막힘 두 큰 이벤트 사이가 조용하면
+	// 태스크 매니저도 사람도 지금 뭐가 되고 있는지 알 길이 없다. 의미 있는 작은 진행(파일 하나 완성,
+	// 테스트 통과, 계획 변경 등)마다 짧게 알리게 한다 — 세션을 안 끝내는 가벼운 체크인이라 완료/막힘
+	// 판단과 안 섞인다.
+	const progressLine = `■ 작업 중간중간 의미 있는 진행이 있을 때마다(예: 파일 하나 완성, 테스트 통과, 계획 변경 등 — 완료도 막힘도 아닌 작은 진척) 조용히 넘어가지 말고 짧게 알려라: curl -s -X POST http://localhost:${port}/api/tasks/${task.id}/subtask-work/progress -H 'Content-Type: application/json' -d '{"text":"<지금 뭘 하고 있는지 한두 문장>"}' (세션엔 아무 영향 없다 — 자주 알릴수록 좋다, 완료·막힘 보고를 대신하지는 않는다)`
+	const seed = (rules ? rules.trim() + '\n\n' : '') + taskLine + (wt.branch ? `\n지금 브랜치: ${wt.branch}` : '') + buildReviewContext(review) + (reminder ? `\n\n■ ${reminder}` : '') + `\n\n${advanceLine}\n\n${blockedLine}\n\n${progressLine}`
 	const model = Settings.modelFor('dev')
 	const t = await Term.create({ cwd: wt.path, command: 'claude', label: subtask.name, seed, model })
 	if (!t.ok) return { ok: false, error: t.error }
@@ -289,8 +294,14 @@ async function advanceSubtaskWork(taskId, reportHtml) {
 		const s = ensureState(task.folder_id)
 		delete s.blocked[current.id] // 막혀있다가 결국 스스로 풀고 완료한 경우 — 표시 해제.
 		delete s.stalled[current.id]
-		const text = next ? `"${current.name}" 완료 → 다음 단계 "${next.name}" 자동 시작` : `"${current.name}" 완료 — 마지막 단계였습니다.`
-		await notifyConductor(task.folder_id, current.id, text, 'result')
+		// "완료됐다는 한 줄만 오면 지휘자가 리포트를 안 읽고 그냥 다음으로 넘겨버린다" — reportHtml
+		// 본문을 태그만 벗겨 짧게 지휘자 pty에 같이 타이핑해 넣는다(전문은 reportUrl로 사람도 지휘자도
+		// 같이 열어볼 수 있게). 이래야 지휘자가 실제로 뭘 했는지 검토하고 다음 지시를 판단할 근거가 생긴다.
+		const excerpt = reportHtml ? String(reportHtml).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240) : ''
+		const doneLine = next ? `"${current.name}" 완료 → 다음 단계 "${next.name}" 자동 시작` : `"${current.name}" 완료 — 마지막 단계였습니다.`
+		const text = excerpt ? `${doneLine}\n리포트 요약: ${excerpt}…` : doneLine
+		const reportUrl = reportHtml ? `/api/subtask-sessions/${currentSession.id}/report` : null
+		await notifyConductor(task.folder_id, current.id, text, 'result', reportUrl)
 		// 전체 체인이 다 끝났을 때만 OS 알림(중간 홉마다 울리면 시끄러움 — 사용자 확인).
 		if (!next) Notify.notifyEscalation(`🏁 "${task.name}" 체인 완료`, `"${current.name}"까지 모든 단계가 끝났습니다.`)
 	}
@@ -314,6 +325,23 @@ async function reportSubtaskBlocked(taskId, reason) {
 	s.blocked[current.id] = cleanReason
 	await notifyConductor(task.folder_id, current.id, `"${current.name}" 막힘 — ${cleanReason}`, 'blocked')
 	Notify.notifyEscalation(`🆘 "${current.name}" 도움 요청`, cleanReason)
+	return { ok: true, subtaskId: current.id }
+}
+
+// "자잘한 업무도 대화하는게 보여야 신뢰가 가니까" — 완료(advance)·막힘(report-blocked)과 별개로, 그
+// 사이의 자잘한 진행도 조용히 넘어가지 않고 알리는 세 번째 채널. 세션 상태는 안 건드린다(끝난 것도
+// 막힌 것도 아닌 그냥 "진행 중"이라는 체크인일 뿐) — blocked/stalled 표시도, OS 알림도 없다(그렇게까지
+// 하면 너무 시끄럽다, 어디까지나 가벼운 근황 공유).
+async function reportSubtaskProgress(taskId, text) {
+	const task = StoreTasks.get(taskId)
+	if (!task) return { ok: false, error: 'task not found' }
+	if (!task.folder_id) return { ok: false, error: '메인 태스크에 아직 연결되지 않았습니다.' }
+	const subtasks = StoreSubtasks.listByTask(taskId)
+	const liveIdx = subtasks.findIndex((st) => !!StoreSubtaskSessions.getActiveForSubtask(st.id))
+	if (liveIdx === -1) return { ok: false, error: '진행 중인 서브태스크가 없습니다.' }
+	const current = subtasks[liveIdx]
+	const cleanText = String(text || '').trim().slice(0, 300) || '(내용 없음)'
+	await notifyConductor(task.folder_id, current.id, cleanText, 'progress')
 	return { ok: true, subtaskId: current.id }
 }
 
@@ -588,8 +616,8 @@ async function stop(folderId) {
 // 기록)이지만, 여기서는 group 문자열이 아니라 실제 folderId/taskId로 정확히 찾는다(퍼지 매칭 불필요 —
 // states의 sessions 배열이 이미 taskId→tmuxSession을 정확히 알고 있음). 새 서브태스크를 직접 만드는
 // 권한은 주지 않는다 — 있는 서브에게 지시만 전달(dispatch)하고 결과를 기록한다.
-function pushFeed(s, { from, to, text, kind }) {
-	s.feed.push({ ts: Date.now(), from: from || 'orch', to: to || 'orch', text: String(text || '').slice(0, 500), kind: kind || 'msg' })
+function pushFeed(s, { from, to, text, kind, reportUrl }) {
+	s.feed.push({ ts: Date.now(), from: from || 'orch', to: to || 'orch', text: String(text || '').slice(0, 500), kind: kind || 'msg', reportUrl: reportUrl || null })
 	if (s.feed.length > 120) s.feed.splice(0, s.feed.length - 120)
 }
 
@@ -605,7 +633,7 @@ function conductorSeed(folder, tasks, cwd) {
 	]
 	const rules = teamRulesSection(rulePairs)
 	const reminder = teamRulesReminder(rulePairs, '절대 잊지 마라 — 특히 서브태스크에 지시를 내릴 때마다.')
-	return `[역할: "${folder.name}" 태스크 매니저] 너는 OpenRM에서 이 태스크의 진행을 관리하는 태스크 매니저야. ${operator}가 너와 직접 대화한다. 바로 실행하지 말고 계획부터 보고하고 승인받아.${rules}
+	return `[역할: "${folder.name}" 태스크 매니저 — PO/기획자] 너는 OpenTask라는 조직의 PO(기획자)야. 위로는 하이브마인드(대표 — ${operator}와 직접 대화하며 전체를 총괄)가 있고, 아래로는 개발자·디자이너 역할을 하는 서브태스크들이 있다. PO가 늘 그렇듯 기획·설계·지시·검토만 하고, 코드는 절대 네가 직접 짜지 않는다 — 실제 개발은 전부 서브태스크(개발자)의 몫이다. ${operator}가 너와 직접 대화한다. 바로 실행하지 말고 계획부터 보고하고 승인받아.${rules}
 
 ■ 언어: ${operator}가 쓰는 언어에 맞춰 답변해라 — 영어로 물으면 영어로, 한국어로 물으면 한국어로.
 
@@ -617,13 +645,16 @@ function conductorSeed(folder, tasks, cwd) {
 ■ 이 폴더의 태스크 목록 (taskId: 이름):
 ${list}
 
-■ 태스크 하나의 실제 작업 진행 — get_subtask_chain / start_subtask_work / advance_subtask_work (taskId만 넘기면 됨):
+■ 태스크 하나의 실제 작업 진행 — create_subtask / get_subtask_chain / start_subtask_work / advance_subtask_work (taskId만 넘기면 됨):
 0. ${rules ? '위 팀 규칙이 있으면 아래 단계를 진행하기 전에 다시 한번 확인해라 — 서브태스크를 만들거나 진행시킬 때마다 그 규칙에 맞는지 스스로 점검한다.' : '(이 레포엔 등록된 팀 규칙이 없다 — 특별한 제약 없이 진행)'}
 1. get_subtask_chain({taskId})로 지금 서브태스크 체인 상태(뭐가 있고, 어느 게 살아있고, 워크트리·브랜치가
    뭔지)를 먼저 확인해라.
-2. 서브태스크가 하나도 없거나 전부 아직 시작 전이면 start_subtask_work({taskId})로 첫 서브태스크의
-   워크트리+세션을 띄운다(서브태스크가 없으면 AI 검토의 workUnits로, 그것도 없으면 태스크 자신으로
-   자동 생성됨).
+2. 서브태스크가 하나도 없으면 네가(PO로서) 직접 create_subtask({taskId, name, desc})를 순서대로 여러 번
+   불러 작업 단위를 계획해라 — 기준은 "각각 독립적으로 커밋·PR 가능한 단위인가"(개발/QA/배포 같은
+   파이프라인 단계로 쪼개지 마라, 보통 2~5개). 계획을 다 세웠으면(또는 AI 검토 workUnits를 그대로 써도
+   충분하다고 판단했으면) start_subtask_work({taskId})로 첫 서브태스크의 워크트리+세션을 띄운다(네가
+   하나도 안 만들어뒀으면 AI 검토의 workUnits로, 그것도 없으면 태스크 자신으로 자동 생성됨 — 웬만하면
+   여기 기대지 말고 1번처럼 직접 계획해라).
 3. 서브태스크가 실제로 다 끝나면 그 서브태스크 세션 자신이 advance_subtask_work를 호출해 스스로
    다음 단계로 넘기고, 그 결과가 네 이 화면(pty)에 직접 타이핑돼 들어온다 — 네가 advance_subtask_work를
    먼저 호출해 판단할 필요는 없다(과거엔 그래야 했지만 지금은 아니다). 통보가 의심스럽거나 한참
@@ -638,6 +669,7 @@ MCP 툴 dispatch_subtask/log_event/set_subtask_kind가 있으면(도구 목록 �
 - 지금 진행 중인 서브태스크에 지시: curl -s -X POST http://localhost:${port}/api/folders/${folder.id}/conductor/say -H 'Content-Type: application/json' -d '{"taskId":"<위 목록의 taskId>","text":"<지시>"}'
 - 결과/진행을 받으면 기록: curl -s -X POST http://localhost:${port}/api/folders/${folder.id}/conductor/event -H 'Content-Type: application/json' -d '{"from":"<taskId>","to":"orch","text":"<요약>","kind":"result"}'
 - 큰 결정/계획을 ${operator}와 공유: curl -s -X POST http://localhost:${port}/api/folders/${folder.id}/conductor/event -H 'Content-Type: application/json' -d '{"from":"orch","to":"${operator}","text":"<계획/보고>","kind":"plan"}'
+- 서브태스크 생성(계획): curl -s -X POST http://localhost:${port}/api/tasks/<taskId>/subtasks -H 'Content-Type: application/json' -d '{"name":"<8~16자 업무 단위 이름>","desc":"<1~2문장>"}' — 순서대로 여러 번 부르면 그 순서 그대로 체이닝된다.
 - 서브태스크 체인 시작/진행: curl -s -X POST http://localhost:${port}/api/tasks/<taskId>/subtask-work/start (또는 /advance)
 - 체인 상태 확인: curl -s http://localhost:${port}/api/tasks/<taskId>/subtask-work/state
 - kind(진행 방식) 판단·수정: curl -s -X POST http://localhost:${port}/api/folders/${folder.id}/conductor/set-kind -H 'Content-Type: application/json' -d '{"taskId":"<위 목록의 taskId>","kind":"single|chain|parallel","reason":"<왜 이 kind인지 한 줄>"}' — 이전 산출물 위에 이어서 작업해야 하면 chain, 서로 독립적이라 동시에 여러 버전을 시도해볼 만하면 parallel, 그 외엔 single. reason은 필수.
@@ -650,7 +682,12 @@ headless 세션이다 — ${operator}가 이 폴더의 "브라우저" 탭을 열
 띄워놨어" 같은 말은 하지 말고, browser_read로 읽은 내용을 네가 직접 요약해서 말로 보고해라.
 
 ■ 원칙: 태스크 목표를 이해하고, 서브태스크별 진행 상황을 확인하고, 결과를 검증·종합해서 ${operator}에게
-보고해. 지금 상황을 파악해 계획을 ${operator}에게 보고해줘.${reminder ? `\n\n■ ${reminder}` : ''}`
+보고해. 지금 상황을 파악해 계획을 ${operator}에게 보고해줘.${reminder ? `\n\n■ ${reminder}` : ''}
+
+■ 다시 한번 — 너(PO)는 절대 코드를 직접 작성하지 않는다. 막힌 서브태스크를 도와줄 때도 네가 대신
+파일을 고치지 말고 방향을 지시(dispatch_subtask)하거나 ${operator}에게 판단을 물어라. 서브태스크가
+진행(progress) 알림을 보내면 무시하지 말고 필요하면 dispatch_subtask로 짧게 반응해줘(확인했다는
+한마디라도) — 대화가 실제로 오가는 걸 보여주는 것 자체가 신뢰를 준다.`
 }
 
 // "세션이 바뀌면 안 돼 — 강제로 꺼져도 그렇고" — tmux 제거로 세션이 이제 서버 프로세스의 자식이라
@@ -836,14 +873,14 @@ async function conductorTell(folderId, text) {
 // 지휘자→서브태스크=conductorSay) 서브태스크→지휘자만 없었다. conductorTell과 완전히 같은
 // 메커니즘(지휘자 pty에 실제로 타이핑)을 서브태스크/시스템 보고용으로 재사용 — 완료/막힘/침묵형
 // 막힘 세 가지 보고 상태가 전부 이 함수 하나를 거친다.
-async function notifyConductor(folderId, fromLabel, text, kind) {
+async function notifyConductor(folderId, fromLabel, text, kind, reportUrl) {
 	const s = states.get(folderId)
 	if (!s || !s.conductor) return { ok: false, error: '태스크 매니저 세션이 없습니다.' }
 	const live = await Term.list().catch(() => [])
 	const match = live.find((x) => x.name === s.conductor.session || Term.baseName(x.name) === Term.baseName(s.conductor.session))
 	if (!match) return { ok: false, error: '태스크 매니저 세션이 죽었습니다.' }
 	const d = await Actuator.dispatch({ session: match.name, message: text, dryRun: false }).catch((e) => ({ ok: false, error: String((e && e.message) || e) }))
-	pushFeed(s, { from: fromLabel, to: 'orch', text, kind })
+	pushFeed(s, { from: fromLabel, to: 'orch', text, kind, reportUrl: reportUrl || null })
 	return d.ok ? { ok: true } : { ok: false, error: d.error }
 }
 
@@ -892,6 +929,7 @@ module.exports = {
 	startSubtaskWork,
 	advanceSubtaskWork,
 	reportSubtaskBlocked,
+	reportSubtaskProgress,
 	checkStalledSubtasks,
 	stopSubtaskSession,
 	getSubtaskWorkState,

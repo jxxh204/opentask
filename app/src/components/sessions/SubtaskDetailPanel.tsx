@@ -19,6 +19,30 @@ function dateInputValueToMs(v: string) {
 	const [y, m, d] = v.split('-').map(Number)
 	return new Date(y, m - 1, d).getTime()
 }
+function toGCalDate(ms: number) {
+	const d = new Date(ms)
+	return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+}
+// "각 서브 태스크에 구글 캘린더 등록 기능이 있으면좋겠어. 다만 ux를 해치지 않는 선에서" — OAuth
+// 연동(토큰 저장·리프레시)은 이 앱에 아예 없는 인프라를 새로 만들어야 해서 요청 취지("UX 해치지
+// 않는 선")를 넘어선다. 대신 크리덴셜 없이 구글 캘린더 자신의 "이벤트 만들기" 화면을 새 창으로
+// 여는 URL 템플릿(action=TEMPLATE)만 만든다 — 클릭한 사람이 그 화면에서 직접 저장을 눌러야 실제
+// 캘린더에 들어간다(서버가 대신 아무것도 안 함, 이 앱은 구글 계정을 아예 모른다). 날짜는 예정일이
+// 있을 때만 의미가 있어 그때만 뜬다. 종일 일정 형식(dates=시작/종료, 둘 다 YYYYMMDD)의 종료일은
+// 구글 쪽 규약상 배타적(그 날짜 자체는 포함 안 됨)이라, 실제 마지막 날(addBusinessDays가 돌려주는
+// 영업일 기준 종료일 — TaskDetailPanel의 "~ N월 N일 종료" 표시와 같은 계산)에 하루를 더한다.
+function googleCalendarUrl(subtask: { name: string; desc: string; due_date: number | null; duration_days: number | null }, parentTaskName: string) {
+	if (!subtask.due_date) return null
+	const lastDay = new Date(addBusinessDays(subtask.due_date, subtask.duration_days || 1))
+	const endExclusive = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1)
+	const params = new URLSearchParams({
+		action: 'TEMPLATE',
+		text: `${parentTaskName} — ${subtask.name}`,
+		dates: `${toGCalDate(subtask.due_date)}/${toGCalDate(endExclusive.getTime())}`,
+	})
+	if (subtask.desc) params.set('details', subtask.desc)
+	return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
 
 // "서브태스크를 누르면 해당 서브태스크의 내용만 보이게" — 부모 태스크 전체를 담은 TaskDetailModal과
 // 별개로, 서브태스크 하나만을 위한 드로어. 같은 슬라이드인 셰이프(TaskDetailModal.module.css 재사용)
@@ -177,9 +201,25 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 									onChange={(e) => updateSubtaskDueDate(subtask.id, e.target.value ? dateInputValueToMs(e.target.value) : null)}
 								/>
 								{subtask.due_date !== null && (
-									<button type="button" className={styles.metaClear} onClick={() => updateSubtaskDueDate(subtask.id, null)}>
-										{t('지우기')}
-									</button>
+									<>
+										<button type="button" className={styles.metaClear} onClick={() => updateSubtaskDueDate(subtask.id, null)}>
+											{t('지우기')}
+										</button>
+										{/* "각 서브 태스크에 구글 캘린더 등록 기능... ux를 해치지 않는 선에서" — 이미 있는
+										    "지우기" 텍스트 버튼과 같은 자리·같은 스타일로만 하나 더(§ 위 googleCalendarUrl
+										    주석). SessionShell.tsx apiAddress 링크와 같은 관례 — target="_blank"를
+										    electron/main.cjs의 setWindowOpenHandler가 가로채 시스템 기본 브라우저로 연다. */}
+										<a
+											className={styles.metaClear}
+											style={{ textDecoration: 'none' }}
+											href={googleCalendarUrl(subtask, parentTask.name) ?? undefined}
+											target="_blank"
+											rel="noreferrer"
+											title={t('구글 캘린더에 이 일정 등록')}
+										>
+											{t('구글 캘린더에 등록')}
+										</a>
+									</>
 								)}
 							</div>
 							{subtask.due_date !== null && (

@@ -74,6 +74,32 @@ function textFromContent(content) {
 	return ''
 }
 
+// "채팅창도 꺠져" — /compact 등 로컬 슬래시 명령을 돌리면 claude CLI가 그 부산물을(재개 요약,
+// "이건 사람이 아니라 로컬 명령이 만든 메시지다" 경고, 명령 자체의 XML 태그 echo, 그 stdout까지)
+// 전부 `type:"user"` + 문자열 content로 jsonl에 함께 남긴다 — 실제 세션 파일을 직접 열어 확인함
+// (2026-09-02): `isMeta:true`가 붙는 것도 있고(예: 크로스세션 알림, `<local-command-caveat>`) 안
+// 붙는 것도 있어서(`--continue` 재개 요약, `<command-name>`/`<local-command-stdout>`) isMeta 하나로는
+// 못 거른다. 이 채팅 UI는 애초에 "사람이 실제로 친 말"만 말풍선으로 보여주려는 설계라(§ 위
+// skipFirstUser 주석과 같은 원칙), 이런 CLI 내부 배관은 전부 건너뛴다 — 사람이 직접 입력한 순수
+// 슬래시 명령("/compact" 그 자체, 태그로 안 감싸인 plain string)만 예외로 그대로 보여준다.
+const RESUME_SUMMARY_RE = /^This session is being continued from a previous conversation/
+function isSyntheticUserContent(content) {
+	return RESUME_SUMMARY_RE.test(content) || /^<(local-command-caveat|command-name|local-command-stdout)>/.test(content)
+}
+// 위 부산물 중 `<local-command-stdout>`에는 claude CLI 자신의 TUI가 그리는 raw ANSI SGR 코드
+// (예: "Compacted"를 흐리게 보여주는 \x1b[2m…\x1b[22m)가 그대로 들어있다 — 걸러내지 못한 다른
+// 텍스트에도 혹시 섞여 있을 경우를 대비해 어시스턴트 텍스트·tool 결과에도 공통으로 한 번 씻어낸다.
+function stripAnsi(s) {
+	return String(s).replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+// "명시도 해줘" — 운영 모드(§ control.cjs runOpsModeTick)가 15분마다 하이브마인드 자신에게 넣는
+// 점검 프롬프트는 사람이 친 게 아니다. 이 마커로 시작하는 user 턴만 auto:true로 표시해 ControlPane.tsx가
+// 일반 사용자 말풍선과 다른 배지로 그린다 — control.cjs의 OPS_TICK_MARKER와 반드시 같은 문자열이어야
+// 한다(모듈 의존 방향을 지키려고 상수 import 대신 문자열을 그대로 복제 — transcript.cjs는 순수 파싱
+// 유틸이라 control.cjs를 require하지 않는다).
+const OPS_TICK_MARKER = '[운영 모드 자동 점검]'
+
 // jsonl 한 줄(entry)들 → 채팅 턴 배열. 각 줄이 이미 claude 자신의 턴 경계라 그대로 1턴=1버블로
 // 쓴다(여러 줄을 하나로 합치는 휴리스틱은 오히려 실제 순서·타이밍을 왜곡할 위험이 있어 안 씀).
 // skipFirstUser — 첫 user 턴은 항상 controlSeed()가 주입한 역할 시드 그 자체라(사람이 친 게 아님)
@@ -113,11 +139,14 @@ function parseTranscript(filePath, { skipFirstUser = true } = {}) {
 		const content = r.message && r.message.content
 		if (r.type === 'user') {
 			if (typeof content !== 'string') continue // 배열이면 tool_result뿐 — 이미 흡수함, 별도 버블 없음
+			if (r.isMeta === true || isSyntheticUserContent(content)) continue // § 위 isSyntheticUserContent 주석
 			if (!seenFirstUser) {
 				seenFirstUser = true
 				if (skipFirstUser) continue
 			}
-			turns.push({ id: r.uuid, role: 'user', ts: r.timestamp, parts: [{ kind: 'text', text: content }] })
+			const isOpsTick = content.startsWith(OPS_TICK_MARKER)
+			const text = stripAnsi(isOpsTick ? content.slice(OPS_TICK_MARKER.length).trim() : content)
+			turns.push({ id: r.uuid, role: 'user', ts: r.timestamp, auto: isOpsTick || undefined, parts: [{ kind: 'text', text }] })
 			continue
 		}
 		if (r.type === 'assistant') {
@@ -125,8 +154,8 @@ function parseTranscript(filePath, { skipFirstUser = true } = {}) {
 			const parts = []
 			for (const b of content) {
 				if (!b) continue
-				if (b.type === 'text' && b.text && b.text.trim()) parts.push({ kind: 'text', text: b.text })
-				else if (b.type === 'tool_use') parts.push({ kind: 'tool', name: b.name, input: b.input, result: resultsByToolId.get(b.id) ?? null })
+				if (b.type === 'text' && b.text && b.text.trim()) parts.push({ kind: 'text', text: stripAnsi(b.text) })
+				else if (b.type === 'tool_use') parts.push({ kind: 'tool', name: b.name, input: b.input, result: resultsByToolId.get(b.id) != null ? stripAnsi(resultsByToolId.get(b.id)) : null })
 				// thinking 블록은 화면에 안 보여준다 — 내부 추론이라 장황하고, 사람이 볼 대화가 아니다.
 			}
 			if (parts.length) turns.push({ id: r.uuid, role: 'assistant', ts: r.timestamp, parts })

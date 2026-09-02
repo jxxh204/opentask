@@ -35,6 +35,13 @@ const ARCHIVE_ICON = (
 		<path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" />
 	</svg>
 )
+const HIDE_ICON = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M3 3l18 18" />
+		<path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c5 0 9 3.5 10 7-.5 1.5-1.4 2.9-2.6 4.1M6.5 6.6C4.6 7.9 3.1 9.7 2 12c1 3.5 5 7 10 7 1.3 0 2.5-.2 3.6-.6" />
+		<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+	</svg>
+)
 const LINK_ICON: Record<LinkKind, React.ReactNode> = {
 	figma: (
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -85,7 +92,9 @@ function timeAgo(ts: number) {
 export default function FolderCard({ folder }: { folder: Folder }) {
 	const t = useT()
 	const tp = useTp()
-	const open = useSessionsStore((s) => s.openFolders[folder.id] !== false)
+	// "숨기면 펼쳐진거 닫고 안펼쳐지게 해줘" — 흐리게 처리된 동안은 항상 접힌 채로 둔다(openFolders
+	// 원래 값과 무관하게 강제 적용, § 아래 toggleChevron도 hidden일 땐 no-op).
+	const open = useSessionsStore((s) => s.openFolders[folder.id] !== false) && !folder.hidden
 	const toggleFolder = useSessionsStore((s) => s.toggleFolder)
 	const renameFolder = useSessionsStore((s) => s.renameFolder)
 	const updateTaskColor = useSessionsStore((s) => s.updateTaskColor)
@@ -122,6 +131,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	}, [lastFeedTs])
 	const archiveFolder = useSessionsStore((s) => s.archiveFolder)
 	const archiveBusy = useSessionsStore((s) => s.archiveBusy === folder.id)
+	const setFolderHidden = useSessionsStore((s) => s.setFolderHidden)
 	const deleteFolder = useSessionsStore((s) => s.deleteFolder)
 	const deleteBusy = useSessionsStore((s) => s.deleteBusy === folder.id)
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
@@ -170,7 +180,12 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	// 이 폴더의 모든 태스크에 걸쳐 조인해, 실제 서브태스크가 살아있을 때만 스피너가 돈다.
 	const subtaskWorkMap = useSessionsStore((s) => s.subtaskWork)
 	const anySubtaskAlive = folder.tasks.some((t) => subtaskWorkMap[t.id]?.some((w) => w.alive))
-	const isRunning = !needsAuth && !needsInput && anySubtaskAlive
+	// "메인 태스크 세션 돌고있으면 사이드메뉴에서도 서클이 보여야할것같아" — 지휘자가 서브태스크를
+	// 아직 하나도 디스패치하기 전(계획 수립·shell 명령 실행 등)엔 anySubtaskAlive가 계속 false라
+	// 실제로 살아서 일하는 중인데도 스피너가 안 돌았다. conductorTermStatus.working(§ SessionShell.tsx
+	// controlTermStatus.working·SubagentStrip.tsx와 같은 소스 — tmux를 실시간으로 스크레이프)을 더해
+	// 지휘자 자신이 일하는 중일 때도 잡는다.
+	const isRunning = !needsAuth && !needsInput && (anySubtaskAlive || !!conductorTermStatus?.working)
 	// 서브태스크별 세션명으로 다시 조인(§ TaskRow의 subChainDot과 동일 패턴).
 	const termStatusMap = useSessionsStore((s) => s.termStatus)
 	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 이 목록에서 걸러낸다(§ TaskRow
@@ -254,6 +269,17 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 		deleteFolder(folder.id)
 	}
 
+	// "눈모양 누르면 투명하게 보이는정도로 해줘 아예 숨기지말고" — 트리에서 아예 빼지 않고, 그 자리에
+	// 그대로 둔 채 흐리게(opacity)만 낮춘다(§ 아래 .node에 nodeHidden 클래스). 그래서 archive처럼
+	// 별도 "숨김" 목록/복원 절차가 필요 없다 — 같은 아이콘을 다시 누르면 바로 원래 밝기로.
+	function onHideClick(e: React.MouseEvent) {
+		e.stopPropagation()
+		const nextHidden = !folder.hidden
+		setFolderHidden(folder.id, nextHidden)
+		// 숨기는 순간 펼쳐져 있었다면 접어둔다 — 다시 표시해도 펼쳐진 채로 튀어나오지 않게 상태 자체를 접음.
+		if (nextHidden && open) toggleFolder(folder.id)
+	}
+
 	// "화살표를 누르면 화살표 역할만 하고 이름을 눌러야 태스크 접속해줘" — 펼치기/접기(화살표 전용)와
 	// 태스크 진입(이름 등 나머지 영역)을 분리한다. 이전엔 헤더 전체가 한 번에 둘 다 했다.
 	// "메인 태스크 누르면 이제 메인태스크의 상세페이지가 탭으로 나와야한다고 했었어" — setActiveNode만
@@ -266,12 +292,13 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	}
 	function toggleChevron(e: React.MouseEvent) {
 		e.stopPropagation()
-		if (!isSimple) toggleFolder(folder.id)
+		// 흐리게 처리된 동안은 펼치기 자체를 막는다 — 숨김 해제 전까지는 계속 접힌 채로.
+		if (!isSimple && !folder.hidden) toggleFolder(folder.id)
 	}
 
 	return (
 		<div
-			className={styles.node}
+			className={`${styles.node} ${folder.hidden ? styles.nodeHidden : ''}`}
 			style={isOver ? { background: 'var(--vtint)', borderRadius: 8 } : undefined}
 			onDragOver={(e) => {
 				e.preventDefault()
@@ -292,22 +319,28 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 				}}
 			>
 				{isSimple ? (
-					<span className={styles.chevron} style={{ width: 9, height: 9 }} />
+					<span className={styles.chevronHit}>
+						<span className={styles.chevron} style={{ width: 9, height: 9 }} />
+					</span>
 				) : (
-					<svg
-						className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}
-						width="9"
-						height="9"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth={2.4}
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						onClick={toggleChevron}
-					>
-						<path d="M9 6l6 6-6 6" />
-					</svg>
+					// "펼치기 버튼 범위가 너무 좁아서 클릭하기 힘들어" — 9x9 svg 자체에 onClick을 걸면 그 픽셀
+					// 안에서만 맞아야 해서 누르기 힘들었다. 아이콘은 그대로 두고, 20x20 여백을 가진 래퍼가
+					// 클릭을 받게 한다(§archiveBtn과 같은 히트 영역 크기).
+					<span className={`${styles.chevronHit} ${styles.chevronHitActive}`} onClick={toggleChevron}>
+						<svg
+							className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}
+							width="9"
+							height="9"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth={2.4}
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M9 6l6 6-6 6" />
+						</svg>
+					</span>
 				)}
 				<span
 					className={`${styles.statusIcon} ${
@@ -394,6 +427,9 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 					</span>
 				)}
 				<span className={`m ${styles.time}`}>{timeAgo(folder.updated_at)}</span>
+				<span className={styles.archiveBtn} title={folder.hidden ? t('다시 누르면 원래 밝기로 돌아옵니다') : t('흐리게 표시해 눈에 덜 띄게 합니다 (다시 누르면 원래대로)')} onClick={onHideClick}>
+					{HIDE_ICON}
+				</span>
 				<span
 					className={`${styles.archiveBtn} ${confirmArchive ? styles.archiveConfirm : ''}`}
 					title={confirmArchive ? t('다시 누르면 보관함으로 이동합니다') : t('완료된 태스크를 보관함으로 이동')}

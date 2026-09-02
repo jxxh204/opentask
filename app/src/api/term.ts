@@ -21,6 +21,11 @@ export function killTerm(name: string) {
 	return api.post<{ ok: boolean }>('/api/term/kill', { name })
 }
 
+// "고스티에서 열기" 버튼 — 이 세션이 tmux로 떠 있으면 그대로 attach, 아니면 새 셸만(§ term.cjs openExternal).
+export function openTermExternal(name: string) {
+	return api.post<{ ok: boolean; attached?: boolean; error?: string }>('/api/term/open-external', { name })
+}
+
 export interface TermStatus {
 	exists: boolean
 	working?: boolean

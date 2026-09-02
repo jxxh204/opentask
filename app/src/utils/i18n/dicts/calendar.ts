@@ -4,7 +4,6 @@ const dict: Record<string, string> = {
 	'{year}년 {month}월': '{month}/{year}',
 	'{year}년 {month}월 {d1}–{d2}일': '{month}/{d1}–{d2}/{year}',
 	'{m1}월 {d1}일 – {m2}월 {d2}일': '{m1}/{d1} – {m2}/{d2}',
-	'{label} (영업일 {days}일)': '{label} ({days} business day(s))',
 	'{days}일': '{days}d',
 	'작업 추가': 'Add task',
 	'일감 추가': 'Add task',
@@ -13,6 +12,13 @@ const dict: Record<string, string> = {
 	'일정 막기': 'Block period',
 	'예정일 없는 일감이 없습니다.': 'No unscheduled tasks.',
 	오늘: 'Today',
+	'지금 실행 중': 'Running now',
+	'도움 필요': 'Needs help',
+	'한동안 응답 없음': 'Quiet for a while',
+	'완료 처리됨': 'Marked done',
+	'세션 종료 (완료 처리 안 됨)': 'Session ended (not marked done)',
+	'대기 중': 'Waiting',
+	'완료 리포트 보기': 'View report',
 
 	// CronJobsPane.tsx
 	'{minutes}분마다': 'Every {minutes} min',
@@ -41,8 +47,8 @@ const dict: Record<string, string> = {
 	'실행할 지시': 'Instruction',
 	'실행할 지시를 입력하세요.': 'Enter the instruction to run.',
 	'예: 이번 주 완료되지 않은 서브태스크를 전부 다음 주로 재스케줄해줘': 'e.g. Reschedule every subtask not completed this week to next week',
-	'이 시각이 되면 이 문장을 오버마인드에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.':
-		"When this fires, it runs exactly as if you'd typed this sentence to the Overmind yourself — the same sentence every time, with no improvised scope from the AI.",
+	'이 시각이 되면 이 문장을 하이브마인드에게 그대로 시키는 것과 똑같이 실행됩니다 — 매번 이 문장 그대로만 실행되고, AI가 즉흥적으로 범위를 넓히지 않습니다.':
+		"When this fires, it runs exactly as if you'd typed this sentence to the Hivemind yourself — the same sentence every time, with no improvised scope from the AI.",
 	'만드는 중…': 'Creating…',
 	'자동화 만들기': 'Create automation',
 	크론잡: 'Cron Jobs',

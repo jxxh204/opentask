@@ -9,15 +9,39 @@
 	margin-bottom: 12px;
 }
 
+.input {
+	width: 100%;
+	min-height: 84px;
+	resize: vertical;
+	background: var(--card2);
+	color: var(--ink);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	font-size: 12.5px;
+	padding: 10px 11px;
+}
+.input::placeholder {
+	color: var(--t3);
+}
+
+/* "타이핑부터 시작" — 모드 세그먼트와 날짜를 같은 줄에 나란히 둬서 입력창 아래 보조 취급되게
+   한다(예전엔 각각 전체 너비를 쓰는 별도 줄이었다). */
+.metaRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
 /* "여기서 메인 서브 선택 기능있으면 좋을듯" — 메인 태스크로 만들지, 이미 있는 메인 태스크의
-   서브태스크로 만들지 미리 고른다. */
+   서브태스크로 만들지 고른다. */
 .modeRow {
 	display: flex;
 	gap: 4px;
 	padding: 3px;
 	background: var(--card2);
 	border-radius: var(--radius-control);
-	margin-bottom: 10px;
+	flex: 1;
+	min-width: 0;
 }
 .modeTab {
 	flex: 1;
@@ -36,35 +60,14 @@
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .subParentRow {
-	margin-bottom: 10px;
-}
-
-.input {
-	width: 100%;
-	min-height: 84px;
-	resize: vertical;
-	background: var(--card2);
-	color: var(--ink);
-	border: 1px solid var(--line2);
-	border-radius: var(--radius-control);
-	font-size: 12.5px;
-	padding: 10px 11px;
-}
-.input::placeholder {
-	color: var(--t3);
+	margin-top: 10px;
 }
 
 .dateRow {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	margin-top: 10px;
-}
-.dateLabel {
+	gap: 6px;
 	flex: none;
-	font-size: 11.5px;
-	font-weight: 700;
-	color: var(--t2);
 }
 .dateClear {
 	flex: none;

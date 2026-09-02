@@ -1,9 +1,24 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEventHandler } from 'react'
+import { useEffect, useRef, useState, type ClipboardEventHandler } from 'react'
 import { marked } from 'marked'
-import { getControlState, startControl, stopControl, askControl, getControlTranscript, uploadImage, interruptControl } from '../../api/control'
-import type { ControlState, ChatTurn, ChatPart } from '../../api/control'
+import {
+	getControlState,
+	startControl,
+	stopControl,
+	resetControl,
+	askControl,
+	getControlTranscript,
+	uploadImage,
+	interruptControl,
+	getControlLivePrompt,
+	sendControlLiveAction,
+} from '../../api/control'
+import type { ControlState, ChatTurn, ChatPart, LivePrompt, LiveAction } from '../../api/control'
+import { updateOperatorSettings } from '../../api/setup'
+import { openTermExternal } from '../../api/term'
+import { useSessionsStore } from '../../store/useSessionsStore'
 import StatusDot from '../common/StatusDot'
-import { useT, useTp } from '../../utils/i18n'
+import XTerm from '../terminal/XTerm'
+import { useT, useTp, translate } from '../../utils/i18n'
 import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './ControlPane.module.css'
 
@@ -24,6 +39,16 @@ marked.setOptions({ breaks: true })
 // 그대로(§ tabIcons.tsx overmindIcon). 이미지 자체가 이미 어두운 배지라 .avatar의 violet 배경은
 // 걷어내고(§ ControlPane.module.css .avatar) 이미지가 원형을 꽉 채우게 한다.
 const CONTROL_AVATAR_ICON = <img src={overmindIcon} alt="" className={styles.avatarImg} />
+// "유저가 직접 확인하는것도 쉬워야하는데" — 헤더의 "마지막 점검" 표시용(§ OrchestratorPane.tsx 등
+// 여러 곳의 같은 이름 로컬 헬퍼와 동일 패턴 — 공유 모듈로 안 뽑고 그대로 복제).
+function timeAgo(ts: number) {
+	const min = Math.floor((Date.now() - ts) / 60000)
+	if (min < 1) return translate('방금')
+	if (min < 60) return `${min}m`
+	const hr = Math.floor(min / 60)
+	if (hr < 24) return `${hr}h`
+	return `${Math.floor(hr / 24)}d`
+}
 const TOOL_ICON = (
 	<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 		<rect x="3" y="4" width="18" height="16" rx="2.2" />
@@ -51,7 +76,7 @@ const STOP_ICON = (
 )
 
 // "작은 변화도 채팅으로 알려줘서 진행중인 느낌을 줘야해" — 지금까지는 tool 호출이 원문 이름+JSON을
-// 접어둔 기술적 디테일이라, 클릭해서 펼쳐야만 뭘 하는지 보였다. 오버마인드가 실제로 쓰는 MCP 툴
+// 접어둔 기술적 디테일이라, 클릭해서 펼쳐야만 뭘 하는지 보였다. 하이브마인드가 실제로 쓰는 MCP 툴
 // (§ control.cjs controlSeed의 목록)만 사람이 읽는 문장으로 매핑 — 모르는 tool은 지어내지 않고
 // 원문 이름을 그대로 노출한다(크론잡 상태 배지 때와 같은 원칙).
 const TOOL_LABELS: Record<string, string> = {
@@ -87,173 +112,6 @@ function toolLabel(name: string, t: ReturnType<typeof useT>): string {
 	const bare = name.replace(/^mcp__[\w-]+__/, '')
 	const known = TOOL_LABELS[bare] ?? TOOL_LABELS[name]
 	return known ? t(known) : name
-}
-
-// "왼쪽 오른쪽 공간이 남는데... 관련 내용이 아주 단순하게 떠오르면서 위로쌓이는 구조" — 중앙 정렬
-// 읽기 폭 컬럼(§ .thread) 옆의 빈 여백을, 오버마인드가 실제로 만지는 태스크/크론잡/캘린더를 실시간
-// 미니어처로 보여주는 자리로 쓴다. 완전히 새 일러스트 대신 이 시스템에 이미 있는 아이콘(§
-// SessionShell.tsx CALENDAR_ICON/AUTOMATIONS_ICON, tabIcons.tsx subtask 점)을 축소 재사용하고, 색은
-// Signal-Only Rule을 지키기 위해 전부 시그널 바이올렛(에이전트가 한 일이라는 신호) 하나로 통일한다.
-// 데이터 소스는 새 추적 코드 없이 이미 파싱돼 있는 tool_use part(§ transcript.cjs)를 그대로 읽는다.
-type CanvasKind = 'task' | 'subtask' | 'cron' | 'blocked'
-interface CanvasItem {
-	id: string
-	// "이거 자연스럽지 않아" — 같은 태스크를 create_task로 만들고 곧이어 start_task로 착수시키면
-	// 실제로는 한 대상인데 tool_use 콜마다 카드를 하나씩 찍어 똑같은 제목이 두 번 쌓였다. entityId로
-	// "무엇을 가리키는가"를 분리해두고 deriveCanvasItems에서 최신 한 장만 남긴다.
-	entityId: string
-	kind: CanvasKind
-	label: string
-	title: string
-	meta: string | null
-}
-
-function fmtDate(v: unknown): string | null {
-	if (v == null) return null
-	const ms = typeof v === 'string' ? new Date(/^\d+$/.test(v) ? Number(v) : v + 'T00:00:00').getTime() : Number(v)
-	if (!Number.isFinite(ms)) return null
-	const d = new Date(ms)
-	return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-const SCHEDULE_TYPE_LABEL: Record<string, string> = { interval: '반복 간격', daily: '매일', weekly: '매주' }
-
-const CANVAS_ICON: Record<CanvasKind, React.ReactNode> = {
-	task: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<circle cx="12" cy="12" r="5.5" />
-		</svg>
-	),
-	subtask: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<circle cx="12" cy="12" r="4" />
-		</svg>
-	),
-	cron: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<rect x="3" y="5" width="18" height="16" rx="2.5" />
-			<path d="M3 10h18M8 3v4M16 3v4" />
-			<circle cx="15.5" cy="15.5" r="3.2" />
-			<path d="M15.5 14v1.6l1.1.9" />
-		</svg>
-	),
-	blocked: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<rect x="3" y="5" width="18" height="16" rx="2.5" />
-			<path d="M3 10h18M8 3v4M16 3v4" />
-			<path d="M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17.5h1M11.5 17.5h1" />
-		</svg>
-	),
-}
-
-// tool_use 파트 하나 → 캔버스 카드 하나(그릴 게 없으면 null). result는 실제 API 응답(§
-// mcpControl.cjs ok() — JSON.stringify(data))이라 input보다 신뢰할 수 있는 값이면 그쪽을 우선한다.
-// 삭제류 툴은 카드로 그릴 대상이 사라지는 액션이라(등장 연출과 안 어울림) 의도적으로 제외한다.
-function canvasItemFor(turnId: string, partIndex: number, name: string, input: unknown, result: string | null, t: ReturnType<typeof useT>): CanvasItem | null {
-	const bare = name.replace(/^mcp__[\w-]+__/, '')
-	const inp = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
-	let data: Record<string, unknown> | null = null
-	if (result) {
-		try {
-			const parsed = JSON.parse(result)
-			if (parsed && typeof parsed === 'object') data = parsed as Record<string, unknown>
-		} catch {
-			/* ignore */
-		}
-	}
-	const id = `${turnId}-${partIndex}`
-	const pick = (key: string) => (data && data[key] != null ? data[key] : inp[key])
-
-	switch (bare) {
-		case 'create_task':
-		case 'update_task':
-			return {
-				id,
-				entityId: String(data?.id ?? inp.taskId ?? id),
-				kind: 'task',
-				label: t('태스크'),
-				title: String(pick('name') ?? t('태스크')),
-				meta: fmtDate(pick('due_date') ?? pick('dueDate')),
-			}
-		case 'reschedule_task':
-			return { id, entityId: String(inp.taskId ?? id), kind: 'task', label: t('태스크'), title: String(data?.name ?? t('일정 조정')), meta: fmtDate(pick('due_date') ?? pick('dueDate')) }
-		case 'start_task':
-			return { id, entityId: String(inp.taskId ?? id), kind: 'task', label: t('태스크'), title: String(inp.taskName ?? t('태스크')), meta: t('착수') }
-		case 'create_subtask':
-		case 'update_subtask':
-			return {
-				id,
-				entityId: String(data?.id ?? inp.subtaskId ?? id),
-				kind: 'subtask',
-				label: t('서브태스크'),
-				title: String(pick('name') ?? t('서브태스크')),
-				meta: fmtDate(pick('due_date') ?? pick('dueDate')),
-			}
-		case 'create_blocked_period':
-			return {
-				id,
-				entityId: String(data?.id ?? id),
-				kind: 'blocked',
-				label: t('차단 기간'),
-				title: String(pick('name') ?? t('차단 기간')),
-				meta: [fmtDate(pick('start_date') ?? pick('startDate')), fmtDate(pick('end_date') ?? pick('endDate'))].filter(Boolean).join(' ~ ') || null,
-			}
-		case 'create_cron_job':
-		case 'update_cron_job': {
-			const scheduleType = String(pick('schedule_type') ?? pick('scheduleType') ?? '')
-			return {
-				id,
-				entityId: String(data?.id ?? inp.id ?? id),
-				kind: 'cron',
-				label: t('크론잡'),
-				title: String(pick('name') ?? t('크론잡')),
-				meta: SCHEDULE_TYPE_LABEL[scheduleType] ? t(SCHEDULE_TYPE_LABEL[scheduleType]) : null,
-			}
-		}
-		case 'run_cron_job_now':
-			// 수동 실행은 매번 독립된 이벤트라(같은 크론잡을 여러 번 눌러도 각각 의미가 있다) entityId를
-			// 공유시키지 않는다 — id 자체를 써서 항상 새 카드로 쌓인다.
-			return { id, entityId: id, kind: 'cron', label: t('크론잡'), title: t('지금 실행'), meta: null }
-		default:
-			return null
-	}
-}
-
-function deriveCanvasItems(turns: ChatTurn[], t: ReturnType<typeof useT>): CanvasItem[] {
-	const items: CanvasItem[] = []
-	for (const turn of turns) {
-		if (turn.role !== 'assistant') continue
-		turn.parts.forEach((p, i) => {
-			if (p.kind !== 'tool') return
-			const item = canvasItemFor(turn.id, i, p.name, p.input, p.result, t)
-			if (item) items.push(item)
-		})
-	}
-	const reversed = items.reverse() // 최신이 위로 쌓이게(§ "위로쌓이는 구조") — 배열 맨 앞이 가장 최근
-	// 같은 태스크/서브태스크/크론잡을 대화 중 여러 번 건드리면(예: create_task 후 start_task) 매번
-	// 새 카드가 찍혀 같은 제목이 중복 표시됐다("이거 자연스럽지 않아") — 대상당 가장 최근 카드 한 장만.
-	const seen = new Set<string>()
-	const deduped: CanvasItem[] = []
-	for (const item of reversed) {
-		const key = `${item.kind}:${item.entityId}`
-		if (seen.has(key)) continue
-		seen.add(key)
-		deduped.push(item)
-	}
-	return deduped
-}
-
-function CanvasCard({ item }: { item: CanvasItem }) {
-	return (
-		<div className={styles.canvasCard}>
-			<div className={styles.canvasCardHead}>
-				<span className={styles.canvasCardIcon}>{CANVAS_ICON[item.kind]}</span>
-				<span className={styles.canvasCardKind}>{item.label}</span>
-			</div>
-			<div className={styles.canvasCardTitle}>{item.title}</div>
-			{item.meta && <div className={`m ${styles.canvasCardMeta}`}>{item.meta}</div>}
-		</div>
-	)
 }
 
 function ToolPart({ name, input, result }: { name: string; input: unknown; result: string | null }) {
@@ -294,7 +152,131 @@ function TurnPart({ part }: { part: ChatPart }) {
 	return <ToolPart name={part.name} input={part.input} result={part.result} />
 }
 
-export default function ControlPane() {
+// "질문이 안왔는데?" — 처음엔 대화 기록(jsonl) 폴링에서 tool_use를 파싱해 버튼으로 그렸는데, 실제
+// 떠 있는 세션의 jsonl 파일을 직접 열어보니 AskUserQuestion의 tool_use 레코드 자체가 **사람이
+// 답하기 전까진 파일에 전혀 안 쓰인다**(2026-09-01 실측). 그래서 대화 기록으로는 "지금 질문이 떠
+// 있다"를 원천적으로 감지 못 한다 — 대신 살아있는 pty 화면을 직접 읽는 전용 폴링(§ api/control.ts
+// getControlLivePrompt, server/control.cjs parseLivePrompt)을 쓴다. 클릭 하나가 곧 지금 화면 기준
+// 키 하나(select/toggle/next/submit/cancel)라 옵션 인덱스가 화면과 어긋날 위험이 없다 — 서버가
+// 매번 방금 읽은 실제 화면으로만 키를 계산한다(§ server/control.cjs sendLiveAction).
+function LivePromptPanel({
+	prompt,
+	session,
+	cwd,
+	modelLabel,
+}: {
+	prompt: LivePrompt
+	session: string
+	cwd: string
+	modelLabel: string | null
+}) {
+	const t = useT()
+	const [busy, setBusy] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const [showRaw, setShowRaw] = useState(false)
+	// 클릭 직후엔 폴링이 아직 그 결과를 못 봤을 수 있다(§ 위 폴링 주기) — prompt 자체가 실제로
+	// 바뀐 걸 확인할 때까지 busy를 유지해, 화면과 어긋난 채로 다음 클릭이 또 나가는 걸 막는다.
+	const signature = JSON.stringify(prompt)
+	const appliedRef = useRef(signature)
+	useEffect(() => {
+		if (signature !== appliedRef.current) {
+			appliedRef.current = signature
+			setBusy(false)
+		}
+	}, [signature])
+
+	async function act(action: LiveAction) {
+		if (busy) return
+		setBusy(true)
+		setError(null)
+		try {
+			const r = await sendControlLiveAction(action)
+			if (!r.ok) {
+				setError(t(r.error || '전송 실패'))
+				setBusy(false)
+			}
+			// 성공하면 busy를 유지 — 위 useEffect가 화면이 실제로 바뀐 걸 확인한 뒤에만 풀어준다.
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+			setBusy(false)
+		}
+	}
+
+	if (showRaw) {
+		return (
+			<div className={styles.rawAnswer}>
+				<div className={styles.rawAnswerLabel}>{t('터미널에서 직접 화살표·Space·Enter로 답하세요(자유 입력 등).')}</div>
+				<div className={styles.rawAnswerHost}>
+					<XTerm session={session} cwd={cwd} modelLabel={modelLabel} />
+				</div>
+			</div>
+		)
+	}
+
+	const rawToggle = (
+		<button type="button" className={styles.askRawToggle} onClick={() => setShowRaw(true)}>
+			{t('자유 입력이 필요하면 터미널로 전환')}
+		</button>
+	)
+
+	if (prompt.kind === 'review') {
+		return (
+			<div className={styles.askPanel}>
+				<div className={styles.askQuestion}>
+					<div className={styles.askQuestionText}>{t('답변을 확인하고 제출하세요.')}</div>
+					{prompt.summary && <div className={styles.askOptionDesc}>{prompt.summary}</div>}
+				</div>
+				{error && <div className={styles.askError}>{error}</div>}
+				<div className={styles.askFooter}>
+					{rawToggle}
+					<div style={{ display: 'flex', gap: 8 }}>
+						<button type="button" className={styles.btn} disabled={busy} onClick={() => act({ type: 'cancel' })}>
+							{t('취소')}
+						</button>
+						<button type="button" className={styles.askSubmit} disabled={busy} onClick={() => act({ type: 'submit' })}>
+							{busy ? t('전송 중…') : t('답변 제출')}
+						</button>
+					</div>
+				</div>
+			</div>
+		)
+	}
+
+	return (
+		<div className={styles.askPanel}>
+			<div className={styles.askQuestion}>
+				{prompt.question && <div className={styles.askQuestionText}>{prompt.question}</div>}
+				<div className={styles.askOptions}>
+					{prompt.options.map((opt, oi) => (
+						<button
+							key={oi}
+							type="button"
+							className={`${styles.askOption} ${opt.checked ? styles.askOptionSelected : ''}`}
+							disabled={busy}
+							onClick={() => act({ type: prompt.multiSelect ? 'toggle' : 'select', index: oi })}
+						>
+							{prompt.multiSelect && <span className={styles.askCheckbox}>{opt.checked ? '☑' : '☐'}</span>}
+							<span className={styles.askOptionLabel}>{opt.label}</span>
+						</button>
+					))}
+				</div>
+			</div>
+			{error && <div className={styles.askError}>{error}</div>}
+			<div className={styles.askFooter}>
+				{rawToggle}
+				{prompt.multiSelect && (
+					<button type="button" className={styles.askSubmit} disabled={busy} onClick={() => act({ type: 'next' })}>
+						{busy ? t('전송 중…') : t('다음')}
+					</button>
+				)}
+			</div>
+		</div>
+	)
+}
+
+// onClose는 도킹 패널(§ SessionShell.tsx controlDock)에서만 넘어온다 — 전체 화면 노드(CONTROL_NODE_ID)나
+// 폴더/태스크 탭에 끼워 넣은 경우엔 각자 자기 탭 닫기가 있어 안 넘긴다(그때는 이 버튼 자체가 안 뜬다).
+export default function ControlPane({ onClose }: { onClose?: () => void } = {}) {
 	const t = useT()
 	const tp = useTp()
 	const [state, setState] = useState<ControlState | null>(null)
@@ -333,17 +315,22 @@ export default function ControlPane() {
 		}
 	}, [])
 
-	// 마지막 턴이 사람 쪽이거나(또는 방금 보낸 게 아직 안 도착했으면), 비서 턴이 텍스트가 아니라
-	// tool 호출로 끝나 있으면(더 이어질 여지가 있음) 아직 응답이 안 끝난 것 — "정지" 버튼, 점 3개,
-	// 폴링 주기가 전부 이 하나의 판단을 공유한다.
 	const lastTurn = turns[turns.length - 1]
 	const lastPart = lastTurn?.parts[lastTurn.parts.length - 1]
-	const generating = !!pendingUser || !lastTurn || lastTurn.role === 'user' || lastPart?.kind !== 'text'
+	// "질문이 안왔는데?" — AskUserQuestion은 사람이 답하기 전까진 대화 기록(jsonl)에 안 나타난다(§
+	// server/control.cjs getLivePrompt 주석, 2026-09-01 실측) — 대화 기록(turns) 기반 감지는 원천적으로
+	// 불가능해서 별도 폴링(§ 아래 liveTick)으로 살아있는 pty 화면을 직접 읽는다.
+	const [live, setLive] = useState<{ waiting: boolean; working: boolean; prompt: LivePrompt | null }>({ waiting: false, working: false, prompt: null })
+	// "멈추기도 동작안하고 채팅창도 꺠져" — 예전엔 "마지막 턴이 user로 끝나 있으면 생성 중"으로
+	// 추측했는데, /compact 같은 로컬 명령 뒤엔 응답이 영영 안 온다(§ transcript.cjs
+	// isSyntheticUserContent 주석) — 그러면 이 추측이 영원히 true로 굳어 점 3개가 안 꺼지고, 정지
+	// 버튼(ESC 전송)도 이미 유휴인 CLI엔 먹힐 게 없다(2026-09-02 실측). live.working이 실제 pty
+	// 상태(§ getLivePrompt) 기준이라 이제 이걸로만 판단한다 — pendingUser는 보낸 직후 폴링이 한 번
+	// 돌기 전까지의 짧은 낙관적 표시.
+	const generating = !!pendingUser || live.working
 	// "작은 변화도 채팅으로 알려줘서 진행중인 느낌을 줘야해" — 지금 뭘 하고 있는지 알 수 있으면(마지막
 	// 파트가 아직 진행 중인 tool 호출) 점 3개 대신 그 활동을 문장으로 보여준다.
 	const activeToolLabel = !pendingUser && lastTurn?.role === 'assistant' && lastPart?.kind === 'tool' ? toolLabel(lastPart.name, t) : null
-	const canvasItems = useMemo(() => deriveCanvasItems(turns, t), [turns, t])
-
 	// 대화 기록 폴링 — 세션이 떠 있는 동안만. 생성 중엔 체감 반응성을 위해 1초, 유휴 땐 2초로
 	// 되돌아간다(불필요한 트래픽을 늘리지 않음) — setInterval 대신 매 tick마다 스스로 다음 지연을
 	// 고르는 self-scheduling 루프라 generating이 바뀔 때마다 타이머를 새로 만들 필요가 없다.
@@ -351,6 +338,29 @@ export default function ControlPane() {
 	useEffect(() => {
 		generatingRef.current = generating
 	})
+	// live-prompt 폴링 — pty 화면 스냅샷만 읽는 가벼운 로컬 호출이라(§ server/control.cjs getLivePrompt)
+	// 대화 기록 폴링과 별개로 항상 1초 고정 — 질문이 뜬 순간을 놓치지 않는 게 트래픽보다 중요하다.
+	useEffect(() => {
+		if (!state?.running) return
+		let cancelled = false
+		let timer: ReturnType<typeof setTimeout>
+		const tick = () => {
+			getControlLivePrompt()
+				.then((r) => {
+					if (cancelled || !r.ok) return
+					setLive({ waiting: r.waiting, working: r.working, prompt: r.prompt })
+				})
+				.catch(() => {})
+				.finally(() => {
+					if (!cancelled) timer = setTimeout(tick, 1000)
+				})
+		}
+		tick()
+		return () => {
+			cancelled = true
+			clearTimeout(timer)
+		}
+	}, [state?.running])
 	useEffect(() => {
 		if (!state?.running) return
 		let cancelled = false
@@ -376,7 +386,7 @@ export default function ControlPane() {
 
 	useEffect(() => {
 		bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight })
-	}, [turns, pendingUser])
+	}, [turns, pendingUser, live.waiting])
 
 	async function restart() {
 		setBusy(true)
@@ -392,6 +402,78 @@ export default function ControlPane() {
 			setBusy(false)
 		}
 	}
+
+	// "세션을 초기화하는거나.. 하이브마인드를 자주사용해서 사용성 개선이 필요해" — restart()는 이전
+	// 대화를 그대로 이어받는다(claude --continue) — 이건 그 대화 자체를 안 이어받는 진짜 새 시작
+	// (§ server/control.cjs reset). 되돌릴 수 없어 restart처럼 확인 없이 바로 누르면 위험하니 확인 한 번.
+	async function reset() {
+		if (!confirm(t('지금 대화를 초기화하고 완전히 새로 시작합니다. 계속할까요?'))) return
+		setBusy(true)
+		try {
+			setTurns([])
+			const r = await resetControl()
+			if (r.ok) setState((prev) => ({ ...prev, running: true, session: r.session ?? null, cwd: r.cwd, modelLabel: r.modelLabel }))
+			else setError(t(r.error || '초기화 실패'))
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+		} finally {
+			setBusy(false)
+		}
+	}
+
+	// "하이브마인드 전체 운영 모드" 토글 — 값 자체는 Settings에 저장되고(server/settings.cjs opsMode),
+	// getControlState()가 그대로 미러해서 돌려준다(§ state.opsMode). 이 함수는 그 값만 뒤집는다.
+	const [opsModeBusy, setOpsModeBusy] = useState(false)
+	async function toggleOpsMode() {
+		if (opsModeBusy || !state) return
+		setOpsModeBusy(true)
+		const next = !state.opsMode
+		try {
+			await updateOperatorSettings({ opsMode: next })
+			setState((prev) => (prev ? { ...prev, opsMode: next } : prev))
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+		} finally {
+			setOpsModeBusy(false)
+		}
+	}
+	// "터미널을 고스티로 열수는 없는거야?" — 이미 있던 기능이다(§ XTerm.tsx openExternal, 설정의
+	// "Ghostty로 보기"). 다만 지금까진 raw 터미널 폴백(질문 파싱 실패·자유 입력 전환)이 떴을 때만
+	// 그 안에 끼워 넣은 XTerm의 버튼으로만 만날 수 있었다 — 채팅 뷰가 기본이라 평소엔 안 보였다.
+	// 헤더에 항상 노출해 언제든 실제 Ghostty로 바로 붙을 수 있게 한다(§ term.cjs openExternal —
+	// tmux면 지금 화면 그대로 attach, 아니면 그 워크트리에서 새 셸).
+	const ghosttyEnabled = useSessionsStore((s) => s.terminalGhostty)
+	const [openingGhostty, setOpeningGhostty] = useState(false)
+	async function openInGhostty() {
+		if (openingGhostty || !state?.session) return
+		setOpeningGhostty(true)
+		try {
+			const r = await openTermExternal(state.session)
+			if (!r.ok) setError(t(r.error || 'Ghostty 열기 실패'))
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+		} finally {
+			setOpeningGhostty(false)
+		}
+	}
+	// "유저가 직접 확인하는것도 쉬워야하는데" — opsMode/lastOpsTickAt은 다른 창에서 토글했거나 서버의
+	// 15분 tick이 방금 돌았을 수 있어, 마운트 시 한 번 받은 state로는 낡을 수 있다. 채팅 폴링만큼
+	// 자주일 필요는 없어(15분 주기 이벤트라) 15초마다만 가볍게 다시 확인.
+	useEffect(() => {
+		if (!state?.running) return
+		let cancelled = false
+		const id = window.setInterval(() => {
+			getControlState()
+				.then((s) => {
+					if (!cancelled) setState((prev) => (prev ? { ...prev, opsMode: s.opsMode, lastOpsTickAt: s.lastOpsTickAt, stalled: s.stalled } : prev))
+				})
+				.catch(() => {})
+		}, 15000)
+		return () => {
+			cancelled = true
+			window.clearInterval(id)
+		}
+	}, [state?.running])
 
 	async function send() {
 		const text = draft.trim()
@@ -470,15 +552,44 @@ export default function ControlPane() {
 			<div className={styles.head}>
 				<img src={overmindIcon} alt="" className={styles.headIcon} />
 				<StatusDot color={state?.running ? 'green' : 'muted'} pulse={!!state?.running} />
-				<span className={styles.state}>{t('오버마인드')}</span>
+				<span className={styles.state}>{t('하이브마인드')}</span>
 				{state?.modelLabel && <span className={`m ${styles.meta}`}>{state.modelLabel}</span>}
 				{/* "계속 유지(백그라운드 실행 & 하나의 세션)" — tmux가 있을 때만(§control.cjs) 진짜로
 				    서버 재시작에도 살아있다는 걸 사용자가 확인할 수 있게. */}
 				{state?.persistent && <span className={`m ${styles.meta}`}>{t('· 백그라운드 유지')}</span>}
 				<div style={{ flex: 1 }} />
-				<button className={styles.btn} disabled={busy} onClick={restart}>
+				{/* "하이브마인드 전체 운영 모드... 유저가 직접 확인하는것도 쉬워야하는데" — 토글 상태 옆에
+				    바로 "마지막 점검"을 붙여서, 채팅을 스크롤하지 않고도 정말 돌고 있는지 한눈에 확인
+				    가능하게(§ server/control.cjs runOpsModeTick, lastOpsTickAt). */}
+				<button
+					className={`${styles.btn} ${state?.opsMode ? styles.btnActive : ''}`}
+					disabled={opsModeBusy || !state}
+					onClick={toggleOpsMode}
+					title={t('켜면 15분마다 전체 태스크 그래프를 점검하고 막힌 태스크에 지시합니다')}
+				>
+					{t('운영 모드')} {state?.opsMode ? t('켜짐') : t('꺼짐')}
+				</button>
+				{state?.opsMode && state?.lastOpsTickAt && (
+					<span className={`m ${styles.meta}`} title={new Date(state.lastOpsTickAt).toLocaleString()}>
+						{tp('· 마지막 점검 {time}', { time: timeAgo(state.lastOpsTickAt) })}
+					</span>
+				)}
+				{ghosttyEnabled && (
+					<button className="btn-dry" disabled={openingGhostty || !state?.session} onClick={openInGhostty} title={t('워크트리 경로에서 Ghostty를 엽니다(tmux로 유지 중이면 지금 화면 그대로 이어봅니다)')}>
+						↗ {t('고스티에서 열기')}
+					</button>
+				)}
+				<button className={styles.btn} disabled={busy} onClick={restart} title={t('같은 대화를 이어서 세션만 새로 띄웁니다')}>
 					{t('재시작')}
 				</button>
+				<button className={styles.btn} disabled={busy} onClick={reset} title={t('지금 대화를 버리고 완전히 새로 시작합니다')}>
+					{t('초기화')}
+				</button>
+				{onClose && (
+					<button className={styles.btn} onClick={onClose} title={t('닫기')}>
+						×
+					</button>
+				)}
 			</div>
 			{state?.running ? (
 				<>
@@ -487,7 +598,7 @@ export default function ControlPane() {
 							{turns.length === 0 && !pendingUser && (
 								<div className={styles.empty}>
 									<span className={styles.emptyDot} />
-									{t('오버마인드에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.')}
+									{t('하이브마인드에게 태스크 생성, 일정 조정, 크론잡 등을 자연어로 부탁해보세요.')}
 								</div>
 							)}
 							{/* "일반적인 챗봇 디자인처럼" — ChatGPT/Claude.ai 웹 챗 기준(구도만, 색·토큰은
@@ -501,16 +612,26 @@ export default function ControlPane() {
 							    가져와 ChatGPT/Claude.ai식 좌측 아바타로 키운다 — 새 도상 발명 대신 이미
 							    있는 신호를 더 크게. */}
 							<div className={styles.thread}>
-								{turns.map((t) => (
-									<div key={t.id} className={`${styles.turnRow} ${t.role === 'user' ? styles.turnRowUser : styles.turnRowAssistant}`}>
-										{t.role === 'assistant' && <span className={styles.avatar}>{CONTROL_AVATAR_ICON}</span>}
-										<div className={`${styles.bubble} ${t.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}>
-											{t.parts.map((p, i) => (
-												<TurnPart key={i} part={p} />
-											))}
+								{turns.map((turn) =>
+									// "명시도 해줘" — 운영 모드가 자동으로 넣은 점검 턴은 사람 말풍선이 아니라 구분선
+									// 형태로(§ server/transcript.cjs auto). 채팅을 쭉 스크롤하다가도 "이건 내가 친 게
+									// 아니라 자동 점검이었구나"를 바로 알 수 있게 — 새 화면 없이 이미 보는 채팅 안에서.
+									turn.auto ? (
+										<div key={turn.id} className={styles.autoTickRow}>
+											<span className={styles.autoTickBadge}>{t('⏱ 자동 점검')}</span>
+											<span className={styles.autoTickTime}>{new Date(turn.ts).toLocaleTimeString()}</span>
 										</div>
-									</div>
-								))}
+									) : (
+										<div key={turn.id} className={`${styles.turnRow} ${turn.role === 'user' ? styles.turnRowUser : styles.turnRowAssistant}`}>
+											{turn.role === 'assistant' && <span className={styles.avatar}>{CONTROL_AVATAR_ICON}</span>}
+											<div className={`${styles.bubble} ${turn.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}>
+												{turn.parts.map((p, i) => (
+													<TurnPart key={i} part={p} />
+												))}
+											</div>
+										</div>
+									),
+								)}
 								{pendingUser && (
 									<div className={`${styles.turnRow} ${styles.turnRowUser}`}>
 										<div className={`${styles.bubble} ${styles.bubbleUser}`} style={{ opacity: 0.6 }}>
@@ -518,10 +639,23 @@ export default function ControlPane() {
 										</div>
 									</div>
 								)}
+								{live.waiting && state?.session && live.prompt && (
+									<LivePromptPanel prompt={live.prompt} session={state.session} cwd={state.cwd} modelLabel={state.modelLabel} />
+								)}
+								{live.waiting && state?.session && !live.prompt && (
+									<div className={styles.rawAnswer}>
+										<div className={styles.rawAnswerLabel}>
+											{t('하이브마인드가 방향키로 답해야 하는 질문을 띄웠습니다 — 여기서 직접 클릭·키보드로 답하세요.')}
+										</div>
+										<div className={styles.rawAnswerHost}>
+											<XTerm session={state.session} cwd={state.cwd} modelLabel={state.modelLabel} />
+										</div>
+									</div>
+								)}
 								{/* "비서가 지금 뭘 하고 있는지" — claude가 답할 때까지 몇 초~몇십 초 아무 신호도 없으면
 								    멈춘 것처럼 보인다(craft-floor "States: loading"). 아직 아무 tool도 안 불렀으면
 								    점 3개, tool을 부르는 중이면("작은 변화도 채팅으로 알려줘서") 그 활동을 문장으로. */}
-								{generating && (
+								{generating && !live.waiting && (
 									<div className={`${styles.turnRow} ${styles.turnRowAssistant}`}>
 										<span className={styles.avatar}>{CONTROL_AVATAR_ICON}</span>
 										<div className={`${styles.bubble} ${styles.bubbleAssistant} ${styles.thinking}`}>
@@ -539,13 +673,6 @@ export default function ControlPane() {
 								)}
 							</div>
 						</div>
-						{canvasItems.length > 0 && (
-							<div className={styles.canvasRail}>
-								{canvasItems.map((item) => (
-									<CanvasCard key={item.id} item={item} />
-								))}
-							</div>
-						)}
 					</div>
 					<div className={styles.inputArea}>
 						{uploadingImage && <div className={styles.imageUploading}>{t('이미지 업로드 중…')}</div>}
@@ -557,7 +684,7 @@ export default function ControlPane() {
 								ref={textareaRef}
 								className={styles.textarea}
 								value={draft}
-								placeholder={t('오버마인드에게 메시지… (이미지 붙여넣기 가능)')}
+								placeholder={t('하이브마인드에게 메시지… (이미지 붙여넣기 가능)')}
 								onChange={(e) => setDraft(e.target.value)}
 								onPaste={handlePaste}
 								onKeyDown={(e) => {
@@ -580,7 +707,7 @@ export default function ControlPane() {
 					</div>
 				</>
 			) : (
-				<div className={styles.starting}>{error ?? t('오버마인드 세션 시작 중…')}</div>
+				<div className={styles.starting}>{error ?? t('하이브마인드 세션 시작 중…')}</div>
 			)}
 		</div>
 	)

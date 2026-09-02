@@ -14,7 +14,7 @@ const IS_CONTROL = process.env.OPENTASK_CONTROL === '1'
 // 에이전트가 프롬프트 인젝션이나 실수로 GitHub 토큰·DB 연결문자열을 읽거나 덮어쓰는 사고를 막기
 // 위함(§control.cjs controlSeed에도 이 제약을 사람이 읽는 문장으로 명시). 그 값들은 설정 화면에서
 // 사람이 직접 넣어야 한다.
-const SAFE_CONNECTORS = new Set(['paths', 'app', 'aws', 'vitals', 'deploy'])
+const SAFE_CONNECTORS = new Set(['paths', 'app', 'aws', 'vitals', 'deploy', 'terminal'])
 
 async function apiGet(path) {
 	const res = await fetch(`http://127.0.0.1:${PORT}${path}`)
@@ -42,7 +42,7 @@ async function apiDelete(path) {
 }
 function requireControl() {
 	if (IS_CONTROL) return null
-	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 오버마인드 세션 전용입니다.' }], isError: true }
+	return { content: [{ type: 'text', text: 'OPENTASK_CONTROL이 설정되지 않았습니다 — 이 MCP 서버는 하이브마인드 세션 전용입니다.' }], isError: true }
 }
 function ok(data) {
 	return { content: [{ type: 'text', text: JSON.stringify(data) }], isError: data && data.ok === false }
@@ -135,7 +135,11 @@ server.registerTool(
 	'create_subtask',
 	{
 		title: '서브태스크 생성',
-		description: '태스크 하나를 개발/개발자테스트/QA/배포처럼 작은 단계로 쪼갠다. 각 서브태스크는 자기만의 설명·예정일·기간을 갖고 캘린더에 독립적으로 표시된다.',
+		// "이 단위로 안 하고있는데? 태스크 매니저는?" — 예전엔 여기 "개발/QA/배포 단계"로 쪼개라고
+		// 돼 있어서, 태스크 매니저(§ mcpDispatch.cjs create_subtask)가 쓰는 "커밋·PR 가능한 단위"
+		// (§ prompts.cjs workUnits) 기준과 서로 달랐다 — 같은 앱 안에서 서브태스크를 만드는 기준이
+		// 어디서 만드느냐에 따라 달라지는 건 이상하다. 하나로 통일한다.
+		description: '태스크 하나를 실제로 처리할 서브태스크로 쪼갠다. 기준은 개수가 아니라 "각각 독립적으로 커밋·PR 가능한 단위인가"다 — 그 자체로 완결된 작은 업무 단위로 나눠라(예: "결제 API 연동", "웹뷰 호스트 화면 구현"). 개발/개발자테스트/QA/배포 같은 파이프라인 단계로 쪼개거나 너무 잘게 나누지 마라. 각 서브태스크는 자기만의 설명·예정일·기간을 갖고 캘린더에 독립적으로 표시된다.',
 		inputSchema: {
 			taskId: z.string(),
 			name: z.string(),
@@ -226,6 +230,31 @@ server.registerTool(
 		if (moved && moved.ok === false) return ok(moved)
 		const started = await apiPost(`/api/folders/${folder.id}/orchestrate/start`)
 		return ok({ ok: true, folderId: folder.id, orchestration: started })
+	},
+)
+
+// "하이브마인드 전체 운영 모드... 전체 태스크 그래프를 그리고 태스크 업무 방향성 확인과 지시" — 지금까지
+// 하이브마인드는 태스크를 만들고 일정을 바꿀 순 있어도, 이미 돌고 있는 지휘자(태스크 매니저) 세션에
+// 직접 말을 걸 수단이 없었다(그건 각 폴더 지휘자 자신의 도구였다). orchestrator.cjs의 conductorTell —
+// 사람이 지휘자에게 직접 말 거는 것과 같은 경로(§ conductorSay/notifyConductor와 대칭인 세 번째 다리)를
+// 그대로 재사용한다.
+server.registerTool(
+	'dispatch_to_task',
+	{
+		title: '태스크 지휘자에게 지시',
+		description:
+			'이미 시작된(폴더로 승격된) 태스크의 지휘자(태스크 매니저) 세션에 직접 지시를 전달한다. 운영 모드에서 방향 수정·재촉·막힘 해소 지시에 쓴다. 아직 시작 안 된 태스크(일감함)엔 지휘자가 없어 쓸 수 없다 — 먼저 start_task로 착수시켜라.',
+		inputSchema: { taskId: z.string(), text: z.string().describe('지휘자에게 전달할 지시 내용') },
+	},
+	async ({ taskId, text }) => {
+		const guard = requireControl()
+		if (guard) return guard
+		const board = await apiGet('/api/sessions/board')
+		const folder = (board.folders || []).find((f) => (f.tasks || []).some((t) => t.id === taskId))
+		if (!folder) {
+			return { content: [{ type: 'text', text: '이 태스크의 지휘자를 찾을 수 없습니다 — 아직 시작(start_task) 전이거나 존재하지 않는 태스크입니다.' }], isError: true }
+		}
+		return ok(await apiPost(`/api/folders/${folder.id}/conductor/tell`, { text }))
 	},
 )
 

@@ -34,6 +34,22 @@
 	font-weight: 600;
 	color: var(--ink);
 	margin-bottom: 5px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* "GPU 이런식으로 간단 명시" — 어느 리소스를 쓰는지 알려주는 작은 태그. */
+.resTag {
+	font-family: var(--font-mono);
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+.resTagGpu {
+	background: var(--gtint);
+	color: var(--green);
 }
 .rowHint {
 	font-size: 10.5px;
@@ -62,4 +78,12 @@
 .optActive {
 	background: var(--violet);
 	color: #fff;
+}
+/* "둘 다 안 깔려있는 사람은 비활성화하고 경고표기" */
+.opt:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.toggleDisabled {
+	opacity: 0.7;
 }

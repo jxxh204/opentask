@@ -51,7 +51,11 @@ function update(id, patch) {
 	// "세션이 바뀌면 안 돼" — 지휘자 세션의 진짜 이름(§ db.cjs v24). 폴더 이름이 나중에 바뀌어도 이
 	// 값은 그대로라, 복원할 때 이름을 다시 지어낼 필요 없이 정확히 그 세션을 다시 찾는다.
 	const conductorSession = 'conductorSession' in patch ? patch.conductorSession || null : cur.conductor_session
-	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, repo_id = ?, rule_task = ?, conductor_session = ?, updated_at = ? WHERE id = ?').run(
+	// "태스크 숨기기" — 완료(§archive)와 무관하게 사이드바 트리에서만 안 보이게 토글(§ db.cjs v27).
+	// hidden_at은 archived_at과 같은 패턴: 켤 때 찍고, 끄면(다시 표시) 지운다.
+	const hidden = 'hidden' in patch ? (patch.hidden ? 1 : 0) : cur.hidden
+	const hiddenAt = 'hidden' in patch ? (patch.hidden ? Date.now() : null) : cur.hidden_at
+	db.prepare('UPDATE folders SET name = ?, base = ?, order_idx = ?, auto_merge = ?, retry_limit = ?, repo_id = ?, rule_task = ?, conductor_session = ?, hidden = ?, hidden_at = ?, updated_at = ? WHERE id = ?').run(
 		name,
 		base,
 		order_idx,
@@ -60,6 +64,8 @@ function update(id, patch) {
 		repoId,
 		ruleTask,
 		conductorSession,
+		hidden,
+		hiddenAt,
 		Date.now(),
 		id,
 	)

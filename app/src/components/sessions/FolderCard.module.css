@@ -1,6 +1,15 @@
 .node {
 	margin-bottom: 2px;
 }
+/* "눈모양 누르면 투명하게 보이는정도로 해줘 아예 숨기지말고" — 트리에서 빼지 않고 흐리게만.
+   호버 중엔 다시 밝혀서(원래 위치에서 바로) 아이콘을 다시 누르거나 내용을 읽기 쉽게 한다. */
+.nodeHidden {
+	opacity: 0.4;
+	transition: opacity 0.12s;
+}
+.nodeHidden:hover {
+	opacity: 0.85;
+}
 
 .head {
 	position: relative;
@@ -189,6 +198,23 @@
 }
 .chevronOpen {
 	transform: rotate(90deg);
+}
+/* "펼치기 버튼 범위가 너무 좁아서 클릭하기 힘들어" — 아이콘(9x9)은 그대로 두고 클릭 히트 영역만
+   archiveBtn과 같은 20x20으로 넓힌다. */
+.chevronHit {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-chip);
+}
+.chevronHitActive {
+	cursor: pointer;
+}
+.chevronHitActive:hover {
+	background: var(--card-hover);
 }
 
 /* 프로토타입의 .agent-status와 동일 — 16x16 원, 아이콘 9x9. "완료"는 실데이터에 없어(라이브
