@@ -57,17 +57,27 @@
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
 						<h3 style="margin:0; font-size:19px;">0.1.9</h3>
 						<span class="chip chip-green">Latest</span>
-						<span style="color:var(--t3); font-size:13px;">2026-09-01</span>
+						<span style="color:var(--t3); font-size:13px;">2026-09-02</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
 						<li>Renamed the assistant back to "Hive Mind" (하이브마인드) throughout the app — same brain-in-a-dome icon, reverted name</li>
 						<li>The Task Manager is now framed as a PO/planner that never writes code directly — it plans, dispatches to subtasks, and reviews, with Hive Mind above it and subtasks (developers/designers) below</li>
 						<li>Subtasks can now send lightweight "still working on it" progress check-ins between the start and the done/blocked report, so the conversation log doesn't go quiet for long stretches</li>
 						<li>A subtask's completion report now shows an excerpt directly in the Task Manager's chat log with a button to open the full report, instead of a bare one-line "done"</li>
-						<li>Added a "hide" toggle on task folders in the sidebar — dims a folder in place (collapsed, no expand) without archiving it</li>
+						<li>Added a "hide" toggle on task folders in the sidebar — dims a folder in place (collapsed, no expand) without archiving it, and hidden folders are now also excluded from the calendar</li>
 						<li>The sidebar spinner now also reflects the Task Manager's own session activity, not just its subtasks — previously it looked idle while the Task Manager was still planning</li>
+						<li>Hive Mind's questions (AskUserQuestion) can now be answered with mouse clicks instead of dropping into a raw terminal</li>
+						<li>Added an "Ops Mode" toggle for Hive Mind — when on, it reviews the full task graph every 15 minutes and nudges any task manager whose work has stalled or drifted off-schedule, with each automated check clearly marked in the chat log</li>
+						<li>Added a "Reset" button next to Restart — starts a genuinely new conversation instead of continuing the previous one</li>
+						<li>The subtask detail panel now shows an "Add to Google Calendar" link whenever the subtask has a due date</li>
+						<li>The in-app browser's "Open in Ghostty" button is now always visible in Hive Mind's header, not just when a raw-terminal fallback happened to be showing</li>
 						<li><strong>Fixed the startup loading screen never appearing</strong> when the backend connects quickly (a fast local reconnect could load the real app before the loading page ever painted a frame)</li>
 						<li><strong>Fixed the sidebar showing "no tasks in progress" during the first sync</strong> instead of a loading indicator, which could be misread as genuinely having zero tasks</li>
+						<li><strong>Fixed Hive Mind's chat log rendering raw CLI internals</strong> (local-command output, stray ANSI codes) as if they were real messages</li>
+						<li><strong>Fixed the Stop button doing nothing</strong> when Hive Mind's underlying session had already gone idle — "generating" is now judged from the live session state instead of the chat log's shape</li>
+						<li><strong>Fixed "Open in Ghostty" failing for the Hive Mind session</strong> specifically (a stale AppleScript submit method plus a session-name mismatch)</li>
+						<li><strong>Fixed tabs and header buttons wrapping into unreadable multi-line labels</strong> on narrow windows — they now scroll horizontally instead of squeezing</li>
+						<li><strong>Fixed popup links inside the in-app browser opening as bare, chrome-less windows</strong> with no toolbar or way to go back</li>
 					</ul>
 				</article>
 
