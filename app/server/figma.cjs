@@ -246,4 +246,55 @@ async function images(nodeIds) {
 	}
 }
 
-module.exports = { images, nodes, fileKey, imageFile, hasToken: () => !!TOKEN }
+// ── "태스크 상세에 피그마 완성 이미지가 있어야해" — 위 images()/nodes()는 구 백로그의 figmaNodes
+// (백로그 항목에 미리 등록된 노드ID) 전용이다. link_briefs(§ db.cjs v28)는 태스크 설명에 사람이
+// 그냥 붙여넣은 원본 Figma URL(파일키+node-id 쿼리)에서 출발하므로, URL 자체를 파싱해 같은 로컬
+// Dev Mode MCP 스크린샷 경로를 재사용하는 별도 함수가 필요하다. 캐시 디렉터리도 따로 둬 노드ID만
+// 겹치는(다른 파일의 같은 nodeId) 충돌을 fileKey로 방지한다.
+const urlSafeName = (fileKey, nodeId) => `${fileKey}_${nodeId}`.replace(/[^\w.-]/g, '_')
+const URL_IMG_DIR = path.join(os.tmpdir(), 'openrm-figma-url-img')
+const urlLocalPath = (fileKey, nodeId) => path.join(URL_IMG_DIR, urlSafeName(fileKey, nodeId) + '.png')
+function urlImageFile(fileKey, nodeId) {
+	try {
+		return fs.statSync(urlLocalPath(fileKey, nodeId)).size > 0 ? urlLocalPath(fileKey, nodeId) : null
+	} catch {
+		return null
+	}
+}
+// https://www.figma.com/(file|design)/<fileKey>/<name>?node-id=<id> → {fileKey, nodeId}. node-id는
+// 대시("2191-43294")·콜론(":"·"%3A") 형식이 섞여 오므로 REST id 형식(콜론)으로 정규화한다.
+function parseFigmaUrl(url) {
+	try {
+		const u = new URL(url)
+		const m = u.pathname.match(/\/(file|design)\/([^/]+)/)
+		if (!m) return null
+		const nodeRaw = u.searchParams.get('node-id')
+		if (!nodeRaw) return { fileKey: m[2], nodeId: null }
+		return { fileKey: m[2], nodeId: decodeURIComponent(nodeRaw).replace('-', ':') }
+	} catch {
+		return null
+	}
+}
+async function screenshotForUrl(url) {
+	const parsed = parseFigmaUrl(url)
+	if (!parsed || !parsed.nodeId) return { ok: false, reason: 'no-node-id' }
+	const { fileKey, nodeId } = parsed
+	if (urlImageFile(fileKey, nodeId)) return { ok: true, url: `/api/figma/url-img?fileKey=${encodeURIComponent(fileKey)}&node=${encodeURIComponent(nodeId)}` }
+	const sid = await mcpSession()
+	if (!sid) return { ok: false, reason: 'mcp-unavailable' }
+	try {
+		fs.mkdirSync(URL_IMG_DIR, { recursive: true })
+	} catch {
+		/* ignore */
+	}
+	try {
+		const buf = await mcpScreenshot(sid, nodeId, fileKey)
+		if (!buf || buf.length < 100) return { ok: false, reason: 'screenshot-failed' }
+		fs.writeFileSync(urlLocalPath(fileKey, nodeId), buf)
+		return { ok: true, url: `/api/figma/url-img?fileKey=${encodeURIComponent(fileKey)}&node=${encodeURIComponent(nodeId)}` }
+	} catch (e) {
+		return { ok: false, reason: String((e && e.message) || e) }
+	}
+}
+
+module.exports = { images, nodes, fileKey, imageFile, hasToken: () => !!TOKEN, parseFigmaUrl, screenshotForUrl, urlImageFile }

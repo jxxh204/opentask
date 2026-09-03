@@ -6,7 +6,14 @@ import { getSubtaskWorkState, stopSubtaskSession } from '../../api/sessions'
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
 import { useT, useTp } from '../../utils/i18n'
+import LinkBriefSection from './LinkBriefSection'
+import CodeBriefSection from './CodeBriefSection'
 import styles from './TaskDetailModal.module.css'
+
+const URL_RE = /https?:\/\/[^\s)\]}"'<>]+/g
+function extractLinks(text: string): string[] {
+	return Array.from(new Set(text.match(URL_RE) ?? []))
+}
 
 function pad(n: number) {
 	return String(n).padStart(2, '0')
@@ -69,6 +76,7 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 	const quickStartTask = useSessionsStore((s) => s.quickStartTask)
 
 	const subtask = parentTask?.subtasks.find((st) => st.id === subtaskId) ?? null
+	const descLinks = subtask ? extractLinks(subtask.desc) : []
 
 	const [work, setWork] = useState<SubtaskWorkStatus | null>(null)
 	const [busy, setBusy] = useState(false)
@@ -291,6 +299,9 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 								{t('설명')}
 							</div>
 							<textarea className={styles.descInput} value={subtask.desc} onChange={(e) => updateSubtaskDesc(subtask.id, e.target.value)} placeholder={t('이 서브태스크에 대해 설명해 주세요')} />
+
+							<LinkBriefSection ownerType="subtask" ownerId={subtask.id} links={descLinks} groupName={parentTask.name} groupColor={parentTask.color} />
+							<CodeBriefSection subtaskId={subtask.id} started={!!work?.started} ended={!!work?.started && !work?.alive} />
 						</div>
 					</>
 				)}

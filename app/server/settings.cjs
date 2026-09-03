@@ -27,6 +27,11 @@ const MODEL_POLICY = {
 	// 그동안의 시간·토큰 낭비의 핵심이었다 — 판단(추론)은 단 한 번만 무거운 모델을 태운다.
 	estimateExplore: 'claude-haiku-4-5', // 1단계 — 코드 탐색(grep/read/bash), 속도 우선
 	estimateJudge: 'claude-opus-4-8', // 2단계 — 조사 결과로 실제 일정 판단, review와 동급 추론력 필요
+	// "태스크 상세에 너무 정보가 없어... 이것만 보면 개발할 수 있다 정도 요약정보" — 노션/피그마
+	// 링크 텍스트 요약(link.brief.*)과 코드 근거 조사(code.brief.*, grep/read + file:line 근거 요구라
+	// enrich/estimateExplore와 동급 신뢰도 필요) 둘 다 구조화 JSON + MCP/도구 사용이라 haiku는 부족.
+	linkBrief: 'claude-sonnet-4-6',
+	codeBrief: 'claude-sonnet-4-6',
 }
 // operatorName — 이 인스턴스의 운영자(리뷰어) 이름. 오픈소스 배포라 특정인에 하드코딩 금지 → 설정으로 노출.
 // 기본값 '운영자'는 프롬프트/피드에 그대로 넣어도 조사(가/에게)가 자연스럽게 붙는 일반 명사.

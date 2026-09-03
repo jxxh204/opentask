@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useReviewStore } from '../../store/useReviewStore'
 import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID } from '../../store/useTabsStore'
-import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import type { GlobalBrowserTab } from '../../store/useGlobalTabsStore'
 import BrowserPane from './BrowserPane'
@@ -220,16 +219,18 @@ export default function SessionShell() {
 	const devServers = useSessionsStore((s) => s.devServers)
 	const apiAddress = useSessionsStore((s) => s.apiAddress)
 	const updateInfo = useUpdateCheck()
-	// "가장 하단에 켜져있는 로컬서버 바로 클릭 가능한 버튼이나 뭔가 있으면 좋겠어" — 에이전트가
-	// 원격으로 브라우저 탭을 열어주는 경로는 없다(webview는 렌더러 안에만 존재 — §BrowserPane.tsx
-	// 주석). 대신 지금 보고 있는 태스크의 "브라우저" 탭을 사람이 직접 그 dev 서버로 연다 — 터미널
-	// 링크 클릭과 똑같은 useBrowserNavStore 경로(§XTerm.tsx)라 새 배관이 필요 없다.
+	// "포트를 호출하는 태스크가 있을거야. 태스크이름 : 로컬서버, 태스크이름 : 스토리북 이런식으로
+	// 노출하면 어때? 포트이름을 볼 필요는 없어" — 예전엔 노드 전용 탭(useTabsStore)에 열어 raw
+	// localhost:PORT가 그대로 탭 제목이 됐다(§ 전역 탭 스트립 도입 전 잔재). 이제 전역 탭 스트립(§
+	// useGlobalTabsStore)에 "<태스크명>: <종류>" 라벨로 열어 다른 확인하기 링크들과 동일하게 그룹핑된다.
+	const DEV_KIND_LABEL: Record<string, string> = { storybook: 'Storybook', vite: 'Vite 개발서버', next: 'Next.js 개발서버', webpack: '개발서버', node: '로컬서버' }
 	function openDevServer() {
 		const nodeId = useTabsStore.getState().activeNodeId
 		const dev = devServers[0]
 		if (!nodeId || nodeId.startsWith('__') || !dev) return
-		useTabsStore.getState().openOrFocusTab(nodeId, 'browser')
-		useBrowserNavStore.getState().request(nodeId, `http://localhost:${dev.port}`)
+		const folderName = folders.find((f) => f.id === nodeId)?.name ?? null
+		const kindLabel = DEV_KIND_LABEL[dev.kind] || '로컬서버'
+		useGlobalTabsStore.getState().openBrowserTab(folderName ? `${folderName}: ${kindLabel}` : kindLabel, `http://localhost:${dev.port}`, nodeId, folderName, null)
 	}
 
 	// "각 레포별로 볼 수 있는 체크박스가 있으면 좋겠어. 예외처리를 한다던가" — 예전엔 라디오 방식(전체 or
@@ -751,7 +752,22 @@ export default function SessionShell() {
 								)
 							})}
 						</div>
-					<div className={styles.workspaceBody}>{activeGlobalTab ? <BrowserPane taskId={activeGlobalTab.id} cwd={null} folderId={activeGlobalTab.folderId} /> : <TabWorkspace />}</div>
+					{/* "브라우저가 동기화되어있어 두개는 완전 분리되어야해. 모바일, PC보는것도 마찬가지 각각" —
+					    예전엔 activeGlobalTab 하나만 조건부로 그려서, 탭을 바꿔도 React가 같은 BrowserPane
+					    인스턴스를 재사용(같은 <webview> DOM 하나를 계속 돌려씀)해 nav 상태·device(PC/모바일)
+					    토글까지 전부 공유돼 보였다. 모든 전역 탭을 각자 독립된 인스턴스로 항상 마운트해두고
+					    display로만 토글한다 — 진짜 크롬 탭처럼 백그라운드 탭도 상태를 그대로 유지한다(부수
+					    효과로 TabWorkspace도 이제 안 사라져서 브라우저 탭을 열어도 캘린더 스크롤 등이 안 날아간다). */}
+					<div className={styles.workspaceBody}>
+						<div className={styles.workspaceLayer} style={{ display: activeGlobalTab ? 'none' : 'block' }}>
+							<TabWorkspace />
+						</div>
+						{globalTabs.map((gt) => (
+							<div key={gt.id} className={styles.workspaceLayer} style={{ display: activeGlobalTabId === gt.id ? 'block' : 'none' }}>
+								<BrowserPane taskId={gt.id} cwd={null} folderId={gt.folderId} />
+							</div>
+						))}
+					</div>
 				</main>
 				{/* "도킹패널" — 지금 보던 폴더/태스크 탭은 그대로 두고 옆에 얹는다(§ useTabsStore
 				    controlDockOpen, 노드 스왑 아님). 닫히면 언마운트되지만 대화 자체는 서버(§control.cjs)

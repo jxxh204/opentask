@@ -813,6 +813,167 @@
 	margin-top: 4px;
 }
 
+/* "태스크 상세에 너무 정보가 없어... 개발할 때 이것만 보면 개발할 수 있다 정도 요약정보" —
+   노션·피그마 링크 요약(LinkBriefSection) + 관련 코드/스토리북(CodeBriefSection) 공용 카드 스타일. */
+.briefSection {
+	margin-top: 4px;
+}
+.briefCard {
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-control);
+	background: var(--card2);
+	padding: 10px 12px;
+	margin-bottom: 8px;
+}
+.briefHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.briefKind {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--violet);
+	background: var(--vtint);
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+}
+.briefOpenLink {
+	margin-left: auto;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--violet);
+	cursor: pointer;
+}
+.briefOpenLink:hover {
+	text-decoration: underline;
+}
+.briefSummary {
+	font-size: 12px;
+	line-height: 1.55;
+	color: var(--ink);
+}
+.briefPolicies {
+	margin: 6px 0 0;
+	padding-left: 16px;
+	font-size: 11.5px;
+	line-height: 1.6;
+	color: var(--t2);
+}
+.briefImage {
+	max-width: 100%;
+	border-radius: 8px;
+	margin-bottom: 8px;
+	display: block;
+	border: 1px solid var(--line2);
+}
+.briefPending {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11.5px;
+	color: var(--t3);
+}
+.briefSpinner {
+	width: 9px;
+	height: 9px;
+	flex: none;
+	border-radius: 50%;
+	border: 1.5px solid var(--line2);
+	border-top-color: var(--violet);
+	animation: briefSpin 0.7s linear infinite;
+}
+@keyframes briefSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.briefError {
+	font-size: 11.5px;
+	color: #b9791a;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.briefRetry {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--violet);
+	cursor: pointer;
+	text-decoration: underline;
+}
+.briefEndpointList {
+	margin-bottom: 4px;
+}
+.briefEndpoint {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+	font-size: 11.5px;
+	margin-bottom: 4px;
+	flex-wrap: wrap;
+}
+.briefMethod {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-weight: 700;
+	color: var(--violet);
+	flex: none;
+}
+.briefEndpointNote {
+	color: var(--t2);
+}
+.briefRefItem {
+	border-top: 1px solid var(--line2);
+	padding-top: 6px;
+	margin-top: 6px;
+	font-size: 11.5px;
+}
+.briefRefPath {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-weight: 700;
+	color: var(--ink);
+	word-break: break-all;
+}
+.briefEditorLink {
+	margin-left: 8px;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--violet);
+	text-decoration: underline;
+}
+.briefRefCondition {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 11px;
+	color: var(--t2);
+	background: var(--card);
+	padding: 5px 7px;
+	border-radius: 6px;
+	margin: 5px 0;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.briefRefExplanation {
+	color: var(--t2);
+	line-height: 1.5;
+}
+.briefStorybookRow {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line2);
+}
+.briefStorybookLink {
+	font-size: 11.5px;
+	font-weight: 700;
+	color: var(--violet);
+	text-decoration: underline;
+}
+.briefStorybookHint {
+	font-size: 11.5px;
+	color: var(--t3);
+}
+
 .actions {
 	flex: none;
 	display: flex;

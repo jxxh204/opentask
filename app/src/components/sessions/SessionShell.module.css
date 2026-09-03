@@ -948,6 +948,12 @@
 .workspaceBody {
 	flex: 1 1 auto;
 	min-height: 0;
+	position: relative;
+}
+/* "완전 분리되어야해" — 항상 같이 마운트돼 있는 레이어들(TabWorkspace + 전역 탭마다 하나씩). display만
+   토글해 비활성 레이어의 상태(스크롤·nav 기록·webview)를 그대로 보존한다(§ 위 workspaceBody 주석). */
+.workspaceLayer {
+	height: 100%;
 }
 /* "크롬의 탭 폴더관리처럼 탭 모둠으로 전역 탭관리" — 노드(폴더/태스크)에 안 묶인 탭 스트립
    (§ useGlobalTabsStore). 활성 탭만 워크스페이스 배경(--bg)과 같은 색으로 "떠 있는" 느낌을 주고,

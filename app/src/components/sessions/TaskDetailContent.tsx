@@ -9,6 +9,7 @@ import { LINK_LABEL } from '../../utils/linkDetect'
 import { useT, useTp, translate, translateP, localeFor } from '../../utils/i18n'
 import { useUiStore } from '../../store/useUiStore'
 import BranchChain from './BranchChain'
+import LinkBriefSection from './LinkBriefSection'
 import TaskColorDot from './TaskColorDot'
 import MainTaskPicker from './MainTaskPicker'
 import RepoSelect from './RepoSelect'
@@ -684,6 +685,8 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 						)}
 					</div>
 				)}
+
+				<LinkBriefSection ownerType="task" ownerId={found.id} links={descLinks} groupName={found.name} groupColor={found.color} />
 
 				{found.branches.length > 0 && (
 					<div className={styles.branchSection}>

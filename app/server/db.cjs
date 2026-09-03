@@ -447,6 +447,45 @@ const MIGRATIONS = [
 			ALTER TABLE folders ADD COLUMN hidden_at INTEGER;
 		`)
 	},
+	// v28 — "태스크 상세에 너무 정보가 없어. 노션·피그마 파일에서 중요한 정보들은 외부에서도 보여야해
+	// 요약해서라도... 개발할 때 이것만 보면 개발할 수 있다 정도 요약정보." 태스크/서브태스크 설명에
+	// 박힌 노션·피그마 링크(desc 자유 텍스트에서 파싱됨 — branch_links 테이블은 프론트가 실제로 쓰지
+	// 않는 죽은 경로라 여기 붙이지 않는다)마다 헤드리스 claude+MCP로 핵심 정책을 요약해 캐싱한다
+	// (link_briefs, owner_type+owner_id+url로 유일). "관련 코드"(API 결정 로직 file:line + 설명,
+	// 착수 전 참고 + 완료 후 변경점 둘 다)는 서브태스크당 stage(pre/post)별로 별도 캐싱한다
+	// (code_briefs). 둘 다 agent_jobs와 같은 이유로 status(pending/ok/error)+data_json 캡슐 패턴 —
+	// 생성은 오래 걸리는 헤드리스 claude 호출이라 즉시 완료되지 않고, 서버 재시작에도 살아남아야 한다.
+	(db) => {
+		db.exec(`
+			CREATE TABLE link_briefs (
+				id TEXT PRIMARY KEY,
+				owner_type TEXT NOT NULL CHECK (owner_type IN ('task', 'subtask')),
+				owner_id TEXT NOT NULL,
+				url TEXT NOT NULL,
+				kind TEXT NOT NULL CHECK (kind IN ('figma', 'doc')),
+				status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ok', 'error')),
+				data_json TEXT,
+				error TEXT,
+				job_id TEXT,
+				generated_at INTEGER,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE UNIQUE INDEX idx_link_briefs_owner_url ON link_briefs(owner_type, owner_id, url);
+
+			CREATE TABLE code_briefs (
+				id TEXT PRIMARY KEY,
+				subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+				stage TEXT NOT NULL CHECK (stage IN ('pre', 'post')),
+				status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ok', 'error')),
+				data_json TEXT,
+				error TEXT,
+				job_id TEXT,
+				generated_at INTEGER,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE UNIQUE INDEX idx_code_briefs_subtask_stage ON code_briefs(subtask_id, stage);
+		`)
+	},
 ]
 
 function migrate() {

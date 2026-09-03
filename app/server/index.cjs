@@ -95,6 +95,8 @@ const StoreBlockedPeriods = require('./store/blockedPeriods.cjs') // 캘린더 "
 const StoreDecisions = require('./store/decisions.cjs') // AI 판정 감사 로그(§12) — feed와 달리 재시작에도 안 날아감
 const RepoAdd = require('./repoAdd.cjs') // "레포 추가" 모달의 clone/새 프로젝트
 const DurationEstimate = require('./durationEstimate.cjs') // 태스크 설명 → 예상 소요 영업일 추정(헤드리스 claude, 제안만)
+const LinkBrief = require('./linkBrief.cjs') // 태스크/서브태스크 설명 속 노션·피그마 링크 → 핵심 정책 요약(개발 브리핑)
+const CodeBrief = require('./codeBrief.cjs') // 서브태스크 착수 전/완료 후 → 관련 코드 file:line 근거 + 스토리북 딥링크(개발 브리핑)
 const Orchestrator = require('./orchestrator.cjs') // 폴더 단위 오케스트레이션 (Phase 3.2, in-memory)
 const Control = require('./control.cjs') // "비서" 에이전트 — 태스크 하나가 아니라 앱 전체(캘린더/크론잡/설정)
 const Transcript = require('./transcript.cjs') // 비서 대화형 UI용 — claude CLI 자신의 jsonl 대화 기록 파싱
@@ -1486,6 +1488,65 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' })
     return fs.createReadStream(p).pipe(res)
+  }
+  // "태스크 상세에 피그마 완성 이미지가 있어야해" — link_briefs(§ db.cjs v28)가 캐싱한, 태스크 설명에
+  // 붙은 원본 Figma URL의 스크린샷(§ figma.cjs screenshotForUrl, 위 /api/figma/img와 같은 패턴이지만
+  // fileKey까지 키에 포함).
+  if (url === '/api/figma/url-img') {
+    const q = new URL(req.url, 'http://x').searchParams
+    const p = Figma.urlImageFile(q.get('fileKey') || '', q.get('node') || '')
+    if (!p) {
+      res.writeHead(404)
+      return res.end()
+    }
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' })
+    return fs.createReadStream(p).pipe(res)
+  }
+  // "태스크 상세에 너무 정보가 없어... 개발할 때 이것만 보면 개발할 수 있다 정도 요약정보" — 태스크/
+  // 서브태스크 설명 속 노션·피그마 링크마다 핵심 정책 요약을 자동 생성(ensure = 이미 있으면 재사용,
+  // 없으면 백그라운드로 생성 시작)해 캐싱한다.
+  if (url === '/api/link-briefs' && req.method === 'GET') {
+    const q = new URL(req.url, 'http://x').searchParams
+    try {
+      return sendJSON(res, 200, { ok: true, briefs: LinkBrief.listByOwner(q.get('ownerType') || '', q.get('ownerId') || '') })
+    } catch (e) {
+      return sendJSON(res, 500, { ok: false, error: String(e.message || e) })
+    }
+  }
+  if (url === '/api/link-briefs/ensure' && req.method === 'POST') {
+    return readBody(req)
+      .then((b) => sendJSON(res, 200, LinkBrief.ensureBrief({ ownerType: b && b.ownerType, ownerId: b && b.ownerId, url: b && b.url })))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
+  // "API의 경우 변경된 API 엔드포인트... 실제 판별 코드를 이런 조건에 보여지고 API에서는 이렇게
+  // 내려온다 식으로" — 서브태스크의 착수 전(pre)/완료 후(post) 코드 근거 브리핑.
+  if (url.match(/^\/api\/code-briefs\/[^/]+$/) && req.method === 'GET') {
+    const subtaskId = decodeURIComponent(url.slice('/api/code-briefs/'.length))
+    try {
+      const list = CodeBrief.listBySubtask(subtaskId)
+      return sendJSON(res, 200, { ok: true, pre: list.find((b) => b.stage === 'pre') || null, post: list.find((b) => b.stage === 'post') || null })
+    } catch (e) {
+      return sendJSON(res, 500, { ok: false, error: String(e.message || e) })
+    }
+  }
+  if (url.match(/^\/api\/code-briefs\/[^/]+\/generate$/) && req.method === 'POST') {
+    const subtaskId = decodeURIComponent(url.split('/')[3])
+    return readBody(req)
+      .then((b) => {
+        const stage = b && b.stage === 'post' ? 'post' : 'pre'
+        const subtask = StoreSubtasks.get(subtaskId)
+        if (!subtask) return sendJSON(res, 404, { ok: false, error: 'subtask not found' })
+        const task = subtask.task_id ? StoreTasks.get(subtask.task_id) : null
+        const folder = task && task.folder_id ? StoreFolders.get(task.folder_id) : null
+        const session = StoreSubtaskSessions.latestForSubtask(subtaskId)
+        if (!session) return sendJSON(res, 400, { ok: false, error: '아직 시작된 세션이 없습니다' })
+        if (stage === 'pre') {
+          return sendJSON(res, 200, CodeBrief.ensurePre(subtaskId, { worktreePath: session.worktree_path, taskName: (task && task.name) || '', subtaskName: subtask.name, desc: subtask.desc || (task && task.desc) || '' }, true))
+        }
+        const repo = StoreRepos.get((subtask && subtask.repo_id) || (folder && folder.repo_id) || (task && task.repo_id) || null)
+        return sendJSON(res, 200, CodeBrief.ensurePost(subtaskId, { worktreePath: session.worktree_path, taskName: (task && task.name) || '', subtaskName: subtask.name, baseBranch: (folder && folder.base) || (repo && repo.base) || null }, true))
+      })
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
   if (url === '/api/tree') {
     try {

@@ -205,6 +205,74 @@ export function getDurationEstimateStatus(id: string, jobId: string) {
 export function durationEstimateReportUrl(id: string, jobId: string) {
 	return `/api/tasks/${id}/estimate-duration/report?jobId=${encodeURIComponent(jobId)}`
 }
+
+// "태스크 상세에 너무 정보가 없어... 개발할 때 이것만 보면 개발할 수 있다 정도 요약정보" — 태스크/
+// 서브태스크 설명 속 노션·피그마 링크마다 핵심 정책 요약(§ db.cjs v28 link_briefs, linkBrief.cjs).
+// 자동 생성이라 프론트는 감지된 링크마다 ensure를 부르고 결과가 올 때까지 짧게 폴링만 하면 된다.
+export interface LinkBriefData {
+	summary: string
+	policies: string[]
+	imageUrl: string | null
+}
+export interface LinkBrief {
+	owner_type: 'task' | 'subtask'
+	owner_id: string
+	url: string
+	kind: 'figma' | 'doc'
+	status: 'pending' | 'ok' | 'error'
+	data: LinkBriefData | null
+	error: string | null
+}
+export function listLinkBriefs(ownerType: 'task' | 'subtask', ownerId: string) {
+	return api.get<{ ok: boolean; briefs: LinkBrief[] }>(`/api/link-briefs?ownerType=${ownerType}&ownerId=${encodeURIComponent(ownerId)}`)
+}
+export function ensureLinkBrief(ownerType: 'task' | 'subtask', ownerId: string, url: string) {
+	return api.post<{ ok: boolean; status?: string; error?: string }>('/api/link-briefs/ensure', { ownerType, ownerId, url })
+}
+
+// "API의 경우 변경된 API 엔드포인트... 실제 판별 코드를 이런 조건에 보여지고 API에서는 이렇게
+// 내려온다 식으로" — 서브태스크 착수 전(pre, 관련 기존 코드 참고) / 완료 후(post, 실제 diff 기준
+// 변경점) 코드 근거 브리핑(§ db.cjs v28 code_briefs, codeBrief.cjs). "Storybook에서 어디로 들어가야
+// 하는지 알려주지 않는다" — storybook 필드가 정확한 딥링크(서버가 파일을 직접 읽어 결정론적으로 생성).
+export interface CodeBriefReference {
+	path: string
+	lines: string
+	condition: string
+	explanation: string
+	editorLink: string | null
+	exists: boolean
+}
+export interface CodeBriefEndpoint {
+	method: string
+	path: string
+	note: string
+}
+export interface CodeBriefStorybook {
+	path: string
+	story: string | null
+	storyId: string | null
+	label: string
+	url: string | null
+}
+export interface CodeBriefData {
+	summary: string
+	endpoints: CodeBriefEndpoint[]
+	references: CodeBriefReference[]
+	storybook: CodeBriefStorybook | null
+}
+export interface CodeBrief {
+	subtask_id: string
+	stage: 'pre' | 'post'
+	status: 'pending' | 'ok' | 'error'
+	data: CodeBriefData | null
+	error: string | null
+}
+export function getCodeBriefs(subtaskId: string) {
+	return api.get<{ ok: boolean; pre: CodeBrief | null; post: CodeBrief | null }>(`/api/code-briefs/${encodeURIComponent(subtaskId)}`)
+}
+export function generateCodeBrief(subtaskId: string, stage: 'pre' | 'post') {
+	return api.post<{ ok: boolean; status?: string; error?: string }>(`/api/code-briefs/${encodeURIComponent(subtaskId)}/generate`, { stage })
+}
 // 스레드/노션/피그마 링크로 만든 일감의 "○○ 링크 태스크" placeholder 제목을, 링크 내용을 실제로
 // 읽어(claude -p + MCP) 얻은 제목·요약으로 교체 — 몇 초~170초 걸릴 수 있어 호출부는 await하지 않고
 // 백그라운드로 던진다.

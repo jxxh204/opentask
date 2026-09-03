@@ -4,6 +4,7 @@ import type { OrchestrationSession } from '../../api/sessions'
 import { removeTask } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
+import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import { useT, useTp, translate } from '../../utils/i18n'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
@@ -104,6 +105,10 @@ export default function TaskRow({
 	const [renaming, setRenaming] = useState(false)
 	const [nameDraft, setNameDraft] = useState(task.name)
 	const renameInputRef = useRef<HTMLInputElement>(null)
+
+	const openPrTab = (url: string, label: string) => {
+		useGlobalTabsStore.getState().openBrowserTab(label, url, task.folder_id, task.name, task.color)
+	}
 
 	const nb = task.branches.length
 	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 태스크 트리와 같은 원칙으로
@@ -229,7 +234,11 @@ export default function TaskRow({
 								target="_blank"
 								rel="noreferrer"
 								className={`m ${styles.pill} ${git.pr.draft ? styles.pillPrDraft : styles.pillPr}`}
-								onClick={(e) => e.stopPropagation()}
+								onClick={(e) => {
+									e.preventDefault()
+									e.stopPropagation()
+									openPrTab(git.pr!.url, `${task.name} PR`)
+								}}
 							>
 								{git.pr.draft ? 'PR draft' : PR_LABEL[git.pr.state]}
 							</a>
@@ -441,7 +450,11 @@ export default function TaskRow({
 														target="_blank"
 														rel="noreferrer"
 														className={`m ${styles.subChainPill} ${subGit.pr.draft ? styles.pillPrDraft : styles.pillPr}`}
-														onClick={(e) => e.stopPropagation()}
+														onClick={(e) => {
+															e.preventDefault()
+															e.stopPropagation()
+															openPrTab(subGit.pr!.url, `${st.name} PR`)
+														}}
 													>
 														{subGit.pr.draft ? 'PR draft' : PR_LABEL[subGit.pr.state]}
 													</a>

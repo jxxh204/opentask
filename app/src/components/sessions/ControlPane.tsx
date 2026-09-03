@@ -16,6 +16,7 @@ import type { ControlState, ChatTurn, ChatPart, LivePrompt, LiveAction } from '.
 import { updateOperatorSettings } from '../../api/setup'
 import { openTermExternal } from '../../api/term'
 import { useSessionsStore } from '../../store/useSessionsStore'
+import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import StatusDot from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
 import { useT, useTp, translate } from '../../utils/i18n'
@@ -147,8 +148,22 @@ function ToolPart({ name, input, result }: { name: string; input: unknown; resul
 	)
 }
 
+// "이거 링크누르면 앱 내부 브라우저로 띄워졌으면" — marked.parse가 그리는 <a>는 target 속성이 없는
+// 평범한 링크라, 누르면 electron/main.cjs의 will-navigate 인터셉트를 타고 시스템 기본 브라우저로
+// 열렸다(§ 그 파일 주석 — "OpenTask 전체가 웹페이지로 뒤바뀌는" 사고를 막으려고 넣은 조치였는데,
+// 그 결과가 "매번 다른 앱으로 튕겨나감"이었다). 여기서 클릭을 먼저 가로채 브라우저 기본 내비게이션
+// 자체가 안 일어나게 막고(그러면 will-navigate도 안 탄다), 확인하기 버튼과 같은 전역 브라우저 탭
+// (§ useGlobalTabsStore)으로 연다 — 하이브마인드는 특정 태스크에 안 묶이니 그룹 색 없이 낱개 탭.
+function handleMarkdownClick(e: React.MouseEvent<HTMLDivElement>) {
+	const a = (e.target as HTMLElement).closest('a')
+	const href = a?.getAttribute('href')
+	if (!href) return
+	e.preventDefault()
+	useGlobalTabsStore.getState().openBrowserTab(a!.textContent || href, href, null, null, null)
+}
+
 function TurnPart({ part }: { part: ChatPart }) {
-	if (part.kind === 'text') return <div className={styles.md} dangerouslySetInnerHTML={{ __html: marked.parse(part.text, { async: false }) as string }} />
+	if (part.kind === 'text') return <div className={styles.md} onClick={handleMarkdownClick} dangerouslySetInnerHTML={{ __html: marked.parse(part.text, { async: false }) as string }} />
 	return <ToolPart name={part.name} input={part.input} result={part.result} />
 }
 
@@ -288,7 +303,13 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 	const [pendingUser, setPendingUser] = useState<string | null>(null)
 	const [uploadingImage, setUploadingImage] = useState(false)
 	const startedRef = useRef(false)
-	const turnCountAtSendRef = useRef(0)
+	// "잔상 생기는 문제랑 멈춤 안되는 문제" — 대화 기록이 최근 60턴으로 잘리기 시작하면서(§
+	// transcript.cjs maxTurns) turns.length가 그 이후로는 절대 안 늘어난다(항상 60으로 고정) — 그런데
+	// 아래 폴링은 "길이가 늘었으면 내 메시지가 도착한 것"으로 판단했다. 길이가 고정되니 그 조건이
+	// 영원히 거짓이 되어 pendingUser(반투명 잔상 말풍선)가 절대 안 지워지고, generating(=pendingUser
+	// 살아있음)도 계속 true라 정지 버튼이 눌러도 "여전히 생성 중"인 것처럼 보였다. 길이 대신 마지막
+	// 턴의 id(배열이 잘려도 각 턴 자체의 정체성은 안 바뀜)가 바뀌었는지로 판단한다.
+	const lastTurnIdAtSendRef = useRef<string | undefined>(undefined)
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -370,7 +391,8 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 				.then((r) => {
 					if (cancelled || !r.ok) return
 					setTurns(r.turns)
-					if (r.turns.length > turnCountAtSendRef.current) setPendingUser(null)
+					const newestId = r.turns[r.turns.length - 1]?.id
+					if (newestId !== undefined && newestId !== lastTurnIdAtSendRef.current) setPendingUser(null)
 				})
 				.catch(() => {})
 				.finally(() => {
@@ -499,7 +521,7 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 		setSending(true)
 		setDraft('')
 		setPendingUser(text)
-		turnCountAtSendRef.current = turns.length
+		lastTurnIdAtSendRef.current = turns[turns.length - 1]?.id
 		try {
 			const r = await askControl(text)
 			if (!r.ok) setError(t(r.error || '전송 실패'))

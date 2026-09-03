@@ -29,6 +29,7 @@ const StoreDecisions = require('./store/decisions.cjs')
 const StoreSubtasks = require('./store/subtasks.cjs')
 const StoreSubtaskSessions = require('./store/subtaskSessions.cjs')
 const { translateToEnglishSlug } = require('./branchSlug.cjs')
+const CodeBrief = require('./codeBrief.cjs')
 
 // ② 레포 분류 검증 — repoClassify.cjs가 자동배정(repo_auto=1)한 경우에만, 워크트리를 실제로 만들기
 // 전에 태스크명/설명과 레포명이 최소한의 토큰이라도 겹치는지 스크립트로 확인한다(AI 아님, 단순 매칭).
@@ -220,6 +221,14 @@ async function launchSubtask(task, subtask) {
 	const modelLabel = Settings.modelLabel(model)
 	StoreSubtaskSessions.create({ subtaskId: subtask.id, taskId: task.id, tmuxSession: t.name, worktreePath: wt.path, branch: wt.branch, model, modelLabel })
 	syncFolderSession(task, { taskId: task.id, tmuxSession: t.name, worktreePath: wt.path, model, modelLabel })
+	// "개발할 때 이것만 보면 개발할 수 있다 정도 요약정보" — 착수와 동시에 백그라운드로 관련 기존
+	// 코드(§ codeBrief.cjs runPreJob)를 조사해둔다. 실패해도 세션 시작 자체는 막지 않는다(참고 자료일
+	// 뿐이라 없어도 진행 가능 — § verify 게이트와 달리 필수 아님).
+	try {
+		CodeBrief.ensurePre(subtask.id, { worktreePath: wt.path, taskName: task.name, subtaskName: subtask.name, desc: subtask.desc || task.desc })
+	} catch (_) {
+		/* best-effort */
+	}
 	return { ok: true, subtaskId: subtask.id, subtaskName: subtask.name, tmuxSession: t.name, worktreePath: wt.path, modelLabel, base: wt.base || null }
 }
 
@@ -310,6 +319,15 @@ async function advanceSubtaskWork(taskId, reportHtml) {
 	// "서브 태스크가 끝나면... 어떻게 끝났고 어떤것들을 했는지 정리해서 보여줬으면해" — advanceLine이
 	// 완료 curl의 body에 실어 보내라고 지시한 HTML 리포트를 같은 UPDATE로 저장(§ db.cjs v25).
 	StoreSubtaskSessions.markEnded(currentSession.id, reportHtml)
+	// "완료 후 변경점" — 실제 git diff 근거로 엔드포인트/결정 로직 변경을 정리해둔다(§ codeBrief.cjs
+	// runPostJob). launchSubtask의 base 계산(§ 위)과 같은 우선순위로 diff 기준 브랜치를 고른다.
+	try {
+		const folder = task.folder_id ? StoreFolders.get(task.folder_id) : null
+		const repo = StoreRepos.get(resolveRepoId({ subtask: current, folder, task }))
+		CodeBrief.ensurePost(current.id, { worktreePath: currentSession.worktree_path, taskName: task.name, subtaskName: current.name, baseBranch: (folder && folder.base) || (repo && repo.base) || null })
+	} catch (_) {
+		/* best-effort */
+	}
 	// "서로 대화를 안 하거든" — pushFeed(로그 기록)만으론 지휘자가 대화 로그를 스스로 보러 가지 않는
 	// 한 절대 못 알아챈다. notifyConductor로 지휘자 pty에 직접 타이핑해 능동적으로 통보한다(사람→지휘자
 	// conductorTell, 지휘자→서브태스크 conductorSay와 대칭되는 서브태스크→지휘자 다리).
