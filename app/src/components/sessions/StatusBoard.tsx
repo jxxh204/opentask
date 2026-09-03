@@ -400,6 +400,24 @@ export default function StatusBoard({ visibleTasks }: { visibleTasks?: Map<strin
 			<div className={styles.head}>
 				<span>{t('현황판')}</span>
 			</div>
+			{/* "현황판이 늦게 뜨니 스켈레톤 적용해주고" — 첫 getBoardStatus 응답 전엔 아무것도 안 그려
+			    헤더만 덩그러니 떠 있었다. 컬럼 뼈대 + 맥박 카드로 로딩 중임을 보여준다. */}
+			{!loaded && (
+				<div className={styles.board}>
+					{COLUMNS.map(({ key, label }) => (
+						<div key={key} className={styles.column}>
+							<div className={`${styles.columnHead} ${COLUMN_HEAD_CLASS[key] ?? ''}`}>
+								<span>{label}</span>
+							</div>
+							<div className={styles.columnBody}>
+								{Array.from({ length: key === 'holding' ? 3 : key === 'todo' ? 1 : 0 }).map((_, i) => (
+									<div key={i} className={styles.skeletonCard} />
+								))}
+							</div>
+						</div>
+					))}
+				</div>
+			)}
 			{loaded && totalCount === 0 && <div className={styles.empty}>{t('이번 주에 예정되었거나 진행 중이거나 최근 완료된 태스크가 없습니다.')}</div>}
 			{loaded && totalCount > 0 && (
 				<div className={styles.board}>

@@ -405,3 +405,20 @@
 	background: var(--btint);
 	border-color: var(--blue);
 }
+
+/* 로딩 스켈레톤 — 첫 응답 전 컬럼 뼈대에 맥박 카드 */
+.skeletonCard {
+	height: 74px;
+	border-radius: 10px;
+	border: 1px solid var(--line);
+	background: linear-gradient(100deg, var(--card2) 40%, var(--card) 50%, var(--card2) 60%);
+	background-size: 200% 100%;
+	animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+	0% { background-position: 120% 0; }
+	100% { background-position: -80% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.skeletonCard { animation: none; }
+}
