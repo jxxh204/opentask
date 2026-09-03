@@ -27,7 +27,9 @@
 .tabScroll {
 	display: flex;
 	align-items: stretch;
-	flex: 1 1 auto;
+	/* "+버튼은 탭 오른쪽에.." — 1 1 auto로 그리디하게 늘리면 "+"(.cmdkAnchor)가 탭바 오른쪽 끝으로
+	   밀려났다. 크롬처럼 마지막 탭 바로 뒤에 "+"가 붙도록 grow를 끈다(넘치면 여전히 가로 스크롤). */
+	flex: 0 1 auto;
 	min-width: 0;
 	overflow-x: auto;
 	scrollbar-width: thin;
