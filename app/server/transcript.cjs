@@ -104,7 +104,12 @@ const OPS_TICK_MARKER = '[운영 모드 자동 점검]'
 // 쓴다(여러 줄을 하나로 합치는 휴리스틱은 오히려 실제 순서·타이밍을 왜곡할 위험이 있어 안 씀).
 // skipFirstUser — 첫 user 턴은 항상 controlSeed()가 주입한 역할 시드 그 자체라(사람이 친 게 아님)
 // 채팅에는 안 보여준다.
-function parseTranscript(filePath, { skipFirstUser = true } = {}) {
+// "내용도 안 사라져서.. 기록만 하고 일정 이상 내용은 안 보여도 될 것 같아" — 이 파일(jsonl)은 claude
+// CLI가 계속 유지 세션(§ control.cjs persistent)에 영원히 이어 쓰는 진짜 기록이라 turns를 몇 개만
+// 남겨도 데이터 유실이 아니다(원본 파일은 그대로 다 남는다). 매 폴링(1~2초)마다 파일 전체를 다시
+// 읽고 파싱하는데, 세션이 오래갈수록 그 전체가 계속 자라 파싱 비용도 같이 늘고, 프론트도 그만큼
+// 많은 DOM을 매번 다시 그려야 했다 — 최근 것만 남긴다.
+function parseTranscript(filePath, { skipFirstUser = true, maxTurns = 60 } = {}) {
 	let raw
 	try {
 		raw = fs.readFileSync(filePath, 'utf8')
@@ -161,7 +166,7 @@ function parseTranscript(filePath, { skipFirstUser = true } = {}) {
 			if (parts.length) turns.push({ id: r.uuid, role: 'assistant', ts: r.timestamp, parts })
 		}
 	}
-	return turns
+	return maxTurns ? turns.slice(-maxTurns) : turns
 }
 
 module.exports = { findControlTranscript, parseTranscript, projectDirFor }

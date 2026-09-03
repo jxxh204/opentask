@@ -389,9 +389,19 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 	// 사람이 스크롤을 올려 지난 대화를 읽는 중이어도 다음 폴링 tick에 바로 도로 끌려 내려갔다. 이미
 	// 바닥 근처(=방금까지 실시간으로 지켜보던 중)일 때만 자동 스크롤하고, 위로 올려 읽고 있으면 그
 	// 자리 그대로 둔다 — 일반적인 채팅 UI의 "스마트 오토스크롤" 관례.
+	// "스크롤이 계속 맨 위라 작업이 어려워" — 위 nearBottom 판정은 패널을 처음 열 때도 그대로 적용돼
+	// 문제였다. 마운트 직후는 scrollTop이 항상 0이라, 쌓인 대화가 길면(scrollHeight가 큼) 첫 판정부터
+	// nearBottom이 false가 되어 영원히 맨 위에 멈춰 있었다 — 열 때 한 번은 판정 없이 무조건 바닥으로.
+	const didInitialScrollRef = useRef(false)
 	useEffect(() => {
 		const el = bodyRef.current
 		if (!el) return
+		if (!didInitialScrollRef.current) {
+			if (turns.length === 0 && !pendingUser) return // 아직 보여줄 내용이 없다 — 다음 업데이트를 기다린다
+			didInitialScrollRef.current = true
+			el.scrollTo({ top: el.scrollHeight })
+			return
+		}
 		const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
 		if (nearBottom) el.scrollTo({ top: el.scrollHeight })
 	}, [turns, pendingUser, live.waiting])
