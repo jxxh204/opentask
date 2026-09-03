@@ -10,6 +10,7 @@ const Cmux = require('./cmux.cjs')
 const Ticket = require('./ticket.cjs')
 const Term = require('./term.cjs') // 에이전트(tmux) 세션이 도는 워크트리도 active로 잡기 위함 (term은 cockpit 미참조 → 순환 없음)
 const StoreRepos = require('./store/repos.cjs')
+const Worktrees = require('./worktrees.cjs') // goneBranches 재사용 (worktrees는 cockpit 미참조 → 순환 없음)
 
 // "방금 만진 곳" 감지에서 제외할 자동생성 노이즈 (아이콘 배럴·생성물·스냅샷)
 const IGNORE_TOUCH = /(^|\/)(svgr\.[tj]sx?|.*\.generated\..*|.*\.snap)$/
@@ -56,6 +57,14 @@ function sh(cmd, args, timeout = 6000) {
   )
 }
 const git = (args, repo) => sh('git', ['-C', repo, ...args])
+
+// ok 플래그가 필요한 곳(=삭제 안전 판정)용 — sh 는 타임아웃/에러에도 '' 라 status 를 clean 으로 오인한다.
+function shOk(cmd, args, timeout = 12000) {
+  return new Promise((resolve) =>
+    execFile(cmd, args, { timeout, maxBuffer: 8 << 20 }, (e, out) => resolve({ ok: !e, out: String(out || '') })),
+  )
+}
+const gitOk = (args, repo) => shOk('git', ['-C', repo, ...args])
 
 // 동시 git 호출 제한 (54개×여러 호출 폭주 방지)
 async function mapLimit(items, limit, fn) {
@@ -122,13 +131,18 @@ async function portLabels() {
 // ── 작업 스트림: 워크트리 + git상태 + PR/CI + devServer 조인 ──
 async function streams() {
   const paths = repoPaths()
-  const rawPerRepo = await mapLimit(paths, 4, (p) => git(['worktree', 'list', '--porcelain'], p))
+  // 레포별로 워크트리 목록 + 머지·삭제된(gone) 브랜치 집합을 함께 수집 → 각 워크트리에 소속 레포의 gone 판정을 붙인다.
+  const perRepo = await mapLimit(paths, 4, async (p) => ({
+    repo: p,
+    raw: await git(['worktree', 'list', '--porcelain'], p),
+    gone: await Worktrees.goneBranches(p).catch(() => new Set()),
+  }))
   const wts = []
-  for (const raw of rawPerRepo) {
+  for (const { repo, raw, gone } of perRepo) {
     let cur = null
     for (const line of raw.split('\n')) {
       if (line.startsWith('worktree ')) {
-        cur = { path: line.slice(9).trim() }
+        cur = { path: line.slice(9).trim(), repo, goneSet: gone }
         wts.push(cur)
       } else if (cur && line.startsWith('branch ')) cur.branch = line.slice(7).trim().replace('refs/heads/', '')
       else if (cur && line.startsWith('HEAD ')) cur.head = line.slice(5).trim().slice(0, 9)
@@ -148,13 +162,14 @@ async function streams() {
   }
 
   const enriched = await mapLimit(wts, 8, async (w) => {
-    const [status, last, ahead, behind] = await Promise.all([
-      git(['status', '--porcelain'], w.path),
+    const [st, last, ahead, behind] = await Promise.all([
+      gitOk(['status', '--porcelain'], w.path), // ok 필요 — 타임아웃/에러를 clean 으로 오인하지 않기 위해
       git(['log', '-1', '--format=%cr%s'], w.path),
       git(['rev-list', '--count', `${BASE}..HEAD`], w.path),
       git(['rev-list', '--count', `HEAD..${BASE}`], w.path),
     ])
-    const dirty = status.split('\n').filter(Boolean).length
+    const statusOk = st.ok
+    const dirty = st.out.split('\n').filter(Boolean).length
     const [rel, subject] = (last || '').trim().split('')
     const pr = prByBranch[w.branch] || null
     const devList = devByPath[w.path] || []
@@ -165,6 +180,10 @@ async function streams() {
       ticket: ticketOf(w.branch) || ticketOf(w.path),
       isMain: paths.includes(w.path),
       dirty,
+      // gone: 원격 브랜치가 머지·삭제됨(정리 후보). cleanable: gone + status 확인성공 + 변경 0줄일 때만.
+      gone: !paths.includes(w.path) && !!w.branch && !!w.goneSet && w.goneSet.has(w.branch),
+      cleanable: !paths.includes(w.path) && !!w.branch && !!w.goneSet && w.goneSet.has(w.branch) && statusOk && dirty === 0,
+      repoPath: w.repo,
       ahead: Number(ahead.trim()) || 0,
       behind: Number(behind.trim()) || 0,
       lastRel: rel || null,

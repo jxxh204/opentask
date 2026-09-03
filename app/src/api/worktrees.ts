@@ -15,13 +15,33 @@ export interface RealWorktree {
 	ahead: number
 	behind: number
 	isMain: boolean
+	// gone: 원격 브랜치가 머지·삭제됨(정리 후보). cleanable: gone + 미커밋 없음 = 안전하게 자동 삭제 가능.
+	gone: boolean
+	cleanable: boolean
 }
 
 export interface RepoWorktrees {
 	base: string
 	count: number
+	staleCleanable: number
+	staleDirty: number
 	worktrees: RealWorktree[]
 	builtAt: string
+}
+
+export interface PruneStaleResult {
+	ok: boolean
+	dryRun: boolean
+	base: string
+	targets: { path: string; branch: string; dirty: number }[]
+	removed: { path: string; branch: string }[]
+	failed: { path: string; branch: string; errors: string[] }[]
+	skippedDirty: { path: string; branch: string; dirty: number }[]
+}
+
+// 머지·삭제된(gone) 워크트리 정리 — 기본은 미커밋 없는(clean) 것만. dryRun이면 삭제 없이 대상만 반환.
+export function pruneStaleWorktrees(repoId: string, opts: { dryRun?: boolean; includeDirty?: boolean } = {}) {
+	return api.post<PruneStaleResult>(`/api/repos/${repoId}/worktrees/prune-stale`, opts)
 }
 
 // git worktree list --porcelain 그대로 — OpenTask가 태스크로 추적 중인지 여부와 무관하게 그 레포의

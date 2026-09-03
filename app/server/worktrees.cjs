@@ -121,25 +121,29 @@ async function create({ ticket, base, desc, dir: dirOverride, branch: explicitBr
 }
 
 // 워크트리 제거 — 폴더 제거(미커밋 변경 --force 폐기) + 로컬 브랜치 삭제. 초기화(reset)용.
-async function remove(wtPath, branch) {
+async function removeFrom(repo, wtPath, branch) {
 	const errors = []
 	let worktreeRemoved = false
 	let branchDeleted = false
 	if (!wtPath) return { ok: false, errors: ['워크트리 경로 없음'] }
-	const rm = await gitX(['worktree', 'remove', '--force', wtPath], C.REPO)
+	const rm = await gitX(['worktree', 'remove', '--force', wtPath], repo)
 	if (rm.ok) worktreeRemoved = true
 	else {
-		await gitX(['worktree', 'prune'], C.REPO) // 폴더가 이미 없으면 메타만 정리
+		await gitX(['worktree', 'prune'], repo) // 폴더가 이미 없으면 메타만 정리
 		if (!fs.existsSync(wtPath)) worktreeRemoved = true
 		else errors.push('워크트리 제거 실패: ' + (rm.err.split('\n').find((l) => l.trim()) || '').slice(0, 120))
 	}
 	// main/develop 등 보호 브랜치는 삭제 안 함
 	if (branch && !/^(develop|main|master)$/i.test(branch)) {
-		const bd = await gitX(['branch', '-D', branch], C.REPO)
+		const bd = await gitX(['branch', '-D', branch], repo)
 		if (bd.ok) branchDeleted = true
 		else errors.push('브랜치 삭제 실패: ' + (bd.err.split('\n').find((l) => l.trim()) || '').slice(0, 120))
 	}
 	return { ok: worktreeRemoved && errors.length === 0, worktreeRemoved, branchDeleted, errors }
+}
+
+function remove(wtPath, branch) {
+	return removeFrom(C.REPO, wtPath, branch)
 }
 
 // gitignore된 env 파일을 워크트리로 복사 (없으면 next.config rewrites가 undefined로 dev 서버가 깨짐).
@@ -306,9 +310,23 @@ async function mapLimit(items, limit, fn) {
 	return out
 }
 
+// 원격에서 이미 사라진(머지 후 삭제된) upstream을 가진 로컬 브랜치 집합.
+// `%(upstream:track)`가 '[gone]'이면 upstream이 설정돼 있었는데 remote-tracking ref가 없어진 것 =
+// 그 브랜치의 PR이 머지·삭제됐다는 강한 신호. 레포당 한 번(for-each-ref)이라 워크트리 수와 무관하게 가볍다.
+async function goneBranches(repoPath) {
+	const raw = await git(['for-each-ref', '--format=%(refname:short) %(upstream:track)', 'refs/heads'], repoPath || C.REPO)
+	const set = new Set()
+	for (const line of raw.split('\n')) {
+		if (!line.trim()) continue
+		// "branch-name [gone]" — track 토큰은 항상 마지막. 브랜치명엔 공백이 없다.
+		if (/\[gone\]\s*$/.test(line)) set.add(line.replace(/\s*\[gone\]\s*$/, '').trim())
+	}
+	return set
+}
+
 async function list(repoPath) {
 	const repo = repoPath || C.REPO
-	const raw = await git(['worktree', 'list', '--porcelain'], repo)
+	const [raw, gone] = await Promise.all([git(['worktree', 'list', '--porcelain'], repo), goneBranches(repo)])
 	const wts = []
 	let cur = null
 	for (const line of raw.split('\n')) {
@@ -321,15 +339,21 @@ async function list(repoPath) {
 	}
 
 	const worktrees = await mapLimit(wts, 8, async (w) => {
-		const [status, last, ahead, behind] = await Promise.all([
-			git(['status', '--porcelain'], w.path),
+		// 🔴 status 는 gitX 로 — ok 플래그가 필요하다. git() 는 타임아웃/에러에도 '' 를 돌려주는데,
+		// 그걸 "변경 0줄 = clean" 으로 오인하면 실제로는 dirty 한 워크트리를 자동 삭제 대상으로 잘못 분류한다.
+		// (실제 사고: node_modules 심링크 등으로 status 가 7s 타임아웃 → '' → 오탐 clean → 자동 삭제.)
+		const [st, last, ahead, behind] = await Promise.all([
+			gitX(['status', '--porcelain'], w.path, 15000),
 			git(['log', '-1', `--format=%cr${SEP}%s${SEP}%an${SEP}%ct`], w.path),
 			git(['rev-list', '--count', `${BASE}..HEAD`], w.path),
 			git(['rev-list', '--count', `HEAD..${BASE}`], w.path),
 		])
-		const dirtyLines = status.split('\n').filter(Boolean)
+		const statusOk = st.ok // false = 타임아웃/에러 → clean 여부 '모름'(안전측: 삭제 불가)
+		const dirtyLines = st.out.split('\n').filter(Boolean)
 		const [lastRel, lastSubject, author, lastTs] = last.trim().split(SEP)
 		const branch = w.branch || (w.detached ? '(detached)' : '?')
+		const isMain = w.path === repo
+		const isGone = !isMain && !!w.branch && gone.has(w.branch)
 		return {
 			path: w.path,
 			name: w.path.split('/').pop(),
@@ -338,19 +362,55 @@ async function list(repoPath) {
 			head: w.head || null,
 			dirty: dirtyLines.length,
 			dirtySrc: dirtyLines.filter((l) => / src\//.test(l) || /\bsrc\//.test(l.slice(3))).length,
+			statusOk,
 			lastRel: lastRel || null,
 			lastSubject: lastSubject || null,
 			author: author || null,
 			lastTs: Number(lastTs) || 0,
 			ahead: Number(ahead.trim()) || 0,
 			behind: Number(behind.trim()) || 0,
-			isMain: w.path === repo,
+			isMain,
+			// gone: 원격 브랜치가 머지·삭제됨(정리 후보). cleanable: gone + status 확인성공 + 변경 0줄일 때만.
+			// statusOk 가 false(모름)면 절대 cleanable 로 두지 않는다 — 삭제는 '확인된 clean' 에만 허용.
+			gone: isGone,
+			cleanable: isGone && statusOk && dirtyLines.length === 0,
 		}
 	})
 
 	// 정렬: 미커밋 있는 것 먼저 → 최근 커밋 순
 	worktrees.sort((a, b) => (b.dirty > 0 ? 1 : 0) - (a.dirty > 0 ? 1 : 0) || b.lastTs - a.lastTs)
-	return { base: BASE, count: worktrees.length, worktrees, builtAt: new Date().toISOString() }
+	const staleCleanable = worktrees.filter((w) => w.cleanable).length
+	const staleDirty = worktrees.filter((w) => w.gone && !w.cleanable).length
+	return { base: BASE, count: worktrees.length, staleCleanable, staleDirty, worktrees, builtAt: new Date().toISOString() }
+}
+
+// 안전 정리 — 원격에서 머지·삭제된(gone) 워크트리만 대상. 기본은 미커밋 없는(clean) 것만 지운다.
+// dirty(미커밋 변경 있음)한 gone 워크트리는 사람 검토가 필요하므로 includeDirty=true일 때만 건드린다.
+// dryRun이면 실제 삭제 없이 대상만 돌려준다(주기 배치 미리보기·UI 확인용).
+async function pruneStale(repoPath, { dryRun = false, includeDirty = false } = {}) {
+	const repo = repoPath || C.REPO
+	const { worktrees } = await list(repo)
+	const targets = worktrees.filter((w) => !w.isMain && w.gone && (includeDirty || w.cleanable))
+	const skippedDirty = worktrees.filter((w) => !w.isMain && w.gone && !w.cleanable).map((w) => ({ path: w.path, branch: w.branch, dirty: w.dirty }))
+	const removed = []
+	const failed = []
+	if (!dryRun) {
+		for (const w of targets) {
+			// 방어 2선 — 삭제 직전 권위 있는 status 재확인. includeDirty 가 아닌데 여기서 변경이 잡히거나
+			// status 확인이 실패하면(모름) 삭제하지 않는다. list() 시점과 삭제 시점 사이의 변화도 잡는다.
+			if (!includeDirty) {
+				const chk = await gitX(['status', '--porcelain'], w.path, 15000)
+				if (!chk.ok || chk.out.split('\n').filter(Boolean).length > 0) {
+					failed.push({ path: w.path, branch: w.branch, errors: ['삭제 직전 재확인에서 미커밋 변경 또는 status 실패 — 건너뜀'] })
+					continue
+				}
+			}
+			const r = await removeFrom(repo, w.path, w.branch)
+			if (r.ok) removed.push({ path: w.path, branch: w.branch })
+			else failed.push({ path: w.path, branch: w.branch, errors: r.errors })
+		}
+	}
+	return { ok: true, dryRun, base: BASE, targets: targets.map((w) => ({ path: w.path, branch: w.branch, dirty: w.dirty })), removed, failed, skippedDirty }
 }
 
 // 특정 브랜치가 이미 워크트리로 체크아웃돼 있으면 그 경로 (없으면 null)
@@ -371,4 +431,4 @@ async function count(repoPath) {
 	const raw = await git(['worktree', 'list', '--porcelain'], repoPath || C.REPO)
 	return raw.split('\n').filter((l) => l.startsWith('worktree ')).length
 }
-module.exports = { list, create, ensure, remove, copyEnvFiles, ensureNodeModules, deriveNames, createDeployBranch, buildGroupBranch, pathForBranch, count }
+module.exports = { list, create, ensure, remove, removeFrom, goneBranches, pruneStale, copyEnvFiles, ensureNodeModules, deriveNames, createDeployBranch, buildGroupBranch, pathForBranch, count }

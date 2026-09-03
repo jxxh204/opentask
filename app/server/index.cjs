@@ -738,6 +738,17 @@ const server = http.createServer((req, res) => {
       .then((d) => sendJSON(res, 200, d))
       .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
   }
+  // stale 워크트리 정리 — 원격에서 머지·삭제된(gone) 워크트리를 지운다. 기본은 미커밋 없는(clean) 것만.
+  // 보드/사이드바의 "정리 가능 N개" 버튼과 주기 배치가 공용으로 쓴다. dryRun이면 대상만 돌려주고 삭제 안 함.
+  if (url.startsWith('/api/repos/') && url.endsWith('/worktrees/prune-stale') && req.method === 'POST') {
+    const id = decodeURIComponent(url.slice('/api/repos/'.length, url.length - '/worktrees/prune-stale'.length))
+    const repo = StoreRepos.get(id)
+    if (!repo) return sendJSON(res, 404, { ok: false, error: 'repo not found' })
+    return readBody(req)
+      .then((b) => Worktrees.pruneStale(repo.path, { dryRun: !!(b && b.dryRun), includeDirty: !!(b && b.includeDirty) }))
+      .then((r) => sendJSON(res, 200, r))
+      .catch((e) => sendJSON(res, 500, { ok: false, error: String(e.message || e) }))
+  }
   // "연결" — OpenTask가 모르는 기존 워크트리를 태스크로 입양. 새 워크트리를 만들지 않고(이미 있으니)
   // 그 브랜치를 가리키는 Folder/Task/Branch 레코드만 생성 — 실제 git 상태는 손대지 않는다.
   // orchestrator.start()가 이 태스크를 시작할 때 branches 레코드로 기존 경로를 재사용한다.
@@ -2493,6 +2504,7 @@ function startServer(opts = {}) {
       console.log('   🔔  에이전트 알림: 완료·질문·인증 감시 시작')
       Scheduler.start() // Automations(§07 "크론잡 생성") — 30초마다 due job 확인
       console.log('   🗓  Automations: 스케줄러 시작\n')
+      startStaleWorktreeSweep() // 머지·삭제된(gone) 워크트리 자동 정리 — clean만, dirty는 보존
       // "맥북 껏다킬거야. 세션전부 다시 살아나고 태스크도 살아나야해... 당연히 내가 킨 세션만" —
       // 서버가 뜨자마자, 재시작 전 실제로 떠 있었던 세션(스냅샷 있는 것)만 골라 한 번에 복원한다.
       // 한 번도 시작 안 한 지휘자/서브태스크는 새로 안 만든다. 부팅을 막지 않도록 fire-and-forget.
@@ -2509,6 +2521,44 @@ function startServer(opts = {}) {
       resolve({ port, host, server })
     })
   })
+}
+
+// 머지·삭제된(gone) 워크트리 지속 감지 — 스트림/워크트리가 100개 넘게 쌓이던 문제의 대응.
+// 🔴 기본은 '감지 전용'(dryRun): 정리 후보 개수만 로그로 남기고 실제 삭제는 하지 않는다.
+//    삭제는 사람이 UI '정리' 버튼으로 트리거한다(원클릭). 부팅 자동 삭제는 오탐 시 위험이 커서 기본 비활성.
+// OPENRM_STALE_SWEEP=auto 로 명시 opt-in 했을 때만 clean(확인된 미커밋 없음) 워크트리를 주기 자동 삭제한다.
+// OPENRM_STALE_SWEEP=off 면 감지 로그도 끈다. 주기: 부팅 1분 뒤 1회 + 이후 6시간마다.
+function startStaleWorktreeSweep() {
+  const mode = String(process.env.OPENRM_STALE_SWEEP || '').toLowerCase()
+  if (mode === 'off') return
+  const autoDelete = mode === 'auto'
+  const EVERY_MS = Number(process.env.OPENRM_STALE_SWEEP_MS) || 6 * 60 * 60 * 1000
+  const sweep = async () => {
+    try {
+      const repos = StoreRepos.list()
+      let cleanable = 0
+      let removed = 0
+      let dirtyLeft = 0
+      for (const repo of repos) {
+        // autoDelete 가 아니면 dryRun — 삭제 없이 개수만.
+        const r = await Worktrees.pruneStale(repo.path, { dryRun: !autoDelete, includeDirty: false }).catch(() => null)
+        if (!r) continue
+        cleanable += r.targets.length
+        removed += r.removed.length
+        dirtyLeft += r.skippedDirty.length
+        if (autoDelete && r.removed.length) console.log(`   🧹  stale 워크트리 정리: ${repo.name} — ${r.removed.length}개 제거`)
+      }
+      if (autoDelete) {
+        if (removed || dirtyLeft) console.log(`   🧹  stale sweep(auto) — 제거 ${removed}개, 검토 대기(dirty) ${dirtyLeft}개\n`)
+      } else if (cleanable || dirtyLeft) {
+        console.log(`   🧹  stale 감지 — 정리 가능 ${cleanable}개, 검토 대기(dirty) ${dirtyLeft}개 (UI '정리' 버튼으로 삭제)\n`)
+      }
+    } catch (e) {
+      console.log(`   ⚠️  stale 감지 실패: ${String((e && e.message) || e)}\n`)
+    }
+  }
+  setTimeout(sweep, 60 * 1000)
+  setInterval(sweep, EVERY_MS)
 }
 
 if (require.main === module) {
