@@ -11,10 +11,9 @@ import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
 import { useUpdateCheck } from '../../utils/useUpdateCheck'
 import { useT, useTp, localeFor } from '../../utils/i18n'
 import { timeAgo } from '../../utils/timeAgo'
-import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
-import ControlPane from './ControlPane'
+import ControlPane, { HivemindStatusDot } from './ControlPane'
 import PrReviewModal from './PrReviewModal'
 import TaskDetailModal from './TaskDetailModal'
 import SubtaskDetailPanel from './SubtaskDetailPanel'
@@ -190,21 +189,6 @@ export default function SessionShell() {
 	const loadTermStatus = useSessionsStore((s) => s.loadTermStatus)
 	const loadBoard = useSessionsStore((s) => s.loadBoard)
 	const loadRepos = useSessionsStore((s) => s.loadRepos)
-	// "관제에게 물어보기 하면 관제가 움직이잖아. 관제에도 상태가 보일 필요가 있어" — term.cjs가 이미
-	// 계산해주는 status(§ loadTermStatus, TaskRow가 쓰는 것과 같은 소스)를 관제 세션 이름(orm-control)
-	// 그대로 조인한다.
-	const controlTermStatus = useSessionsStore((s) => s.termStatus['orm-control'])
-	// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — control.cjs checkStalled와 같은
-	// 3분 임계값(값은 그쪽이 정본, 여긴 폴링 지연 없이 즉시 반영하려고 프론트에서도 계산).
-	const CONTROL_STALLED_THRESHOLD_MS = 3 * 60 * 1000
-	const controlStalled =
-		!!controlTermStatus?.exists &&
-		!controlTermStatus.working &&
-		!controlTermStatus.waiting &&
-		!controlTermStatus.needsAuth &&
-		!controlTermStatus.needsResume &&
-		!!controlTermStatus.lastWorkingAt &&
-		Date.now() - controlTermStatus.lastWorkingAt >= CONTROL_STALLED_THRESHOLD_MS
 	const loadHealth = useSessionsStore((s) => s.loadHealth)
 	const refreshAllOrchestrations = useSessionsStore((s) => s.refreshAllOrchestrations)
 	const refreshAllSubtaskWork = useSessionsStore((s) => s.refreshAllSubtaskWork)
@@ -432,14 +416,7 @@ export default function SessionShell() {
 						>
 							<span className={styles.navLinkIcon}>{CONTROL_ICON}</span>
 							<span style={{ flex: 1, textAlign: 'left' }}>{t('하이브마인드')}</span>
-							{controlTermStatus?.exists && (
-								<StatusDot
-									color={controlTermStatus.needsAuth ? 'red' : controlTermStatus.waiting || controlStalled ? 'amber' : 'green'}
-									pulse={!!controlTermStatus.working || controlStalled}
-									size={7}
-									title={controlStalled ? t('하이브마인드가 한동안 응답이 없습니다 — 확인해보세요') : undefined}
-								/>
-							)}
+							<HivemindStatusDot />
 						</button>
 					</div>
 					<label className={styles.sidebarSearch}>

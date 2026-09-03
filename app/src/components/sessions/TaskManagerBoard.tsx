@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Task, Subtask } from '../../store/types'
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { useSessionsStore } from '../../store/useSessionsStore'
@@ -60,6 +60,12 @@ function TaskLane({ task }: { task: Task }) {
 	// 이 탭이 열려있는 동안엔 그 같은 액션을 5초마다 다시 불러 이 태스크만 더 자주 갱신하되, 실제
 	// fetch·저장 경로는 여전히 하나뿐이라 사이드바 등 다른 화면도 이 탭이 열려있는 동안 덩달아 빨라진다.
 	const work = useSessionsStore((s) => s.subtaskWork[task.id]) ?? []
+	// "정보구조 감사" 제안 5 — 조립 라인 카드와 타임라인 행이 이름·상태·기간·워크트리·브랜치를 그대로
+	// 두 번 그리던 걸, 카드는 이름+상태만 남기고(빠르게 훑는 용도) 나머지 필드는 타임라인 한 곳에서만
+	// 보여준다. 대신 카드에 올리면 그 서브태스크의 타임라인 행으로 스크롤 + 하이라이트해 "이 카드가
+	// 곧 저 아래 저 줄이다"를 시각적으로 잇는다 — 클릭(세션 탭 열기)은 기존 그대로 둔다.
+	const [linkedId, setLinkedId] = useState<string | null>(null)
+	const timelineRowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
 	useEffect(() => {
 		useSessionsStore.getState().refreshSubtaskWork(task.id)
@@ -77,7 +83,6 @@ function TaskLane({ task }: { task: Task }) {
 					<div className={styles.chain}>
 						{task.subtasks.map((st, i) => {
 							const w = work.find((x) => x.id === st.id)
-							const period = periodLabel(st)
 							return (
 								<div key={st.id} className={styles.step}>
 									{i > 0 && <Connector />}
@@ -85,34 +90,38 @@ function TaskLane({ task }: { task: Task }) {
 										className={styles.note}
 										style={{ transform: `rotate(${tiltFor(i)}deg)` }}
 										onClick={() => activeNodeId && openSubtaskTab(activeNodeId, st.id, task.id, st.name)}
-										title={t('클릭하면 이 서브태스크의 세션 탭이 열립니다')}
+										onMouseEnter={() => {
+											setLinkedId(st.id)
+											timelineRowRefs.current.get(st.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+										}}
+										onMouseLeave={() => setLinkedId((id) => (id === st.id ? null : id))}
+										title={t('클릭하면 이 서브태스크의 세션 탭이 열립니다 — 자세한 내용은 아래 타임라인에서')}
 									>
 										<StatusPin st={w} />
 										<div className={styles.noteName}>{st.name}</div>
-										<div className={styles.noteWorktree} title={w?.worktreePath || undefined}>
-											{w?.worktreePath ? w.worktreePath.split('/').slice(-1)[0] : t('worktree 없음')}
-										</div>
-										{w?.branch && <div className={styles.noteBranch}>⎇ {w.branch}</div>}
-										{period && <div className={styles.notePeriod}>{period}</div>}
-										<div className={styles.popover}>
-											<div className={styles.popoverLabel}>{st.name}</div>
-											<div className={styles.popoverText}>{st.desc || t('설명 없음')}</div>
-										</div>
 									</div>
 								</div>
 							)
 						})}
 					</div>
 
-					{/* "전체화면을 사용해서 내용을 구체적으로 표현해줘" — 위 조립 라인은 한눈에 훑는 용도라
-					    설명이 호버 팝오버에 숨어 있다. 그 아래 남는 큰 공간을 실제 정보로 채우는 상세
-					    타임라인 — 이름·설명 전문·워크트리 전체 경로·브랜치·기간·상태를 전부 펼쳐 보여준다. */}
+					{/* "전체화면을 사용해서 내용을 구체적으로 표현해줘" — 위 조립 라인은 이름+상태만 보여주는
+					    한눈에 훑는 용도(§ 정보구조 감사 제안 5 — 워크트리·브랜치·기간·설명은 여기 한 곳에서만).
+					    카드에 마우스를 올리면 이 타임라인의 해당 행이 스크롤+하이라이트되어 "이 카드 = 이 줄"이
+					    바로 이어진다. */}
 					<div className={styles.timeline}>
 						{task.subtasks.map((st, i) => {
 							const w = work.find((x) => x.id === st.id)
 							const period = periodLabel(st)
 							return (
-								<div key={st.id} className={styles.timelineRow}>
+								<div
+									key={st.id}
+									ref={(el) => {
+										if (el) timelineRowRefs.current.set(st.id, el)
+										else timelineRowRefs.current.delete(st.id)
+									}}
+									className={`${styles.timelineRow} ${linkedId === st.id ? styles.timelineRowLinked : ''}`}
+								>
 									<div className={styles.timelineRail}>
 										<span className={styles.timelineIndex}>{i + 1}</span>
 										{i < task.subtasks.length - 1 && <span className={styles.timelineLine} />}

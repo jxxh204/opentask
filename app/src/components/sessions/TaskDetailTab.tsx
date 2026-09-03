@@ -26,7 +26,7 @@ export default function TaskDetailTab({ nodeId, tabId, folderId }: { nodeId: str
 	return (
 		<div className={styles.tabWrap}>
 			<div className={styles.tabWrapInner}>
-				<TaskDetailContent taskId={taskId} onClose={() => closeTab(nodeId, tabId)} />
+				<TaskDetailContent taskId={taskId} onClose={() => closeTab(nodeId, tabId)} showPinToTab={false} />
 			</div>
 		</div>
 	)

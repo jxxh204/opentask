@@ -138,6 +138,27 @@
 	background-position: center;
 	background-size: 9px 9px;
 }
+/* "드로어 하나 + 탭에 고정 모드" — 잠깐 훑어본 상세를 탭으로 계속 열어두고 싶을 때. doneToggle과
+   같은 체급의 칩 버튼이되 토글이 아니라 원샷 액션이라 active 색 상태는 없다. */
+.pinTabBtn {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 9px;
+	margin-right: 6px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--t3);
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-chip);
+	cursor: pointer;
+}
+.pinTabBtn:hover {
+	background: var(--card-hover);
+	color: var(--ink);
+}
 .closeBtn {
 	flex: none;
 	width: 26px;

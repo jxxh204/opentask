@@ -82,10 +82,6 @@
 	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.08);
 	z-index: 2;
 }
-.note:hover .popover {
-	opacity: 1;
-	visibility: visible;
-}
 
 .pin {
 	position: absolute;
@@ -115,58 +111,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	margin-bottom: 6px;
-}
-.noteWorktree {
-	font-size: 9.5px;
-	font-family: var(--mono, ui-monospace, monospace);
-	color: var(--t3);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.noteBranch {
-	margin-top: 2px;
-	font-size: 9.5px;
-	color: var(--t3);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.notePeriod {
-	margin-top: 5px;
-	font-size: 9.5px;
-	font-weight: 700;
-	color: var(--t2);
-	font-variant-numeric: tabular-nums;
-}
-
-.popover {
-	position: absolute;
-	top: calc(100% + 8px);
-	left: 0;
-	z-index: 5;
-	width: 220px;
-	padding: 8px 10px;
-	border-radius: 8px;
-	background: var(--vtint);
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
-	opacity: 0;
-	visibility: hidden;
-	transition: opacity 0.12s ease;
-	pointer-events: none;
-}
-.popoverLabel {
-	font-size: 10.5px;
-	font-weight: 700;
-	color: var(--violet);
-	margin-bottom: 3px;
-}
-.popoverText {
-	font-size: 11.5px;
-	color: var(--t2);
-	line-height: 1.55;
-	white-space: normal;
 }
 
 /* "전체화면을 사용해서 내용을 구체적으로 표현해줘" — 조립 라인 아래 남는 공간을 실제 상세 정보로
@@ -178,6 +122,13 @@
 .timelineRow {
 	display: flex;
 	gap: 14px;
+	border-radius: 8px;
+	transition: background 0.15s ease;
+}
+/* 조립 라인 카드에 마우스를 올리면 그 카드와 짝인 이 행이 잠깐 빛난다 — "이 카드 = 이 줄"을
+   잇는 유일한 표시(§ TaskManagerBoard.tsx linkedId). */
+.timelineRowLinked {
+	background: var(--vtint);
 }
 .timelineRail {
 	flex: none;

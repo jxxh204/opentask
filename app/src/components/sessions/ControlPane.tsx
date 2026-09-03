@@ -21,6 +21,7 @@ import StatusDot from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
 import { useT, useTp } from '../../utils/i18n'
 import { timeAgo } from '../../utils/timeAgo'
+import { deriveStalled } from '../../utils/sessionStatus'
 import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './ControlPane.module.css'
 
@@ -41,6 +42,27 @@ marked.setOptions({ breaks: true })
 // 그대로(§ tabIcons.tsx overmindIcon). 이미지 자체가 이미 어두운 배지라 .avatar의 violet 배경은
 // 걷어내고(§ ControlPane.module.css .avatar) 이미지가 원형을 꽉 채우게 한다.
 const CONTROL_AVATAR_ICON = <img src={overmindIcon} alt="" className={styles.avatarImg} />
+// "멈춘상황을 어떻게 인지할 수 있을까?" — 3분 무응답이면 정체로 본다(§ control.cjs checkStalled와
+// 같은 임계값, 여긴 폴링 지연 없이 즉시 반영하려고 프론트도 계산).
+export const CONTROL_STALLED_THRESHOLD_MS = 3 * 60 * 1000
+// "이거 확인해봐야하는데 여기저기서 다 다르게 보이면 헷갈려" — 하이브마인드는 사이드바 nav·전역 노드·
+// 태스크별 추가 탭 셋 다 완전히 같은 세션 하나를 가리킨다(§ 위 주석). 어디서 열든 같은 점을 보여줘
+// "이거 다른 대화 아니야?"라는 학습비용을 없앤다 — 세션이 아예 없으면(한 번도 시작 안 함) 아무것도
+// 안 그린다.
+export function HivemindStatusDot({ size = 7 }: { size?: number }) {
+	const t = useT()
+	const term = useSessionsStore((s) => s.termStatus['orm-control'])
+	if (!term?.exists) return null
+	const stalled = deriveStalled(term, CONTROL_STALLED_THRESHOLD_MS)
+	return (
+		<StatusDot
+			color={term.needsAuth ? 'red' : term.waiting || stalled ? 'amber' : 'green'}
+			pulse={!!term.working || stalled}
+			size={size}
+			title={stalled ? t('하이브마인드가 한동안 응답이 없습니다 — 확인해보세요') : t('하이브마인드 대화를 이어서 봅니다')}
+		/>
+	)
+}
 const TOOL_ICON = (
 	<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 		<rect x="3" y="4" width="18" height="16" rx="2.2" />

@@ -18,7 +18,7 @@ import ModelPolicyPane from './ModelPolicyPane'
 import TeamRulesPane from './TeamRulesPane'
 import { TAB_ICON } from './tabIcons'
 import CalendarPane from './CalendarPane'
-import ControlPane from './ControlPane'
+import ControlPane, { HivemindStatusDot } from './ControlPane'
 import styles from './TabWorkspace.module.css'
 
 // 오케스트레이터·태스크(서브태스크) 노드 둘 다 같은 탭 개념을 쓴다 — "+"로 열 수 있는 종류는 노드
@@ -721,6 +721,10 @@ export default function TabWorkspace() {
 									<span className={styles.cmdkItemLabel}>
 										{TAB_ICON[t] && <span className={styles.tabIcon}>{TAB_ICON[t]}</span>}
 										<span>{tr(TAB_LABEL[t])}</span>
+										{/* "이거 확인해봐야하는데 여기저기서 다 다르게 보이면 헷갈려" — 사이드바 nav의
+										    하이브마인드 점과 같은 소스(§ ControlPane.tsx HivemindStatusDot). 이 메뉴에서
+										    열어도 같은 대화가 이어진다는 걸 열기 전에 미리 보여준다. */}
+										{t === 'control' && <HivemindStatusDot size={6} />}
 									</span>
 									{i < 9 && <kbd className={styles.cmdkBadge}>{i + 1}</kbd>}
 								</div>

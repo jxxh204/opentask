@@ -24,3 +24,12 @@ export function deriveSubtaskAlert(term: TermStatus | undefined): { needsAuth: b
 	const needsInput = !needsAuth && !!term?.waiting
 	return { needsAuth, needsInput }
 }
+
+// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 명시적 대기 신호(needsAuth/needsResume/
+// waiting) 없이 그냥 조용해진 걸 시간 임계값으로 추정한다(§ SessionShell.tsx 하이브마인드 상태 점의
+// 원본 계산 — TabWorkspace.tsx의 "+ 탭 추가" 메뉴 배지도 같은 판정이 필요해 여기로 뽑았다).
+export function deriveStalled(term: TermStatus | undefined, thresholdMs: number): boolean {
+	if (!term?.exists || term.working || term.waiting || term.needsAuth || term.needsResume) return false
+	if (!term.lastWorkingAt) return false
+	return Date.now() - term.lastWorkingAt >= thresholdMs
+}

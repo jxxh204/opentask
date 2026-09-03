@@ -68,7 +68,11 @@ function dateInputValueToMs(v: string) {
 // 감싸기만 다르게 해서 그대로 재사용한다 — 실제 필드/핸들러는 여기 한 곳에만 있다. onClose는 두
 // 맥락에서 의미가 다르다: 드로어에서는 "드로어 닫기", 탭에서는 "이 상세 탭 닫기"(TaskDetailTab이
 // closeTab으로 연결). openWorkspace처럼 탭 전환만으로 충분한 동작은 onClose를 부르지 않는다.
-export default function TaskDetailContent({ taskId, onClose = () => {} }: { taskId: string | null; onClose?: () => void }) {
+// "정보구조 감사" 제안 C — 둘을 아예 하나로 합치진 않는다: 드로어(훑어보고 닫는 용도)와 탭(계속
+// 열어두고 작업하는 용도)은 실제로 다른 요청("메인태스크 상세 탭이 여전히없어")에서 나온 서로 다른
+// 필요다. 대신 드로어에서 탭으로 "고정"하는 다리만 놓는다 — showPinToTab은 TaskDetailTab(이미 탭
+// 맥락이라 버튼이 무의미)에서만 false로 끈다.
+export default function TaskDetailContent({ taskId, onClose = () => {}, showPinToTab = true }: { taskId: string | null; onClose?: () => void; showPinToTab?: boolean }) {
 	const t = useT()
 	const tp = useTp()
 	const lang = useUiStore((s) => s.lang)
@@ -227,6 +231,16 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 		useTabsStore.getState().openOrFocusTab(folder.id, 'terminal')
 		onClose()
 	}
+	// isPrimaryTask — 이 태스크가 folder.tasks[0](TaskDetailTab이 "메인 태스크"로 삼는 그 태스크)일
+	// 때만 대응하는 탭 목적지가 있다. 다른 태스크(일감함 미승격, 다중 태스크 폴더의 2번째 이후)는
+	// 아직 그 자리가 없다.
+	const isPrimaryTask = !!folder && folder.tasks[0]?.id === found?.id
+	function pinToTab() {
+		if (!found || !folder) return
+		useTabsStore.getState().setActiveNode(folder.id, 'detail')
+		useTabsStore.getState().openOrFocusTab(folder.id, 'detail')
+		onClose()
+	}
 	async function register() {
 		if (!found) return
 		await quickStartTask(found.id)
@@ -266,6 +280,13 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 						if (e.key === 'Enter') nameRef.current?.blur()
 					}}
 				/>
+				{/* "정보구조 감사" 제안 C — 훑어보던 드로어를 계속 열어두고 싶을 때 탭으로 넘긴다. 대응하는
+				    탭 목적지가 있을 때만(isPrimaryTask) 보이고, 이미 탭 맥락(TaskDetailTab)이면 안 보인다. */}
+				{showPinToTab && isPrimaryTask && (
+					<button type="button" className={styles.pinTabBtn} onClick={pinToTab} title={t('이 상세를 탭으로 열어 계속 봅니다')}>
+						{t('탭으로 보기')}
+					</button>
+				)}
 				{/* "일감 완료 체크가 있으면 좋겠어. 그걸하면 그냥 완료로 보이는거야" — 체크하면 레코드는
 				    안 지우고 completed_at만 찍혀 태스크 트리에서 사라진다(캘린더엔 그대로 남음). 여기가
 				    유일하게 다시 되돌릴 수 있는 자리다. "완료 위치 개선... 체크박스 기능을 하는 버튼으로"
