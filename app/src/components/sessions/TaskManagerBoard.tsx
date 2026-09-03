@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import type { Task, Subtask } from '../../store/types'
 import type { SubtaskWorkStatus } from '../../api/sessions'
-import { getSubtaskWorkState } from '../../api/sessions'
+import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
 import { addBusinessDays } from '../../utils/businessDays'
 import { useT } from '../../utils/i18n'
@@ -56,20 +56,15 @@ function TaskLane({ task }: { task: Task }) {
 	const t = useT()
 	const activeNodeId = useTabsStore((s) => s.activeNodeId)
 	const openSubtaskTab = useTabsStore((s) => s.openSubtaskTab)
-	const [work, setWork] = useState<SubtaskWorkStatus[]>([])
+	// "진행중 표기도 안돼" 이후 subtaskWork는 useSessionsStore 한 곳에서만 가져온다(§ refreshSubtaskWork) —
+	// 이 탭이 열려있는 동안엔 그 같은 액션을 5초마다 다시 불러 이 태스크만 더 자주 갱신하되, 실제
+	// fetch·저장 경로는 여전히 하나뿐이라 사이드바 등 다른 화면도 이 탭이 열려있는 동안 덩달아 빨라진다.
+	const work = useSessionsStore((s) => s.subtaskWork[task.id]) ?? []
 
 	useEffect(() => {
-		let cancelled = false
-		async function poll() {
-			const r = await getSubtaskWorkState(task.id)
-			if (!cancelled && r.ok) setWork(r.subtasks)
-		}
-		poll()
-		const id = window.setInterval(poll, 5000)
-		return () => {
-			cancelled = true
-			window.clearInterval(id)
-		}
+		useSessionsStore.getState().refreshSubtaskWork(task.id)
+		const id = window.setInterval(() => useSessionsStore.getState().refreshSubtaskWork(task.id), 5000)
+		return () => window.clearInterval(id)
 	}, [task.id])
 
 	return (

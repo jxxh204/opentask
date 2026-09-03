@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
-import { getSubtaskWorkState, stopSubtaskSession } from '../../api/sessions'
-import type { SubtaskWorkStatus } from '../../api/sessions'
+import { stopSubtaskSession } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
 import { extractLinks } from '../../utils/extractLinks'
 import { useT, useTp } from '../../utils/i18n'
@@ -74,21 +73,15 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 	const subtask = parentTask?.subtasks.find((st) => st.id === subtaskId) ?? null
 	const descLinks = subtask ? extractLinks(subtask.desc) : []
 
-	const [work, setWork] = useState<SubtaskWorkStatus | null>(null)
+	// useSessionsStore.subtaskWork 한 곳에서만 가져온다(§ TaskManagerBoard/TaskDetailContent와 동일
+	// 패턴) — 이 패널이 열려있는 동안엔 그 같은 액션을 5초마다 다시 불러 이 태스크만 더 자주 갱신한다.
+	const work = useSessionsStore((s) => (parentTaskId ? s.subtaskWork[parentTaskId]?.find((x) => x.id === subtaskId) : undefined)) ?? null
 	const [busy, setBusy] = useState(false)
 	useEffect(() => {
 		if (!open || !parentTaskId || !subtaskId) return
-		let cancelled = false
-		async function poll() {
-			const r = await getSubtaskWorkState(parentTaskId!)
-			if (!cancelled && r.ok) setWork(r.subtasks.find((x) => x.id === subtaskId) ?? null)
-		}
-		poll()
-		const id = window.setInterval(poll, 5000)
-		return () => {
-			cancelled = true
-			window.clearInterval(id)
-		}
+		useSessionsStore.getState().refreshSubtaskWork(parentTaskId)
+		const id = window.setInterval(() => useSessionsStore.getState().refreshSubtaskWork(parentTaskId), 5000)
+		return () => window.clearInterval(id)
 	}, [open, parentTaskId, subtaskId])
 
 	function goToMainTask() {
@@ -141,12 +134,11 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 	}
 
 	async function stopSession() {
-		if (!subtaskId) return
+		if (!subtaskId || !parentTaskId) return
 		setBusy(true)
 		try {
 			await stopSubtaskSession(subtaskId)
-			const r = await getSubtaskWorkState(parentTaskId!)
-			if (r.ok) setWork(r.subtasks.find((x) => x.id === subtaskId) ?? null)
+			await useSessionsStore.getState().refreshSubtaskWork(parentTaskId)
 		} finally {
 			setBusy(false)
 		}

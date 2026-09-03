@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import { useTabsStore } from '../../store/useTabsStore'
 import { useReviewStore } from '../../store/useReviewStore'
-import { removeTask, durationEstimateReportUrl, startSubtaskWork, advanceSubtaskWork, getSubtaskWorkState, attachTaskAsSubtask, createTask } from '../../api/sessions'
-import type { SubtaskWorkStatus } from '../../api/sessions'
+import { removeTask, durationEstimateReportUrl, startSubtaskWork, advanceSubtaskWork, attachTaskAsSubtask, createTask } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
 import { URL_RE, extractLinks } from '../../utils/extractLinks'
 import { LINK_LABEL } from '../../utils/linkDetect'
@@ -120,39 +119,31 @@ export default function TaskDetailContent({ taskId, onClose = () => {} }: { task
 	}, [descEditing])
 
 	// "코드작업은 무조건 서브태스크를 만들고 그 서브태스크에 워크트리를 만들어서... 순차로" — 서브태스크
-	// 체이닝 진행 상태. 열려있는 동안만 가볍게 폴링(실시간 세션 생사 확인은 tmux 조회가 들어가
-	// 있어 매초 돌릴 정도는 아니라 5초 간격).
-	const [subtaskWork, setSubtaskWork] = useState<SubtaskWorkStatus[]>([])
+	// 체이닝 진행 상태. useSessionsStore.subtaskWork 한 곳에서만 가져온다(§ refreshSubtaskWork, 사이드바와
+	// 동일 소스) — 이 패널이 열려있는 동안엔 그 같은 액션을 5초마다 다시 불러 이 태스크만 더 자주
+	// 갱신하되(실시간 세션 생사 확인은 tmux 조회가 들어가 있어 매초 돌릴 정도는 아님), fetch·저장
+	// 경로는 여전히 하나뿐이라 사이드바 등 다른 화면도 이 패널이 열려있는 동안 덩달아 빨라진다.
+	const subtaskWork = useSessionsStore((s) => (found ? s.subtaskWork[found.id] : undefined)) ?? []
 	const [subtaskWorkBusy, setSubtaskWorkBusy] = useState(false)
 	useEffect(() => {
 		if (!open || !found) return
-		let cancelled = false
-		async function poll() {
-			const r = await getSubtaskWorkState(found!.id)
-			if (!cancelled && r.ok) setSubtaskWork(r.subtasks)
-		}
-		poll()
-		const id = window.setInterval(poll, 5000)
-		return () => {
-			cancelled = true
-			window.clearInterval(id)
-		}
+		useSessionsStore.getState().refreshSubtaskWork(found.id)
+		const id = window.setInterval(() => useSessionsStore.getState().refreshSubtaskWork(found!.id), 5000)
+		return () => window.clearInterval(id)
 	}, [open, found?.id])
 	async function startDev() {
 		if (!found || subtaskWorkBusy) return
 		setSubtaskWorkBusy(true)
 		await startSubtaskWork(found.id)
 		await useSessionsStore.getState().loadBoard() // ensureWorkUnitSubtasks가 서버에서 새 서브태스크를 만들었을 수 있음
-		const r = await getSubtaskWorkState(found.id)
-		if (r.ok) setSubtaskWork(r.subtasks)
+		await useSessionsStore.getState().refreshSubtaskWork(found.id)
 		setSubtaskWorkBusy(false)
 	}
 	async function advanceDev() {
 		if (!found || subtaskWorkBusy) return
 		setSubtaskWorkBusy(true)
 		await advanceSubtaskWork(found.id)
-		const r = await getSubtaskWorkState(found.id)
-		if (r.ok) setSubtaskWork(r.subtasks)
+		await useSessionsStore.getState().refreshSubtaskWork(found.id)
 		setSubtaskWorkBusy(false)
 	}
 

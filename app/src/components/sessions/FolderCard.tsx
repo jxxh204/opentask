@@ -6,6 +6,7 @@ import { LINK_LABEL } from '../../utils/linkDetect'
 import type { LinkKind } from '../../utils/linkDetect'
 import { useT, useTp } from '../../utils/i18n'
 import { timeAgo } from '../../utils/timeAgo'
+import { deriveSessionStatus, deriveSubtaskAlert } from '../../utils/sessionStatus'
 import { CLOCK, LOCK, QUESTION } from '../common/StatusIcon'
 import TaskRow, { PR_LABEL, CHECK, HELP } from './TaskRow'
 import TaskColorDot from './TaskColorDot'
@@ -141,25 +142,26 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 	// 원이 running/waiting 둘뿐이라 지휘자(태스크 매니저)가 인증·질문 대기 중이어도 티가 안 났다.
 	// TaskRow의 statusDot과 같은 소스(termStatus, § term.cjs가 계산)를 지휘자 세션명으로 조인한다.
 	const conductorTermStatus = useSessionsStore((s) => (orch.conductor ? s.termStatus[orch.conductor.session] : undefined))
-	const needsAuth = !!conductorTermStatus?.needsAuth
-	const needsResume = !needsAuth && !!conductorTermStatus?.needsResume
-	const needsInput = !needsAuth && !needsResume && !!conductorTermStatus?.waiting
-	// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 지휘자가 명시적 대기(needsInput류)
-	// 없이 그냥 조용해진 경우(§ orchestrator.cjs checkStalledSubtasks의 conductorStalled). 백엔드가
-	// 확정 판단하지만, 폴링 주기(60초) 지연 없이 곧바로 반영되도록 프론트도 같은 조건을 한 번 더 본다.
-	const conductorStalled = !needsAuth && !needsResume && !needsInput && !!orch.conductorStalled
 	// "서브태스크가 돌아도 메인태스크 스피너가 도는것같기도하고" — orch.running은 웨이브 오케스트레이션이
 	// 한 번이라도 시작됐는지만 볼 뿐(start()에서 세션이 하나라도 있으면 켜지고, stop() 전까진 절대 안
 	// 꺼짐) 지금 실제로 뭔가 돌고 있는지와 무관했다. subChainDot과 같은 실데이터(subtaskWork[].alive)를
 	// 이 폴더의 모든 태스크에 걸쳐 조인해, 실제 서브태스크가 살아있을 때만 스피너가 돈다.
 	const subtaskWorkMap = useSessionsStore((s) => s.subtaskWork)
 	const anySubtaskAlive = folder.tasks.some((t) => subtaskWorkMap[t.id]?.some((w) => w.alive))
+	// "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 지휘자가 명시적 대기(needsInput류)
+	// 없이 그냥 조용해진 경우(§ orchestrator.cjs checkStalledSubtasks의 conductorStalled). 백엔드가
+	// 확정 판단하지만, 폴링 주기(60초) 지연 없이 곧바로 반영되도록 프론트도 같은 조건을 한 번 더 본다.
 	// "메인 태스크 세션 돌고있으면 사이드메뉴에서도 서클이 보여야할것같아" — 지휘자가 서브태스크를
 	// 아직 하나도 디스패치하기 전(계획 수립·shell 명령 실행 등)엔 anySubtaskAlive가 계속 false라
 	// 실제로 살아서 일하는 중인데도 스피너가 안 돌았다. conductorTermStatus.working(§ SessionShell.tsx
 	// controlTermStatus.working·SubagentStrip.tsx와 같은 소스 — tmux를 실시간으로 스크레이프)을 더해
 	// 지휘자 자신이 일하는 중일 때도 잡는다.
-	const isRunning = !needsAuth && !needsInput && (anySubtaskAlive || !!conductorTermStatus?.working)
+	const conductorStatus = deriveSessionStatus({ term: conductorTermStatus, stalled: !!orch.conductorStalled, running: anySubtaskAlive || !!conductorTermStatus?.working })
+	const needsAuth = conductorStatus === 'needsAuth'
+	const needsResume = conductorStatus === 'needsResume'
+	const needsInput = conductorStatus === 'needsInput'
+	const conductorStalled = conductorStatus === 'stalled'
+	const isRunning = conductorStatus === 'running'
 	// 서브태스크별 세션명으로 다시 조인(§ TaskRow의 subChainDot과 동일 패턴).
 	const termStatusMap = useSessionsStore((s) => s.termStatus)
 	// "서브태스크 완료 버튼 필요" — 완료 처리한(completed_at) 서브태스크는 이 목록에서 걸러낸다(§ TaskRow
@@ -483,8 +485,7 @@ export default function FolderCard({ folder }: { folder: Folder }) {
 								const subGit = work?.worktreePath ? gitStatusByPath[work.worktreePath] : work?.branch ? gitStatus[work.branch] : undefined
 								const subBranch = subGit?.branch ?? work?.branch
 								const subTermStatus = work?.tmuxSession ? termStatusMap[work.tmuxSession] : undefined
-								const subNeedsAuth = !!subTermStatus?.needsAuth
-								const subNeedsInput = !subNeedsAuth && !!subTermStatus?.waiting
+								const { needsAuth: subNeedsAuth, needsInput: subNeedsInput } = deriveSubtaskAlert(subTermStatus)
 								return (
 									<div
 										key={st.id}

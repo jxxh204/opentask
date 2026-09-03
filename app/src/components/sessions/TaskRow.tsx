@@ -7,6 +7,7 @@ import { useTabsStore } from '../../store/useTabsStore'
 import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import { useT, useTp } from '../../utils/i18n'
 import { timeAgo } from '../../utils/timeAgo'
+import { deriveSessionStatus, deriveSubtaskAlert } from '../../utils/sessionStatus'
 import { CLOCK, CHECK, LOCK, QUESTION, HELP } from '../common/StatusIcon'
 import BranchChain from './BranchChain'
 import SubagentStrip from './SubagentStrip'
@@ -85,12 +86,13 @@ export default function TaskRow({
 	const openReviewCount = task.reviews.filter((r) => r.state === 'open').length
 	const hasReviews = task.reviews.length > 0
 
-	const isDone = git?.pr?.state === 'merged'
-	// 우선순위(§12): 완료 > 인증필요 > 질문대기 > 진행중 > 대기 — 완료가 아니면 그 다음 확인이 급한 것부터.
-	const needsAuth = !isDone && !!termStatus?.needsAuth
-	const needsResume = !isDone && !needsAuth && !!termStatus?.needsResume
-	const needsInput = !isDone && !needsAuth && !needsResume && !!termStatus?.waiting
-	const isRunning = !isDone && !needsAuth && !needsResume && !needsInput && !!session
+	// 우선순위(§12): 완료 > 인증필요 > 재개필요 > 질문대기 > 진행중 > 대기 — 완료가 아니면 그 다음 확인이 급한 것부터.
+	const status = deriveSessionStatus({ done: git?.pr?.state === 'merged', term: termStatus, running: !!session })
+	const isDone = status === 'done'
+	const needsAuth = status === 'needsAuth'
+	const needsResume = status === 'needsResume'
+	const needsInput = status === 'needsInput'
+	const isRunning = status === 'running'
 
 	// 사이드바가 "지금 대화 중"이라는 걸 실제로 보여주는 자리(§10) — 장식 애니메이션이 아니라 feed에
 	// 진짜 새 이벤트가 들어온 순간에만 0.5초 반짝인다. 이전엔 정적인 스피너뿐이라 대화가 오가도 티가 안 났다.
@@ -324,8 +326,7 @@ export default function TaskRow({
 								const subGit = work?.worktreePath ? gitStatusByPath[work.worktreePath] : work?.branch ? gitStatus[work.branch] : undefined
 								const subBranch = subGit?.branch ?? work?.branch
 								const subTermStatus = work?.tmuxSession ? termStatusMap[work.tmuxSession] : undefined
-								const subNeedsAuth = !!subTermStatus?.needsAuth
-								const subNeedsInput = !subNeedsAuth && !!subTermStatus?.waiting
+								const { needsAuth: subNeedsAuth, needsInput: subNeedsInput } = deriveSubtaskAlert(subTermStatus)
 								return (
 									<div
 										key={st.id}
