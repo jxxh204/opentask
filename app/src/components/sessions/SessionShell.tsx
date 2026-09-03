@@ -303,6 +303,15 @@ export default function SessionShell() {
 		return () => clearInterval(id)
 	}, [loadRepos])
 
+	// "그럼 업데이트 안되는 이유 찾아줘" — 관제(오버마인드)가 control API/MCP로 직접 만든 서브태스크·
+	// 완료 처리도 위와 같은 이유로 트리에 안 보였다: 보드 자체(loadBoard)는 UI 조작 때만 다시 불러왔기
+	// 때문. repos·gitStatus와 같은 15초 주기로 보드도 최신을 따라가게 한다(openFolders는 loadBoard가
+	// 접힘 상태를 보존하므로 폴링해도 사용자가 접어둔 폴더가 다시 펴지지 않는다 §314).
+	useEffect(() => {
+		const id = setInterval(loadBoard, 15000)
+		return () => clearInterval(id)
+	}, [loadBoard])
+
 	// TaskRow가 질문대기/인증필요를 보여주려면(§12) term.cjs의 실시간 status가 필요 — 백엔드는 이미
 	// /api/term으로 내려주고 있었는데 프론트 어디서도 안 쓰고 있었다.
 	useEffect(() => {
