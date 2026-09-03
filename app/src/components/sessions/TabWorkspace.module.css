@@ -19,6 +19,16 @@
 	height: 36px;
 	background: var(--card2);
 	border-bottom: 1px solid var(--line);
+}
+/* "태스크의 + 누르면 나오는 팝오버 가려짐" — overflow-x:auto인 박스는 overflow-y도(명시 안 해도)
+   auto로 계산돼(CSS 스펙) 아래로 펼쳐지는 position:absolute 팝오버(.cmdkPanel)가 수직으로 잘려
+   보였다. 가로 스크롤이 필요한 탭 목록만 이 안쪽 래퍼로 좁히고, "+" 버튼(.cmdkAnchor)은 스크롤
+   박스 밖(.tabbar 직계)에 둬서 팝오버가 잘리지 않게 한다. */
+.tabScroll {
+	display: flex;
+	align-items: stretch;
+	flex: 1 1 auto;
+	min-width: 0;
 	overflow-x: auto;
 	scrollbar-width: thin;
 }

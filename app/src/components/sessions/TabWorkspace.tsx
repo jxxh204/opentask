@@ -639,64 +639,69 @@ export default function TabWorkspace() {
 					setDragTab(null)
 				}}
 			>
-				{groupTabs.map((t) => (
-					<div
-						key={t.id}
-						className={`${styles.tab} ${t.id === groupActiveId ? styles.tabActive : ''}`}
-						draggable
-						onDragStart={(e) => {
-							e.dataTransfer.effectAllowed = 'move'
-							e.dataTransfer.setData('text/plain', t.id)
-							setDragTab({ id: t.id, from: group })
-						}}
-						onDragEnd={() => {
-							setDragTab(null)
-							setDragOverZone(null)
-							dragCounters.current = {}
-						}}
-						onClick={() => (group === 'left' ? setActiveTab(activeNodeId!, t.id) : setActiveRightTab(activeNodeId!, t.id))}
-						onContextMenu={(e) => {
-							e.preventDefault()
-							setMenuForTab(t.id)
-						}}
-					>
-						{renamingTab === t.id ? (
-							<input
-								ref={renameInputRef}
-								className={styles.tabRenameInput}
-								value={renameDraft}
-								onClick={(e) => e.stopPropagation()}
-								onChange={(e) => setRenameDraft(e.target.value)}
-								onBlur={commitRename}
-								onKeyDown={(e) => {
-									if (e.key === 'Enter') commitRename()
-									if (e.key === 'Escape') setRenamingTab(null)
-								}}
-							/>
-						) : (
-							<>
-								{TAB_ICON[t.kind] && <span className={styles.tabIcon}>{TAB_ICON[t.kind]}</span>}
-								<span>{t.label || tr(TAB_LABEL[t.kind])}</span>
-							</>
-						)}
-						<span
-							className={styles.tabClose}
-							onClick={(e) => {
-								e.stopPropagation()
-								closeTab(activeNodeId!, t.id)
+				{/* "+ 누르면 나오는 팝오버 가려짐" — overflow-x:auto인 박스는 overflow-y도 auto로 계산돼
+				    (CSS 스펙) 아래로 펼쳐지는 팝오버(.cmdkPanel)가 잘렸다. 가로 스크롤이 필요한 탭
+				    목록만 이 안쪽 래퍼로 좁히고, "+" 버튼은 이 스크롤 박스 밖(.tabbar 직계)에 둔다. */}
+				<div className={styles.tabScroll}>
+					{groupTabs.map((t) => (
+						<div
+							key={t.id}
+							className={`${styles.tab} ${t.id === groupActiveId ? styles.tabActive : ''}`}
+							draggable
+							onDragStart={(e) => {
+								e.dataTransfer.effectAllowed = 'move'
+								e.dataTransfer.setData('text/plain', t.id)
+								setDragTab({ id: t.id, from: group })
+							}}
+							onDragEnd={() => {
+								setDragTab(null)
+								setDragOverZone(null)
+								dragCounters.current = {}
+							}}
+							onClick={() => (group === 'left' ? setActiveTab(activeNodeId!, t.id) : setActiveRightTab(activeNodeId!, t.id))}
+							onContextMenu={(e) => {
+								e.preventDefault()
+								setMenuForTab(t.id)
 							}}
 						>
-							×
-						</span>
-						{menuForTab === t.id && (
-							<div className={styles.tabMenu} onClick={(e) => e.stopPropagation()}>
-								<div className={styles.tabMenuItem} onClick={() => startRename(t.id, t.label || tr(TAB_LABEL[t.kind]))}>
-									{tr('이름 변경')}
+							{renamingTab === t.id ? (
+								<input
+									ref={renameInputRef}
+									className={styles.tabRenameInput}
+									value={renameDraft}
+									onClick={(e) => e.stopPropagation()}
+									onChange={(e) => setRenameDraft(e.target.value)}
+									onBlur={commitRename}
+									onKeyDown={(e) => {
+										if (e.key === 'Enter') commitRename()
+										if (e.key === 'Escape') setRenamingTab(null)
+									}}
+								/>
+							) : (
+								<>
+									{TAB_ICON[t.kind] && <span className={styles.tabIcon}>{TAB_ICON[t.kind]}</span>}
+									<span>{t.label || tr(TAB_LABEL[t.kind])}</span>
+								</>
+							)}
+							<span
+								className={styles.tabClose}
+								onClick={(e) => {
+									e.stopPropagation()
+									closeTab(activeNodeId!, t.id)
+								}}
+							>
+								×
+							</span>
+							{menuForTab === t.id && (
+								<div className={styles.tabMenu} onClick={(e) => e.stopPropagation()}>
+									<div className={styles.tabMenuItem} onClick={() => startRename(t.id, t.label || tr(TAB_LABEL[t.kind]))}>
+										{tr('이름 변경')}
+									</div>
 								</div>
-							</div>
-						)}
-					</div>
-				))}
+							)}
+						</div>
+					))}
+				</div>
 				<div className={styles.cmdkAnchor}>
 					<button className={styles.cmdkBtn} onClick={() => setCmdkOpenGroup((g) => (g === group ? null : group))} title={tr('탭 추가')}>
 						+
