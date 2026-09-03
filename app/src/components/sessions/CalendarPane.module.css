@@ -48,6 +48,27 @@
 .todayBtn:hover {
 	background: var(--card-hover);
 }
+.quickAddBtn {
+	flex: none;
+	width: 26px;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: var(--radius-chip);
+	background: var(--vtint);
+	color: var(--violet);
+	cursor: pointer;
+}
+.quickAddBtn:hover {
+	background: var(--card-hover);
+}
+.quickAddBtn svg {
+	width: 15px;
+	height: 15px;
+	flex: none;
+}
 .periodLabel {
 	flex: none;
 	font-size: 13.5px;

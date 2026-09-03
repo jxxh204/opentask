@@ -15,6 +15,13 @@ import { CHECK, HELP } from './TaskRow'
 import styles from './CalendarPane.module.css'
 import taskRowStyles from './TaskRow.module.css'
 
+// SessionShell.tsx의 사이드바 "메인 태스크 추가" 버튼과 같은 아이콘.
+const PLUS_ICON = (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+		<path d="M12 8v8M8 12h8" />
+	</svg>
+)
+
 // "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든... 서브태스크 일정은
 // 기존처럼 옮길수있어 각각 일정이 별도" — 캘린더가 실제로 그리는 최소 단위. 서브태스크가 예정일을
 // 가지면 그 서브태스크들이 태스크의 진짜 일정이 되고(태스크 자신은 더 안 그림), 없으면 태스크
@@ -336,6 +343,8 @@ export default function CalendarPane() {
 	const [unscheduledOpen, setUnscheduledOpen] = useState(false)
 	const [query, setQuery] = useState('')
 	const [newTaskDate, setNewTaskDate] = useState<number | null>(null)
+	// 사이드바 "메인 태스크 추가"(+ 버튼)와 동일 — defaultDueDate 없이 열어 오늘 날짜로 시작한다.
+	const [quickAddOpen, setQuickAddOpen] = useState(false)
 	const [blockModalOpen, setBlockModalOpen] = useState(false)
 	const [blockDefaultDate, setBlockDefaultDate] = useState<number | null>(null)
 	// "서브태스크 일정은 기존처럼 옮길수있어 각각 일정이 별도" — 태스크 드래그(dragTaskId, 전역 스토어)와
@@ -707,6 +716,10 @@ export default function CalendarPane() {
 						›
 					</button>
 				</div>
+				{/* "+버튼 있었으면" — 사이드바 "메인 태스크 추가"와 동일한 아이콘/동작. */}
+				<button type="button" className={styles.quickAddBtn} onClick={() => setQuickAddOpen(true)} title={t('메인 태스크 추가')}>
+					{PLUS_ICON}
+				</button>
 				<div className={styles.periodLabel}>{periodLabel()}</div>
 				<div className={styles.spacer} />
 				<input className="fin m" style={{ width: 160, height: 30 }} placeholder={t('검색')} value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -842,6 +855,7 @@ export default function CalendarPane() {
 			)}
 
 			<NewTaskModal open={newTaskDate !== null} onClose={() => setNewTaskDate(null)} defaultDueDate={newTaskDate} />
+			<NewTaskModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
 			<BlockPeriodModal open={blockModalOpen} onClose={() => setBlockModalOpen(false)} defaultStartDate={blockDefaultDate} />
 
 			{hoverWork &&
