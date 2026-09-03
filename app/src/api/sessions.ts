@@ -117,15 +117,22 @@ export function getSubtaskWorkState(taskId: string) {
 // 상태(§ server/cockpit.cjs byPath — TaskRow의 GitStatusEntry.pr와 같은 소스, 재사용). PR이 없으면
 // null(아직 안 만들었거나 매칭 레포 밖).
 // "이 툴은 웹프론트개발자를 위한 툴이 아니라는점이 중요해 그래서 '검증을 위한 자료'라고 추상화하는거야"
-// — verifyText/verifyUrl은 에이전트가 직접 보고한 것(§ reportSubtaskVerify)이 최우선이고, devUrl은
-// 그게 없을 때만 참고하는 자동 감지 폴백(§ getBoardStatus 주석). verifyUrl은 이미 devUrl 폴백이 backend
-// 에서 섞여 들어와 있다 — 프론트는 그냥 verifyText/verifyUrl만 보면 된다.
+// — verifyItems는 에이전트가 직접 보고한 것(§ reportSubtaskVerify)이 최우선이고, 그게 하나도 없을
+// 때만 자동 감지 폴백(devUrl, § getBoardStatus 주석) 하나가 대신 채워진다(auto:true로 표시).
+// "확인하기 한가지 말고 여러가지로 보여줘야할듯해" — 한 작업 안에도 확인할 방법이 여러 개일 수 있어
+// 배열로 온다(최신이 배열 앞쪽).
 export interface BoardStatusPr {
 	number: number
 	url: string
 	state: string
 	draft: boolean
 	ci: string | null
+}
+export interface VerifyItem {
+	text: string | null
+	url: string | null
+	at: number | null
+	auto?: boolean
 }
 export interface BoardStatusItem {
 	folderId: string
@@ -136,19 +143,18 @@ export interface BoardStatusItem {
 		subtaskId: string
 		subtaskName: string
 		tmuxSession: string
-		verifyText: string | null
-		verifyUrl: string | null
+		verifyItems: VerifyItem[]
 		devUrl: string | null
 		branch: string | null
 		pr: BoardStatusPr | null
 	} | null
 	lastDone: { subtaskId: string; subtaskName: string; endedAt: number; reportUrl: string; branch: string | null; pr: BoardStatusPr | null } | null
 	// "여기 들어가는 정보들이 여러 단계에서 적용되어야할것같은데 서브태스크, 메인태스크, 하이브마인드가
-	// 만들어갈 수 있도록" — active/lastDone은 서브태스크 관점(§ 위 주석)이고, note는 특정 서브태스크에
+	// 만들어갈 수 있도록" — active/lastDone은 서브태스크 관점(§ 위 주석)이고, notes는 특정 서브태스크에
 	// 안 묶인 태스크 전체 관점(§ server/orchestrator.cjs reportTaskVerify) — 여러 서브태스크를 종합한
-	// 지휘자(conductor)나, 사람과 직접 대화하며 확인한 하이브마인드가 보고한다. source로 어느 쪽인지
-	// 구분해서 보여준다(둘을 섞으면 "누가 보고했는지"가 사라진다).
-	note: { text: string; url: string | null; at: number; source: 'conductor' | 'hivemind' } | null
+	// 지휘자(conductor)나, 사람과 직접 대화하며 확인한 하이브마인드가 보고한 것들. source로 어느 쪽인지
+	// 항목마다 구분해서 보여준다(둘을 섞으면 "누가 보고했는지"가 사라진다).
+	notes: { text: string; url: string | null; at: number; source: 'conductor' | 'hivemind' }[]
 }
 export function getBoardStatus() {
 	return api.get<{ ok: true; items: BoardStatusItem[] } | { ok: false; error: string }>('/api/board-status')

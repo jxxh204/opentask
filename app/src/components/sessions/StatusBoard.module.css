@@ -20,43 +20,59 @@
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
 }
-/* "한눈에 안 들어옴" — 한 줄도 안 읽고 전체 그림부터: 몇 개가 도움이 필요하고, 몇 개가 정체됐고,
-   몇 개가 정상 진행 중인지. FolderCard.module.css의 .previewChip과 같은 크기·색 관례(카운트 배지를
-   새로 디자인하지 않는다). 0개인 항목은 안 보여준다 — 평소엔 조용하고 문제가 생겼을 때만 눈에 띈다. */
-.headCounts {
+/* "실제 현실에서 사용하는 현황판을 모티브로" — 마티가 보여준 사진 속 화이트보드 칸반(TO DO/WIP/
+   HOLDING/DONE 4단 + 색깔 스티키노트)을 그대로 화면으로 옮긴다. 예전엔 urgency 정렬한 세로 카드
+   목록 하나였는데, 칸반은 "카드가 지금 어느 상태냐"를 위치 자체로 보여준다 — 색 배지 하나만 훑는
+   것보다 사람 눈에 훨씬 빨리 꽂힌다(현실에서 이미 검증된 UI라 새로 발명하는 리스크가 없다).
+.headCounts/.countChip*는 그래서 삭제 — 그 역할은 이제 컬럼 자체(§ .columnHead)가 맡는다. */
+.board {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-x: auto;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(220px, 1fr);
+	gap: 10px;
+	padding: 0 16px 12px;
+}
+.column {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-height: 0;
+}
+.columnHead {
+	flex: none;
 	display: flex;
 	align-items: center;
-	gap: 5px;
-	text-transform: none;
-	letter-spacing: normal;
-}
-.countChip {
-	flex: none;
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 10px;
+	justify-content: space-between;
+	gap: 6px;
+	padding: 3px 2px;
+	font-size: 11px;
 	font-weight: 700;
-	padding: 2px 7px;
-	border-radius: var(--radius-chip);
+	letter-spacing: 0.03em;
+	color: var(--t3);
+	border-bottom: 2px solid var(--line2);
 }
-.countBlocked {
-	background: var(--rtint);
-	color: var(--red);
+.columnCount {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	color: var(--t3);
 }
-.countStalled {
-	background: var(--atint);
-	color: var(--amber);
+/* 컬럼 헤더 밑줄 색으로 그 칸의 의미를 다시 한번 — 화이트보드의 마커 헤더는 다 검정이었지만, 화면은
+   스크롤해서 훑는 속도가 다르니 색으로 한 번 더 도와준다(§ 예전 .countBlocked/.countAlive와 같은
+   팔레트를 재사용 — 새 색을 안 만든다). */
+.columnHeadHolding {
+	border-bottom-color: var(--red);
 }
-.countAlive {
-	background: var(--gtint);
-	color: var(--green);
+.columnHeadWip {
+	border-bottom-color: var(--green);
 }
-.body {
+.columnBody {
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 0 16px 12px;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -77,12 +93,14 @@
 	gap: 10px;
 	padding: 10px 12px;
 	border-radius: var(--radius-card);
-	background: var(--card2);
+	/* --card-accent는 태스크 색이 있을 때만 인라인으로 들어온다(§ StatusBoard.tsx cardAccentStyle) —
+	   없으면 각 color-mix가 자기 자신과 섞여 원래 값 그대로 남는다. */
+	background: color-mix(in srgb, var(--card-accent, var(--card2)) 14%, var(--card2));
 	border: 1px solid var(--line2);
 	cursor: pointer;
 }
 .card:hover {
-	background: var(--card-hover);
+	background: color-mix(in srgb, var(--card-accent, var(--card-hover)) 26%, var(--card-hover));
 }
 /* subChainDot은 사이드바 레일의 position:absolute 좌표 전용 — 여기선 위치만 되돌린다.
    border-color/background 같은 색 속성은 절대 여기서 다시 선언하지 않는다(§ CalendarPane.module.css
@@ -230,31 +248,35 @@
 	font-size: 11px;
 	color: var(--t3);
 }
-.verifyBtn {
-	flex: none;
-	margin-left: auto;
-	height: 22px;
-	padding: 0 9px;
-	border-radius: var(--radius-control);
+/* "위계정리와 정보의 중복이 존재" — 확인 방법이 여러 개면 전부 박스로 늘어놓는 대신 하나만 보여주고
+   나머지는 이 조용한 텍스트 링크로 접는다(§ StatusBoard.tsx Card restVerify) — 박스가 아니라 텍스트인
+   것 자체가 "이건 지금 안 봐도 된다"는 신호다. */
+.moreLink {
+	align-self: flex-start;
 	background: none;
-	border: 1px solid var(--line2);
-	color: var(--t2);
+	border: none;
+	padding: 0;
 	font-size: 10.5px;
-	font-weight: 600;
-	cursor: pointer;
-}
-.verifyBtn:hover {
-	background: var(--card-hover);
-	color: var(--ink);
-}
-/* 에이전트가 직접 보고한 검증 자료 텍스트(§ reportSubtaskVerify) — "검증을 위한 자료" 자체가
-   url 없이 텍스트만일 수도 있다("로그 위치는 ~"). */
-.verifyTextRow {
-	font-size: 11px;
 	color: var(--t3);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	font-family: inherit;
+}
+.moreLink:hover {
+	color: var(--t2);
+}
+/* "확인하기 한가지 말고 여러가지로 보여줘야할듯해" — 서브태스크 자신이 보고한 verifyItems 한 항목당
+   한 줄(§ StatusBoard.tsx VerifyRow). .noteLine과 같은 flex 뼈대를 쓰되, violet 톤은 지휘자·
+   하이브마인드 전용(§ 위 .noteLine 주석)이라 여기선 중립 톤만. */
+.verifyItemRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 4px 8px;
+	border-radius: var(--radius-control);
+	background: var(--card-hover);
 }
 /* 확정 개입 신호(§ reportSubtaskBlocked)의 이유 — red 팔레트로, chip과 같은 신뢰도(확정)를 공유. */
 .blockedReasonRow {
@@ -287,6 +309,9 @@
    사이드바와 현황판에서 다른 색으로 보이면 안 되니 그대로 맞춘다. */
 .prPill {
 	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	font-size: 9.5px;
 	font-weight: 700;
 	padding: 1px 7px;
@@ -298,6 +323,9 @@
 }
 .prPillDraft {
 	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	font-size: 9.5px;
 	font-weight: 700;
 	padding: 1px 7px;
@@ -307,6 +335,24 @@
 	border: 1px solid var(--line2);
 	text-decoration: none;
 	cursor: pointer;
+}
+/* "현황판에 각 색상도 담아서 빠르게 인지가능하게" — CI 상태(§ prs.cjs ciSummary)를 점 하나로.
+   urgency 마커와 같은 팔레트(red=fail, amber=pending, green=pass)를 재사용해 이 앱에서 이미
+   "확정 개입/추정/정상"을 뜻하는 색과 안 흔들리게 맞춘다. */
+.ciDot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+}
+.ciDotPass {
+	background: var(--green);
+}
+.ciDotFail {
+	background: var(--red);
+}
+.ciDotPending {
+	background: var(--amber);
 }
 
 /* 가장 최근 완료 — "둘 다 보여줘"는 유지하되, 지금 진행 중인 것보다 한 단계 낮은 위계로(옅은 색,
@@ -337,19 +383,25 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* "뭐가 눌러지는건지 모르겠어" — 원래 테두리도 배경도 없는 순수 텍스트 링크였다. 옆의 정적 텍스트
+   (.noteText/.hint)와 색·굵기가 거의 같아서 클릭 가능한 걸 미리 구분할 수 없었고, 이 버튼이 얹히는
+   줄들(.verifyItemRow/.noteLine)이 이미 --card-hover/--vtint 배경이라 :hover 색이 --card-hover와
+   겹쳐 마우스를 올려도 반응이 안 보이는 문제까지 있었다. 링크 파랑(--blue, § .prPill과 같은 팔레트)
+   테두리·배경을 얹은 작은 버튼 칩으로 바꿔 정적 텍스트와 처음부터 구분되게, hover는 그 배경과 절대
+   안 겹치는 --btint(파랑 틴트)로. */
 .verifyBtnGhost {
 	flex: none;
-	height: 18px;
-	padding: 0 5px;
+	height: 20px;
+	padding: 0 8px;
 	border-radius: var(--radius-control);
-	background: none;
-	border: none;
-	color: var(--t3);
+	background: var(--card);
+	border: 1px solid var(--line2);
+	color: var(--blue);
 	font-size: 10.5px;
-	font-weight: 600;
+	font-weight: 700;
 	cursor: pointer;
 }
 .verifyBtnGhost:hover {
-	color: var(--ink);
-	background: var(--card-hover);
+	background: var(--btint);
+	border-color: var(--blue);
 }

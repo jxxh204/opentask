@@ -1,0 +1,155 @@
+<!--
+  서브태스크 완료 리포트(reportHtml) 참고 양식 — "네이버쿠폰 배너 QA 증빙" 아티팩트를 모델로 만들었다
+  (2026-09 마티가 "이게 굉장히 좋은 예시가 될 것 같아. 현황판에 이런 리포트가 필요하고"라고 지목한 것).
+
+  이 파일 자체는 앱이 서빙/실행하지 않는다 — advanceSubtaskWork에 보낼 reportHtml을 쓸 때
+  구조·톤·CSS를 그대로 베껴서 참고하라고 두는 예시 문서다. 아래 규칙만 지키면 된다:
+
+  1. 최상단에 "검증 결과 요약"이 숫자로 먼저 보여야 한다(.verdict 타일) — 사람이 스크롤 없이
+     pass/warn/fail 개수부터 파악하게.
+  2. "뭘 확인했는지" 자체가 증빙이어야 한다 — 스크린샷, 실행한 테스트 로그, 코드 발췌 중 실제로
+     확인 가능한 걸 넣는다. "정상 작동함" 같은 결론만 쓰지 않는다.
+  3. 지금 당장 확인 불가능한 항목(dev 서버 필요, 백엔드 배포 대기 등)은 숨기지 말고 별도 섹션으로
+     솔직하게 남긴다(.callout) — 이게 결국 이 앱의 "검증 자료"(report_task_verify) 텍스트로도 이어진다.
+  4. 색은 의미를 가진다 — pass=accent(초록 계열), warn=amber, fail=red. 임의로 다른 색을 쓰지 않는다.
+
+  실제 사용: 이 파일을 통째로 읽어(cat/Read) 구조를 베낀 뒤, 아래 [플레이스홀더]를 실제 작업
+  내용으로 채워서 reportHtml로 보내면 된다. 섹션은 작업 성격에 안 맞으면 빼도 된다(전부 QA용은
+  아님 — 백엔드/설정 작업이면 "02 코드 근거"와 "03 테스트 실행"만으로도 충분할 수 있다).
+-->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>[태스크/서브태스크 이름] 완료 리포트</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F6F8F6; --surface:#FFFFFF; --ink:#171B18; --muted:#5D6862; --line:#DCE3DE;
+  --accent:#03A84E; --accent-soft:#E4F5EB; --accent-ink:#046B34;
+  --amber:#B87B0F; --amber-soft:#F7EEDC; --red:#C2483D; --red-soft:#F8E7E4;
+  --code-bg:#EFF3F0; --chip-bg:#EDF1EE;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ground:#121614; --surface:#1B211D; --ink:#E7ECE8; --muted:#96A29A; --line:#2C352F;
+    --accent:#2FCE74; --accent-soft:#1B3226; --accent-ink:#7ADFA6;
+    --amber:#D9A24A; --amber-soft:#332A18; --red:#E0776C; --red-soft:#3A211E;
+    --code-bg:#161C18; --chip-bg:#232B26;
+  }
+}
+*{box-sizing:border-box}
+body{background:var(--ground); color:var(--ink); font-family:'IBM Plex Sans KR','Apple SD Gothic Neo','Noto Sans KR',sans-serif; line-height:1.65; margin:0; font-size:15px}
+.wrap{max-width:880px; margin:0 auto; padding:48px 24px 80px}
+header.doc h1{font-size:26px; font-weight:700; margin:0 0 6px; letter-spacing:-.01em}
+.eyebrow{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink); font-weight:700; margin-bottom:10px}
+.meta{color:var(--muted); font-size:13.5px; margin:0}
+.meta code{font-family:'IBM Plex Mono',monospace; font-size:12.5px; background:var(--chip-bg); padding:1px 6px; border-radius:4px}
+.verdict{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:28px 0 8px}
+.tile{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px 18px}
+.tile .num{font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:500; font-variant-numeric:tabular-nums}
+.tile .lab{font-size:12.5px; color:var(--muted); margin-top:2px}
+.tile.pass .num{color:var(--accent)}
+.tile.warn .num{color:var(--amber)}
+.tile.fail .num{color:var(--red)}
+h2{font-size:18px; margin:44px 0 6px; letter-spacing:-.005em}
+h2 .no{font-family:'IBM Plex Mono',monospace; color:var(--accent-ink); font-size:14px; margin-right:8px}
+.sec-note{color:var(--muted); font-size:13.5px; margin:0 0 16px}
+.grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.verdict{grid-template-columns:1fr}}
+.case{background:var(--surface); border:1px solid var(--line); border-radius:8px; overflow:hidden; display:flex; flex-direction:column}
+.case .head{display:flex; align-items:baseline; gap:8px; padding:12px 14px 4px}
+.chip{font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:500; padding:2px 8px; border-radius:99px; white-space:nowrap}
+.chip.show{background:var(--accent-soft); color:var(--accent-ink)}
+.chip.hide{background:var(--chip-bg); color:var(--muted)}
+.case .head b{font-size:14px; font-weight:700}
+.case .desc{padding:0 14px 10px; font-size:13px; color:var(--muted)}
+.case .desc .obs{color:var(--ink)}
+.case .shot{border-top:1px solid var(--line); background:#FFFFFF}
+.case .shot img{display:block; width:100%; height:300px; object-fit:cover; object-position:top}
+figcaption{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); padding:6px 14px 10px; border-top:1px dashed var(--line)}
+pre{background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px; overflow-x:auto; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.6; margin:10px 0 4px}
+.src{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--accent-ink); margin:18px 0 0}
+.why{font-size:13.5px; color:var(--muted); margin:6px 0 0}
+.why b{color:var(--ink)}
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--surface); margin-top:14px}
+table{border-collapse:collapse; width:100%; font-size:13px}
+th{font-size:11.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.tc{font-family:'IBM Plex Mono',monospace; font-size:12px; white-space:nowrap}
+td.v{white-space:nowrap; font-weight:500}
+.v-pass{color:var(--accent)} .v-warn{color:var(--amber)} .v-fail{color:var(--red)}
+.pill{display:inline-block; font-size:12px; font-weight:500; padding:1px 9px; border-radius:99px; margin-right:4px}
+.pill.pass{background:var(--accent-soft); color:var(--accent-ink)}
+.pill.warn{background:var(--amber-soft); color:var(--amber)}
+.pill.fail{background:var(--red-soft); color:var(--red)}
+.callout{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:14px 18px; margin:14px 0; font-size:13.5px}
+.callout.amber{border-left-color:var(--amber)}
+.callout p{margin:4px 0}
+ul{padding-left:20px; margin:8px 0}
+li{margin:3px 0}
+.testline{font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin-top:10px}
+.testline b{color:var(--accent)}
+a{color:var(--accent-ink)}
+footer{margin-top:56px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="doc">
+  <div class="eyebrow">[예: Dev Report · 완료 보고]</div>
+  <h1>[태스크 이름] 완료 리포트</h1>
+  <p class="meta">[티켓번호] · PR <a href="[PR URL]">#[번호]</a> · 브랜치 <code>[branch]</code> · [날짜] 작성</p>
+</header>
+
+<!-- 01. 요약 — 숫자 3개로 지금 상태를 한눈에. tile 클래스는 pass/warn/fail만 쓴다. -->
+<div class="verdict">
+  <div class="tile pass"><div class="num">[예: 4 / 4]</div><div class="lab">[예: 핵심 시나리오 — 전부 기대와 일치]</div></div>
+  <div class="tile pass"><div class="num">[예: 12 passed]</div><div class="lab">[예: 관련 단위 테스트 통과]</div></div>
+  <div class="tile warn"><div class="num">[예: 1건]</div><div class="lab">[예: dev 서버에서만 확인 가능한 잔여 항목]</div></div>
+</div>
+
+<!-- 02. 실제로 확인한 화면/결과 — 스크린샷이 있으면 이 grid로, 없으면 이 섹션 자체를 생략해도 된다. -->
+<h2><span class="no">01</span>[예: 실제 화면 확인]</h2>
+<p class="sec-note">[어떤 환경/도구로 어떻게 확인했는지 — 예: Storybook 8.6, 목 데이터 X 사용]</p>
+<div class="grid">
+  <div class="case">
+    <div class="head"><span class="chip show">[케이스 라벨]</span><b>[케이스 제목]</b></div>
+    <div class="desc">[입력값] → <span class="obs">[실제 관찰 결과]</span></div>
+    <!-- <div class="shot"><img src="[스크린샷 경로/URL]"></div> -->
+  </div>
+</div>
+
+<!-- 03. 코드 근거 — 실제로 확인 불가능한(=UI로 안 보이는) 항목은 코드 발췌 + 왜 그렇게 동작하는지로 대체. -->
+<h2><span class="no">02</span>코드 근거</h2>
+<p class="src">[파일경로:줄번호] — [무슨 로직인지 한 줄]</p>
+<pre>[실제 코드 발췌 — 지어내지 말고 grep/Read로 확인한 실제 내용]</pre>
+<p class="why"><b>[핵심 결론 한 문장]</b> — [왜 그렇게 판단했는지]</p>
+
+<!-- 04. 테스트 실행 — 실제로 돌려본 결과만. 안 돌려봤으면 이 섹션을 넣지 않는다. -->
+<h2><span class="no">03</span>테스트 실행</h2>
+<div class="testline">Test Suites: <b>[N] passed</b>, [N] total &nbsp;·&nbsp; Tests: <b>[N] passed</b>, [N] total</div>
+
+<!-- 05. 요구사항/TC 커버리지 맵 — 있으면. pill/v-pass 등으로 항목별 판정을 표로. -->
+<h2><span class="no">04</span>요구사항 커버리지</h2>
+<p class="sec-note"><span class="pill pass">코드검증</span><span class="pill warn">dev 확인 필요</span><span class="pill fail">미커버</span></p>
+<div class="tbl-wrap"><table>
+<thead><tr><th>항목</th><th>내용</th><th>판정</th><th>증빙</th></tr></thead>
+<tbody>
+<tr><td class="tc">[ID]</td><td>[요구사항]</td><td class="v v-pass">[판정]</td><td>[이 문서 어디서 확인 가능한지]</td></tr>
+</tbody>
+</table></div>
+
+<!-- 06. 지금 당장은 확인 못하는 것 — 숨기지 말고 여기 솔직하게. report_task_verify로 보고할 문구도
+     여기서 그대로 뽑아 쓰면 된다. -->
+<h2><span class="no">05</span>라이브 확인 환경 · 잔여 항목</h2>
+<div class="callout">
+  <p><b>[예: 로컬서버]</b> http://localhost:[포트] — [뭘 보려면 어떻게 접속하는지]</p>
+  <p>[아직 확인 못 한 게 있으면 왜 못 했는지 + 언제/어떻게 확인 가능한지]</p>
+</div>
+
+<footer>[선택: 작성자/세션 정보]</footer>
+</div>
+</body>
+</html>

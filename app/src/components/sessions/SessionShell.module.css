@@ -941,6 +941,105 @@
 .workspace {
 	flex: 1 1 auto;
 	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.workspaceBody {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+/* "크롬의 탭 폴더관리처럼 탭 모둠으로 전역 탭관리" — 노드(폴더/태스크)에 안 묶인 탭 스트립
+   (§ useGlobalTabsStore). 활성 탭만 워크스페이스 배경(--bg)과 같은 색으로 "떠 있는" 느낌을 주고,
+   나머지는 한 톤 낮은 --card2 — 실제 크롬 탭 바의 활성/비활성 관례 그대로. */
+.globalTabStrip {
+	flex: none;
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	padding: 6px 10px 0;
+	background: var(--card2);
+	border-bottom: 1px solid var(--line);
+}
+.globalTab {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 180px;
+	padding: 7px 10px;
+	border-radius: 8px 8px 0 0;
+	background: var(--card2);
+	color: var(--t3);
+	font-size: 11.5px;
+	cursor: pointer;
+	border: none;
+	font-family: inherit;
+}
+.globalTabActive {
+	background: var(--bg);
+	color: var(--ink);
+	font-weight: 600;
+}
+.globalTabTitle {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.globalTabClose {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	color: var(--t3);
+	font-size: 13px;
+	line-height: 1;
+}
+.globalTabClose:hover {
+	background: var(--card-hover);
+	color: var(--red);
+}
+/* "각 프로젝트 별로 폴더처럼 관리되어야해 — 크롬에서 사용하는걸 예시로 들어줬자나" — 실제 크롬 탭
+   그룹 관례 그대로: 그룹 전체를 잇는 색 밑줄 하나 + 그 색을 그대로 쓴 옅은 배경의 알약 라벨. 저장된
+   태스크 색(--group-color, § useGlobalTabsStore groupColor)이 없으면(폴더 없는 낱개 탭) 밑줄 없이
+   보통 탭과 완전히 동일하게 보인다. */
+/* "색상이 형광이 아니면 좋겠어 — 크롬처럼" — 태스크 색(--group-color)은 사람이 고른 임의의 색이라
+   원색 그대로 쓰면 채도가 너무 세다(형광). 실제 크롬 탭 그룹 색은 전부 미리 정해진 차분한 톤 —
+   원색을 직접 안 쓰고 앱의 중립 텍스트/선 색과 섞어(color-mix) 채도를 죽인 파생색만 쓴다. */
+.globalTabGroup {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	border-bottom: 2px solid color-mix(in srgb, var(--group-color, transparent) 55%, var(--line2));
+}
+/* "전역적으로 검토해달라" 셀프 감사에서 발견 — DESIGN.md Scoped-Pill Rule("완전한 필은 브라우저-크롬
+   컨트롤에만, 데이터 칩·배지는 예외 없이 6~9px")을 이 라벨이 999px로 어겼다. 이건 데이터 배지(어느
+   프로젝트인지)지 조작 컨트롤이 아니라 칩 라운드로 — 마티가 요청한 건 무채도 색/접기 동작이지 필
+   모양 자체는 아니었다. */
+.globalTabGroupLabel {
+	flex: none;
+	align-self: center;
+	font-size: 10.5px;
+	font-weight: 700;
+	padding: 3px 9px;
+	margin: 0 2px 4px 4px;
+	border-radius: 7px;
+	color: color-mix(in srgb, var(--group-color, var(--t3)) 55%, var(--t2));
+	background: color-mix(in srgb, var(--group-color, var(--t3)) 10%, var(--card));
+	border: 1px solid color-mix(in srgb, var(--group-color, var(--line2)) 45%, var(--line2));
+	max-width: 130px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+	font-family: inherit;
+}
+.globalTabGroupLabel:hover {
+	background: color-mix(in srgb, var(--group-color, var(--t3)) 18%, var(--card));
 }
 
 /* "도킹패널" — 지금 폴더/태스크 워크스페이스는 그대로 두고 옆에 얹는 하이브마인드 패널

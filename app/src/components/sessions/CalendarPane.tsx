@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useHolidayStore } from '../../store/useHolidayStore'
 import { useUiStore } from '../../store/useUiStore'
-import { useTabsStore } from '../../store/useTabsStore'
-import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import { useT, useTp, translate } from '../../utils/i18n'
 import type { Task, BlockedPeriod } from '../../store/types'
 import type { SubtaskWorkStatus } from '../../api/sessions'
@@ -141,12 +140,11 @@ function chipDotState(item: CalItem, subtaskWork: Record<string, SubtaskWorkStat
 function openSubtaskReport(task: Task | undefined, w: SubtaskWorkStatus) {
 	if (!task?.folder_id || !w.reportUrl) return
 	const port = window.location.port || '18771'
-	// 캘린더는 지금 열려 있지 않은 다른 태스크의 칩도 함께 보여준다 — openOrFocusTab만 부르면
-	// activeNodeId가 안 바뀌어 탭이 보이지 않는 곳에 열린다(§ StatusBoard.tsx openVerifyUrl과 동일한
-	// 원인의 동일한 버그 — setActiveNode로 먼저 그 폴더 워크스페이스로 전환해야 한다).
-	useTabsStore.getState().setActiveNode(task.folder_id, 'orchestrator')
-	useTabsStore.getState().openOrFocusTab(task.folder_id, 'browser')
-	useBrowserNavStore.getState().request(task.folder_id, `http://localhost:${port}${w.reportUrl}`)
+	// "캘린더에서 스토리북 링크를 누르면 탭으로 넘어가서 다시 돌아오기 귀찮아지는데" — 예전엔
+	// setActiveNode로 그 태스크의 워크스페이스 자체로 화면을 통째로 바꿨다(§ StatusBoard.tsx
+	// openVerifyUrl과 같은 이유로 넣었던 것). 이제 노드에 안 묶인 전역 브라우저 탭(§
+	// useGlobalTabsStore)을 연다 — 캘린더는 그대로 두고 탭 스트립에 새 탭만 뜬다.
+	useGlobalTabsStore.getState().openBrowserTab(`${task.name} 리포트`, `http://localhost:${port}${w.reportUrl}`, task.folder_id, task.name, task.color)
 }
 // 팝오버는 document.body로 포탈된다(§ CalendarPane 렌더) — 캘린더 칸(.cell/.cellTasksScroll)이
 // overflow:hidden/auto라 그 안에 그냥 넣으면 잘려서 안 보인다. 그래서 뷰포트 기준 고정 좌표가 필요.
@@ -752,6 +750,30 @@ export default function CalendarPane() {
 					const blocked = computeBlockedLanes(weekDays!, blockedPeriods)
 					const tasks = computeLanes(weekDays!, calendarItems)
 					const laneCount = blocked.laneCount + tasks.laneCount
+					// "현황판은 내가보고있는 주의 업무만 보이게 해줘" — 지금 화면의 요일 칸(weekDays)에
+					// 캘린더 항목(§ calendarItems — 태스크 자신이거나, 예정일 있는 서브태스크)이 하나라도
+					// 걸치는 태스크만 추린다. computeLanes/byDay와 같은 겹침 판정(§ 그 두 함수의 windowStart/
+					// windowEnd 계산)을 그대로 따라, "캘린더 위에 보이는 것과 현황판에 보이는 것"이 항상
+					// 같은 기준으로 일치하게 한다.
+					// "TO DO 칸엔 이름·색·예정일이 필요해" — getBoardStatus는 세션을 하나라도 띄운 태스크만
+					// 안다(§ StatusBoard.tsx pureTodo 주석) — 아직 시작 전인 태스크는 여기서 이름·색·(가장
+					// 이른) 예정일을 직접 실어 보내야 칸반의 TO DO 카드로 그릴 수 있다. it.parentName은
+					// 서브태스크 칩이든 태스크 자신이든 항상 부모 태스크 이름이라(§ flattenCalendarItems)
+					// 별도 조회 없이 그대로 쓴다.
+					const weekStartMs = weekDays![0].getTime()
+					const weekLast = weekDays![weekDays!.length - 1]
+					const weekEndMs = new Date(weekLast.getFullYear(), weekLast.getMonth(), weekLast.getDate()).getTime()
+					const visibleTasks = new Map<string, { name: string; color: string | null; dueDate: number | null }>()
+					for (const it of calendarItems) {
+						if (!it.due_date) continue
+						const days = it.duration_days && it.duration_days > 1 ? it.duration_days : 1
+						const endMs = it.due_date + (days - 1) * 86400000
+						if (endMs < weekStartMs || it.due_date > weekEndMs) continue
+						const existing = visibleTasks.get(it.openId)
+						if (!existing || it.due_date < existing.dueDate!) {
+							visibleTasks.set(it.openId, { name: it.parentName, color: it.color, dueDate: it.due_date })
+						}
+					}
 					// "주캘린더가 위에있는게 낫겠어" — 위 절반은 주캘린더, 아래 절반이 현황판(§ StatusBoard.tsx).
 					// 월 뷰는 이미 정보 밀도가 높아 그대로 둠.
 					return (
@@ -773,7 +795,7 @@ export default function CalendarPane() {
 									</div>
 								)}
 							</div>
-							<StatusBoard />
+							<StatusBoard visibleTasks={visibleTasks} />
 						</div>
 					)
 				})()}

@@ -3,6 +3,9 @@ import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSession
 import { useReviewStore } from '../../store/useReviewStore'
 import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
+import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
+import type { GlobalBrowserTab } from '../../store/useGlobalTabsStore'
+import BrowserPane from './BrowserPane'
 import { useUiStore } from '../../store/useUiStore'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
@@ -24,6 +27,26 @@ import AddRepoModal from './AddRepoModal'
 import NewTaskModal from './NewTaskModal'
 import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './SessionShell.module.css'
+
+// "각 프로젝트 별로 폴더처럼 관리되어야해 — 크롬에서 사용하는걸 예시로 들어줬자나" — 크롬 탭 그룹처럼
+// 같은 태스크(folderId)에서 연 탭끼리 묶는다. folderId가 null인 탭(아직 폴더로 안 승격된 태스크 등)은
+// 그룹 라벨 없이 각자 낱개 탭으로 — 서로 묶이면 안 되니 탭 id 자체를 고유 키로 쓴다. 등장한 순서
+// 그대로 첫 등장 위치에 묶어서, 같은 프로젝트 탭을 연달아 열면 자연스럽게 한 덩어리로 보인다.
+function groupGlobalTabs(tabs: GlobalBrowserTab[]) {
+	const groups: { key: string; folderId: string | null; groupName: string | null; groupColor: string | null; tabs: GlobalBrowserTab[] }[] = []
+	const indexByKey = new Map<string, number>()
+	for (const tab of tabs) {
+		const key = tab.folderId ?? `__solo__${tab.id}`
+		let idx = indexByKey.get(key)
+		if (idx === undefined) {
+			idx = groups.length
+			indexByKey.set(key, idx)
+			groups.push({ key, folderId: tab.folderId, groupName: tab.folderId ? tab.groupName : null, groupColor: tab.folderId ? tab.groupColor : null, tabs: [] })
+		}
+		groups[idx].tabs.push(tab)
+	}
+	return groups
+}
 
 const ARCHIVE_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -220,6 +243,13 @@ export default function SessionShell() {
 	// 워크스페이스 오른쪽에 얹는 패널로 열고 닫는다.
 	const controlDockOpen = useTabsStore((s) => s.controlDockOpen)
 	const controlDockWidth = useTabsStore((s) => s.controlDockWidth)
+	// "탭 모둠으로 전역 탭관리" — 현황판/캘린더의 "확인하기"가 노드를 안 바꾸고 여는 전역 브라우저 탭
+	// (§ useGlobalTabsStore). 탭이 하나도 없으면 스트립 자체를 안 그려서 이 기능을 안 쓰는 화면은
+	// 기존과 완전히 동일하다.
+	const globalTabs = useGlobalTabsStore((s) => s.tabs)
+	const activeGlobalTabId = useGlobalTabsStore((s) => s.activeId)
+	const collapsedGlobalGroups = useGlobalTabsStore((s) => s.collapsedGroups)
+	const activeGlobalTab = globalTabs.find((t) => t.id === activeGlobalTabId) ?? null
 	const [repoPickerOpen, setRepoPickerOpen] = useState(false)
 	const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
 	const [sidebarQuery, setSidebarQuery] = useState('')
@@ -669,7 +699,59 @@ export default function SessionShell() {
 				</aside>
 
 				<main className={styles.workspace}>
-					<TabWorkspace />
+					{/* "탭은 항상있어야하고" — 브라우저 탭이 하나도 없어도 스트립 자체는 항상 보인다("메인
+					    화면" 하나만 있는 상태). 예전엔 탭이 0개면 스트립 자체를 안 그려서, 리로드 등으로
+					    탭이 사라지면 "메인 화면"까지 같이 없어진 것처럼 보였다(§ 실제로 그 혼란이 있었음).
+					    크롬도 탭이 하나뿐이어도 탭 바 자체는 항상 떠 있다. */}
+					<div className={styles.globalTabStrip}>
+							<button
+								type="button"
+								className={`${styles.globalTab} ${activeGlobalTabId === null ? styles.globalTabActive : ''}`}
+								onClick={() => useGlobalTabsStore.getState().setActive(null)}
+							>
+								{t('메인 화면')}
+							</button>
+							{/* "각 프로젝트 별로 폴더처럼 관리되어야해 — 크롬에서 사용하는걸 예시로 들어줬자나" —
+							    낱개 탭이 아니라 진짜 크롬 탭 그룹처럼, 어느 태스크에서 연 탭인지 색 라벨로
+							    묶는다(§ useGlobalTabsStore groupName/groupColor). "메인 폴더를 누르면
+							    축소되는 기능 — 크롬 기능을 모르나?" — 라벨을 누르면 그 그룹만 접혀서
+							    라벨만 남는다(§ toggleGroupCollapsed, 크롬 탭 그룹의 그 동작 그대로). */}
+							{groupGlobalTabs(globalTabs).map((g) => {
+								const collapsed = !!g.folderId && collapsedGlobalGroups.has(g.folderId)
+								return (
+									<div key={g.key} className={styles.globalTabGroup} style={g.groupColor ? ({ '--group-color': g.groupColor } as React.CSSProperties) : undefined}>
+										{g.groupName && g.folderId && (
+											<button
+												type="button"
+												className={styles.globalTabGroupLabel}
+												title={g.groupName}
+												onClick={() => useGlobalTabsStore.getState().toggleGroupCollapsed(g.folderId!)}
+											>
+												{g.groupName}
+											</button>
+										)}
+										{!collapsed &&
+											g.tabs.map((gt) => (
+												<div key={gt.id} className={`${styles.globalTab} ${activeGlobalTabId === gt.id ? styles.globalTabActive : ''}`} onClick={() => useGlobalTabsStore.getState().setActive(gt.id)}>
+													<span className={styles.globalTabTitle} title={gt.title}>
+														{gt.title}
+													</span>
+													<span
+														className={styles.globalTabClose}
+														onClick={(e) => {
+															e.stopPropagation()
+															useGlobalTabsStore.getState().closeTab(gt.id)
+														}}
+													>
+														×
+													</span>
+												</div>
+											))}
+									</div>
+								)
+							})}
+						</div>
+					<div className={styles.workspaceBody}>{activeGlobalTab ? <BrowserPane taskId={activeGlobalTab.id} cwd={null} folderId={activeGlobalTab.folderId} /> : <TabWorkspace />}</div>
 				</main>
 				{/* "도킹패널" — 지금 보던 폴더/태스크 탭은 그대로 두고 옆에 얹는다(§ useTabsStore
 				    controlDockOpen, 노드 스왑 아님). 닫히면 언마운트되지만 대화 자체는 서버(§control.cjs)

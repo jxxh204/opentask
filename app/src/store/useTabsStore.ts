@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useGlobalTabsStore } from './useGlobalTabsStore'
 
 // 워크스페이스 탭 상태 — 세션 로컬(지속 저장 안 함, persist 미들웨어 없음). 탭은 트리 노드 기준으로
 // 열린다. 노드는 두 종류 — 태스크(=실제 Folder, 오케스트레이션 단위)와 서브태스크(=실제 Task, 워크트리
@@ -125,6 +126,11 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
 	controlDockWidth: 520,
 
 	setActiveNode: (id, defaultTab) => {
+		// "탭 모둠으로 전역 탭관리" — 사이드바로 노드를 바꾸는 건 항상 "메인 화면을 보고 싶다"는
+		// 뜻이라, 전역 브라우저 탭(§ useGlobalTabsStore)이 떠 있었다면 여기서 접어준다. 이 한 곳에서만
+		// 리셋하면 setActiveNode를 부르는 모든 자리(사이드바 클릭·서브태스크 열기 등)가 따로 신경 안
+		// 써도 된다.
+		useGlobalTabsStore.getState().setActive(null)
 		set((s) => {
 			const existing = s.tabsByNode[id]
 			if (existing) return { activeNodeId: id }
