@@ -47,16 +47,29 @@
 		<section style="padding-top: 0;">
 			<div class="container" style="max-width: 720px;">
 				<div class="callout" style="margin-bottom: 32px;">
-					<strong>Signed with Apple Developer ID, not yet notarized.</strong> If launching shows an
-					"unidentified developer" warning, right-click the app icon → Open, as described on the
-					<a href="/download.html">download page</a>. Once notarization is in place, it'll launch
-					without any warning.
+					<strong>Signed and notarized with Apple Developer ID.</strong> The app opens right away —
+					no "unidentified developer" warning, no right-click workaround needed.
 				</div>
 
 				<article style="margin-bottom: 40px;">
 					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
-						<h3 style="margin:0; font-size:19px;">0.1.9</h3>
+						<h3 style="margin:0; font-size:19px;">0.1.10 – 0.1.12</h3>
 						<span class="chip chip-green">Latest</span>
+						<span style="color:var(--t3); font-size:13px;">2026-09-03</span>
+					</div>
+					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">
+						<li>Builds are now signed <em>and notarized</em> with Apple Developer ID — the "unidentified developer" warning and right-click workaround are gone, and the DMG itself is notarized too, not just the app inside it</li>
+						<li>An information-architecture audit of the sidebar/tabs/status-board/calendar surfaces drove a round of internal cleanup: session-status logic (auth/resume/input/stalled/running) that had been reimplemented separately in the sidebar task row and the folder header is now computed in one place, and the subtask work-status polling that three different panels were each doing on their own now shares a single source</li>
+						<li>The Hive Mind entry point (sidebar, its own tab, and the "add tab" menu) now shows the same live status dot everywhere, so it's clear at a glance they're all the same conversation</li>
+						<li>The Task Manager's assembly-line diagram no longer repeats the worktree/branch/period on both the compact card and the detailed timeline below it — the card now just names the step, and hovering it scrolls the matching timeline row into view</li>
+						<li>The task detail drawer got a "View as tab" button, so a quick peek can be pinned open as a persistent tab instead</li>
+						<li>A couple of confusing UI strings were cleaned up (e.g. an empty-state message that read as if a "main task" needed its own separate "task")</li>
+					</ul>
+				</article>
+
+				<article style="margin-bottom: 40px;">
+					<div style="display:flex; align-items:baseline; gap:10px; margin-bottom: 14px;">
+						<h3 style="margin:0; font-size:19px;">0.1.9</h3>
 						<span style="color:var(--t3); font-size:13px;">2026-09-02</span>
 					</div>
 					<ul style="color:var(--t2); font-size:14px; line-height:1.8; padding-left:20px; margin:0;">

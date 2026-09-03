@@ -212,6 +212,14 @@
   optionalDependencies:
     undici "^7.24.4"
 
+"@electron/notarize@^3.1.1":
+  version "3.1.1"
+  resolved "https://registry.npmjs.org/@electron/notarize/-/notarize-3.1.1.tgz"
+  integrity sha512-uQQSlOiJnqRkTL1wlEBAxe90nVN/Fc/hEmk0bqpKk8nKjV1if/tXLHKUPePtv9Xsx90PtZU8aidx5lAiOpjkQQ==
+  dependencies:
+    debug "^4.4.0"
+    promise-retry "^2.0.1"
+
 "@electron/notarize@2.5.0":
   version "2.5.0"
   resolved "https://registry.npmjs.org/@electron/notarize/-/notarize-2.5.0.tgz"

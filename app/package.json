@@ -1,6 +1,6 @@
 {
   "name": "openrm-app",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "description": "OpenTask · 병렬 AI 개발 관제탑 — 여러 워크트리·에이전트를 한 화면에서 감시·지시",
   "type": "module",
@@ -41,6 +41,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^4",
     "@types/better-sqlite3": "^7.6.11",
     "@types/react": "^18.3.5",
@@ -68,9 +69,14 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false
     },
     "afterSign": "build/afterSign.cjs",
+    "afterAllArtifactBuild": "build/afterAllArtifactBuild.cjs",
     "directories": {
       "output": "release"
     },
