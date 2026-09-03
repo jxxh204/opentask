@@ -456,7 +456,11 @@ async function reportTaskVerify(taskId, text, url, source) {
 // "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — 원래 15분은 사람이 궁금해하는
 // 시점보다 한참 늦게 울렸다. 3분으로 낮춤(오탐은 배지 하나일 뿐 — report-blocked 같은 확정 신호와
 // 안 섞이므로 부담 적음).
-const STALLED_THRESHOLD_MS = 3 * 60 * 1000
+// 침묵 임계값. 예전 3분은 너무 낮아 서브세션의 미세 활동(메타데이터 churn)으로 working↔idle이 토글될 때마다
+// 3분 뒤 재알림 → 지휘자(모델)를 반복적으로 깨워 매번 풀 턴을 소비했다(토큰 낭비). 기본 10분으로 상향하고,
+// 한 번 알린 대상은 쿨다운 동안 다시 지휘자를 깨우지 않는다(사람 OS 알림도 같이 게이팅). 둘 다 env로 조정 가능.
+const STALLED_THRESHOLD_MS = (Number(process.env.OPENRM_STALL_MIN) || 10) * 60 * 1000
+const STALL_RENOTIFY_COOLDOWN_MS = (Number(process.env.OPENRM_STALL_COOLDOWN_MIN) || 30) * 60 * 1000
 async function checkStalledSubtasks() {
 	const now = Date.now()
 	const live = await Term.list().catch(() => [])
@@ -471,8 +475,9 @@ async function checkStalledSubtasks() {
 				s.conductorStalled = false
 			} else {
 				const last = cStatus.lastWorkingAt || s.conductor.startedAt
-				if (now - last >= STALLED_THRESHOLD_MS && !s.conductorStalled) {
+				if (now - last >= STALLED_THRESHOLD_MS && !s.conductorStalled && now - (s.conductorStalledNotifiedAt || 0) >= STALL_RENOTIFY_COOLDOWN_MS) {
 					s.conductorStalled = true
+					s.conductorStalledNotifiedAt = now
 					const mins = Math.round((now - last) / 60000)
 					pushFeed(s, { from: 'conductor', to: 'human', text: `지휘자 ${mins}분째 응답 없음 — 확인해봐라(막힌 게 아니라면 무시해도 됨).`, kind: 'stalled' })
 					Notify.notifyEscalation(`💤 "${folder.name}" 지휘자 응답 없음`, `${mins}분째 조용합니다.`)
@@ -497,7 +502,11 @@ async function checkStalledSubtasks() {
 				}
 				const last = status.lastWorkingAt || session.started_at
 				if (now - last < STALLED_THRESHOLD_MS || s.stalled[st.id]) continue
+				// 쿨다운: 같은 서브태스크로 최근 지휘자를 깨웠으면 재알림 생략(토글로 인한 반복 모델 turn 방지).
+				const notifiedAt = s.stalledNotifiedAt || (s.stalledNotifiedAt = {})
+				if (now - (notifiedAt[st.id] || 0) < STALL_RENOTIFY_COOLDOWN_MS) continue
 				s.stalled[st.id] = true
+				notifiedAt[st.id] = now
 				const mins = Math.round((now - last) / 60000)
 				await notifyConductor(folder.id, st.id, `"${st.name}" ${mins}분째 응답 없음 — 확인해봐라(막힌 게 아니라면 무시해도 됨).`, 'stalled')
 				Notify.notifyEscalation(`💤 "${st.name}" 응답 없음`, `${mins}분째 조용합니다.`)
