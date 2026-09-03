@@ -17,7 +17,7 @@ export default function TaskDetailTab({ nodeId, tabId, folderId }: { nodeId: str
 		return (
 			<div className={styles.tabWrap}>
 				<div className={styles.tabWrapInner}>
-					<div className={styles.body}>{t('아직 이 메인 태스크 밑에 태스크가 없습니다.')}</div>
+					<div className={styles.body}>{t('이 메인 태스크가 아직 비어 있습니다.')}</div>
 				</div>
 			</div>
 		)

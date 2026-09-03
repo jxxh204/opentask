@@ -80,7 +80,7 @@ const dict: Record<string, string> = {
 	'이 서브태스크에 대해 설명해 주세요': 'Please describe this subtask',
 
 	// TaskDetailTab.tsx
-	'아직 이 메인 태스크 밑에 태스크가 없습니다.': 'No task under this main task yet.',
+	'이 메인 태스크가 아직 비어 있습니다.': 'This main task is still empty.',
 
 	// ReviewItemCard.tsx
 	미처리: 'Unresolved',
