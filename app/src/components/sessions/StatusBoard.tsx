@@ -3,7 +3,8 @@ import { getBoardStatus } from '../../api/sessions'
 import type { BoardStatusItem, BoardStatusPr, SubtaskWorkStatus, VerifyItem } from '../../api/sessions'
 import { openTaskOrFolderDetail, useSessionsStore } from '../../store/useSessionsStore'
 import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
-import { useT, useTp, translate } from '../../utils/i18n'
+import { useT, useTp } from '../../utils/i18n'
+import { timeAgoLong as timeAgo } from '../../utils/timeAgo'
 import { HELP } from './TaskRow'
 import styles from './StatusBoard.module.css'
 import taskRowStyles from './TaskRow.module.css'
@@ -30,14 +31,6 @@ function openVerifyUrl(folderId: string, url: string, title: string | undefined,
 	useGlobalTabsStore.getState().openBrowserTab(title || url, url, folderId, groupName, groupColor)
 }
 
-function timeAgo(ts: number) {
-	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}분 전`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}시간 전`
-	return `${Math.floor(hr / 24)}일 전`
-}
 // TO DO 카드의 예정일 — 화이트보드 스티키노트의 "FEB-26" 같은 짧은 날짜 라벨과 같은 자리.
 function formatDueDate(ms: number) {
 	const d = new Date(ms)

@@ -5,6 +5,7 @@ import { useReviewStore } from '../../store/useReviewStore'
 import { removeTask, durationEstimateReportUrl, startSubtaskWork, advanceSubtaskWork, getSubtaskWorkState, attachTaskAsSubtask, createTask } from '../../api/sessions'
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
+import { URL_RE, extractLinks } from '../../utils/extractLinks'
 import { LINK_LABEL } from '../../utils/linkDetect'
 import { useT, useTp, translate, translateP, localeFor } from '../../utils/i18n'
 import { useUiStore } from '../../store/useUiStore'
@@ -15,14 +16,10 @@ import MainTaskPicker from './MainTaskPicker'
 import RepoSelect from './RepoSelect'
 import styles from './TaskDetailModal.module.css'
 
-const URL_RE = /https?:\/\/[^\s)\]}"'<>]+/g
 // "설명이 더 길어졌잖아... link는 자동으로 ui를 나누어주고 글도 나누어줘서 한눈에 볼 수 있게" —
 // AI가 다듬은 설명(betterDesc)은 링크+긴 평문이 한 덩어리로 붙어 있어 읽기 어렵다. 링크는 따로
 // 칩으로 빼고, 남은 글은 이미 줄바꿈이 있으면 그대로, 없으면(AI가 낸 한 덩어리 문장) 문장 단위로
 // 쪼개서 각각 한 줄씩 보여준다.
-function extractLinks(text: string): string[] {
-	return Array.from(new Set(text.match(URL_RE) ?? []))
-}
 // utils/linkDetect.ts의 detectLink는 createTaskFromDraft(태스크 생성)용 — 매칭 안 되는 링크도
 // "콘텐츠가 있는 링크"로 취급하려고 일부러 전부 thread로 폴백한다(자동 시작 여부 판단에 씀).
 // 여기 칩 라벨은 "정말 슬랙 스레드/노션/피그마/PR인지"를 정확히 표시해야 하므로 그 폴백을 쓰지

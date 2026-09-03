@@ -19,7 +19,8 @@ import { useSessionsStore } from '../../store/useSessionsStore'
 import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import StatusDot from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
-import { useT, useTp, translate } from '../../utils/i18n'
+import { useT, useTp } from '../../utils/i18n'
+import { timeAgo } from '../../utils/timeAgo'
 import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './ControlPane.module.css'
 
@@ -40,16 +41,6 @@ marked.setOptions({ breaks: true })
 // 그대로(§ tabIcons.tsx overmindIcon). 이미지 자체가 이미 어두운 배지라 .avatar의 violet 배경은
 // 걷어내고(§ ControlPane.module.css .avatar) 이미지가 원형을 꽉 채우게 한다.
 const CONTROL_AVATAR_ICON = <img src={overmindIcon} alt="" className={styles.avatarImg} />
-// "유저가 직접 확인하는것도 쉬워야하는데" — 헤더의 "마지막 점검" 표시용(§ OrchestratorPane.tsx 등
-// 여러 곳의 같은 이름 로컬 헬퍼와 동일 패턴 — 공유 모듈로 안 뽑고 그대로 복제).
-function timeAgo(ts: number) {
-	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}m`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}h`
-	return `${Math.floor(hr / 24)}d`
-}
 const TOOL_ICON = (
 	<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 		<rect x="3" y="4" width="18" height="16" rx="2.2" />

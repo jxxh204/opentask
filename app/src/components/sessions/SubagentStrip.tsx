@@ -3,7 +3,8 @@ import { getWorktreeSubagents } from '../../api/subagents'
 import type { SubagentEntry } from '../../api/subagents'
 import { useSessionsStore } from '../../store/useSessionsStore'
 import StatusDot from '../common/StatusDot'
-import { translate, useTp } from '../../utils/i18n'
+import { useTp } from '../../utils/i18n'
+import { timeAgoFromIso as timeAgo } from '../../utils/timeAgo'
 import styles from './SubagentStrip.module.css'
 
 const CLAUDE_ICON = (
@@ -11,17 +12,6 @@ const CLAUDE_ICON = (
 		<path d="M4 4h16v12H8l-4 4V4z" />
 	</svg>
 )
-
-// 컴포넌트가 아닌 모듈 함수라 useT() 대신 non-hook translate를 직접 쓴다.
-function timeAgo(iso: string | null) {
-	if (!iso) return ''
-	const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}m`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}h`
-	return `${Math.floor(hr / 24)}d`
-}
 
 const POLL_MS = 8000
 

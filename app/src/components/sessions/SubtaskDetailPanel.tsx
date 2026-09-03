@@ -5,15 +5,11 @@ import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import { getSubtaskWorkState, stopSubtaskSession } from '../../api/sessions'
 import type { SubtaskWorkStatus } from '../../api/sessions'
 import { addBusinessDays } from '../../utils/businessDays'
+import { extractLinks } from '../../utils/extractLinks'
 import { useT, useTp } from '../../utils/i18n'
 import LinkBriefSection from './LinkBriefSection'
 import CodeBriefSection from './CodeBriefSection'
 import styles from './TaskDetailModal.module.css'
-
-const URL_RE = /https?:\/\/[^\s)\]}"'<>]+/g
-function extractLinks(text: string): string[] {
-	return Array.from(new Set(text.match(URL_RE) ?? []))
-}
 
 function pad(n: number) {
 	return String(n).padStart(2, '0')

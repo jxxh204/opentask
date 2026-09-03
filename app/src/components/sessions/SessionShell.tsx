@@ -9,7 +9,8 @@ import { useUiStore } from '../../store/useUiStore'
 import type { Repo } from '../../store/types'
 import { getRepoColor, REPO_COLOR_PALETTE } from '../../utils/repoColor'
 import { useUpdateCheck } from '../../utils/useUpdateCheck'
-import { useT, useTp, translate, localeFor } from '../../utils/i18n'
+import { useT, useTp, localeFor } from '../../utils/i18n'
+import { timeAgo } from '../../utils/timeAgo'
 import StatusDot from '../common/StatusDot'
 import FolderCard from './FolderCard'
 import TabWorkspace from './TabWorkspace'
@@ -152,14 +153,6 @@ const SEARCH_ICON = (
 		<path d="M21 21l-4.3-4.3" />
 	</svg>
 )
-function timeAgo(ts: number) {
-	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}m`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}h`
-	return `${Math.floor(hr / 24)}d`
-}
 
 // 프로토타입의 "사이드바 작업 트리 + 탭 워크스페이스" IA를 실제 데이터로 구현한 최상위 레이아웃.
 // FolderCard/TaskRow는 프로토타입의 압축 트리 노드 스타일로 다시 그렸고, ReviewItemCard/

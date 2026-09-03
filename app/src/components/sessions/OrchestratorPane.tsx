@@ -5,23 +5,14 @@ import { getDecisions } from '../../api/sessions'
 import StatusDot from '../common/StatusDot'
 import type { DotColor } from '../common/StatusDot'
 import XTerm from '../terminal/XTerm'
-import { useT, translate, translateP } from '../../utils/i18n'
+import { useT, translateP } from '../../utils/i18n'
+import { timeAgo } from '../../utils/timeAgo'
 import { useTabsStore } from '../../store/useTabsStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
 import styles from './OrchestratorPane.module.css'
 
 const KIND_LABEL: Record<FeedKind, string> = { plan: '계획', dispatch: '지시', result: '보고', msg: '메시지', error: '오류', blocked: '도움요청', stalled: '응답없음', progress: '진행' }
 const DECISION_LABEL: Record<DecisionKind, string> = { repo_assign: '② 레포 분류', repo_verify_hold: '② 레포 재확인', kind_judge: '⑤ kind 판단', review_verdict: '⑧ 리뷰 판정' }
-
-// 컴포넌트가 아닌 모듈 함수라 useT() 대신 non-hook translate를 직접 쓴다.
-function timeAgo(ts: number) {
-	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}m`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}h`
-	return `${Math.floor(hr / 24)}d`
-}
 
 // 오케스트레이터는 별도로 "시작" 버튼을 누르는 게 아니라, 이 태스크에 서브태스크가 생기는 순간
 // 자동으로 통제를 시작한다(useSessionsStore.createTaskInFolder/quickStartTask에서 트리거). 여기는

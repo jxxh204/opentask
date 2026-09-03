@@ -4,31 +4,14 @@ import { useSessionsStore, getOrchestration } from '../../store/useSessionsStore
 import { useTabsStore } from '../../store/useTabsStore'
 import { LINK_LABEL } from '../../utils/linkDetect'
 import type { LinkKind } from '../../utils/linkDetect'
-import { useT, useTp, translate } from '../../utils/i18n'
+import { useT, useTp } from '../../utils/i18n'
+import { timeAgo } from '../../utils/timeAgo'
+import { CLOCK, LOCK, QUESTION } from '../common/StatusIcon'
 import TaskRow, { PR_LABEL, CHECK, HELP } from './TaskRow'
 import TaskColorDot from './TaskColorDot'
 import styles from './FolderCard.module.css'
 import taskRowStyles from './TaskRow.module.css'
 
-const CLOCK = (
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-		<circle cx="12" cy="12" r="9" />
-		<path d="M12 7v5l3.5 2" />
-	</svg>
-)
-// "클로드세션 동작 여부에 따라서... 여러 상태가 보여야해" — TaskRow의 statusDot과 같은 아이콘(LOCK/QUESTION).
-const LOCK = (
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-		<rect x="5" y="11" width="14" height="9" rx="2" />
-		<path d="M8 11V7a4 4 0 0 1 8 0v4" />
-	</svg>
-)
-const QUESTION = (
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-		<path d="M9 9a3 3 0 1 1 4 2.8c-.9.4-1.5 1.1-1.5 2.2" />
-		<path d="M12 17h.01" />
-	</svg>
-)
 const ARCHIVE_ICON = (
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
 		<rect x="3" y="4" width="18" height="5" rx="1.2" />
@@ -67,15 +50,6 @@ const LINK_ICON: Record<LinkKind, React.ReactNode> = {
 			<path d="M6 8.1v7.8M18 10.1c0 3-3 4-6 4.5" />
 		</svg>
 	),
-}
-
-function timeAgo(ts: number) {
-	const min = Math.floor((Date.now() - ts) / 60000)
-	if (min < 1) return translate('방금')
-	if (min < 60) return `${min}m`
-	const hr = Math.floor(min / 60)
-	if (hr < 24) return `${hr}h`
-	return `${Math.floor(hr / 24)}d`
 }
 
 // 실제 백엔드의 Folder = "태스크"(오케스트레이션 단위, 최상위) — 별도의 "폴더" 개념은 UI에 없다.
