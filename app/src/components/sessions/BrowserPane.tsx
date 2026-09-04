@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WebviewTag } from 'electron'
 import { useSetupStore } from '../../store/useSetupStore'
 import { useBrowserNavStore } from '../../store/useBrowserNavStore'
@@ -113,8 +113,8 @@ const SEND_ICON = (
 
 // 로그인 세션이 없는 사이트를 새 Chromium으로 열 때마다 다시 로그인해야 했던 문제(§Playwright 시절)를
 // 없애려고 모든 인앱 브라우저 탭이 같은 파티션(=같은 쿠키/로그인)을 공유한다 — 한 번 로그인하면 다른
-// 태스크의 "브라우저" 탭에서도 로그인 상태가 유지된다. 특정 태스크만 격리하고 싶다는 요구가 나오면
-// 그때 taskId별 파티션(`persist:browser-${taskId}`)으로 쪼갠다.
+// 태스크의 "브라우저" 탭에서도 로그인 상태가 유지된다. Electron <webview> 경로에서만 쓰임 — 네이티브
+// pane 경로(§openrmBrowserPane)는 WKWebsiteDataStore.default()를 모든 pane이 공유해 같은 효과를 낸다.
 const PARTITION = 'persist:opentask-browser'
 
 function normalizeUrl(input: string) {
@@ -125,26 +125,28 @@ function normalizeUrl(input: string) {
 	return 'https://' + v
 }
 
-// "플레이라이트말고 브라우저 자체를 못띄우나?" — 스크린샷 폴링 대신 Electron 네이티브 <webview>를
-// 그대로 붙인다. 화면 비율·해상도 문제가 원천적으로 없고(진짜 렌더링이라 object-fit 레터박싱 없음),
-// PARTITION으로 로그인 세션도 유지된다. 대신 지휘자(AI)가 headless Playwright로 조작하던 것과는 이제
-// 완전히 분리된 세션이다 — 사람이 지휘자의 화면을 "그대로" 지켜보는 건 이번엔 포기했다(§AskUserQuestion
-// "webview로 완전히 전환" 선택 시 사용자가 인지하고 받아들인 트레이드오프).
+// "플레이라이트말고 브라우저 자체를 못띄우나?" — 스크린샷 폴링 대신 진짜 브라우저 엔진을 그대로 붙인다.
+// 화면 비율·해상도 문제가 원천적으로 없고(진짜 렌더링이라 object-fit 레터박싱 없음), 파티션/공유
+// 데이터스토어로 로그인 세션도 유지된다.
 //
-// ref 타입은 @types/react의 HTMLWebViewElement로 받는다(빈 껍데기지만 JSX 쪽엔 이게 맞음) — 실제
-// electron 메서드(loadURL/goBack/openDevTools 등)를 부를 땐 tag()로 electron.WebviewTag로 캐스팅해서
-// 쓴다(HTMLWebViewElement에 electron 타입을 직접 병합하면 addEventListener 오버로드가 HTMLElement 것과
-// 충돌해 타입체크가 깨진다 — 캐스팅이 더 단순하고 안전).
+// 두 경로가 런타임에 공존한다(Electron 셸 ↔ native/ Swift 셸 마이그레이션 기간):
+// - Electron: 네이티브 <webview> 태그(HTMLWebViewElement)를 직접 그린다 — 기존 그대로.
+// - Swift 셸: window.openrmBrowserPane가 있으면 그쪽을 쓴다 — WKWebView는 <webview>처럼 이 페이지의
+//   DOM 안에 못 들어가는 네이티브 뷰라, placeholder <div>의 화면 좌표(rect)만 흘려보내고 네이티브가
+//   그 위에 진짜 웹뷰를 겹쳐 그린다(§useNativePane 아래 effect들).
 export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string; cwd: string | null; folderId: string | null }) {
 	const tp = useTp()
 	const configuredDevUrl = useSetupStore((s) => s.connectors['dev']?.fields.devServerUrl)
 	const tellConductor = useSessionsStore((s) => s.tellConductor)
 	const webviewRef = useRef<HTMLWebViewElement>(null)
+	const placeholderRef = useRef<HTMLDivElement>(null)
 	const tag = () => webviewRef.current as unknown as WebviewTag | null
+	const useNativePane = typeof window !== 'undefined' && !!window.openrmBrowserPane
 
 	// 탭이 막 열리는 이 순간 이미 XTerm이 남겨둔 요청(§useBrowserNavStore)이 있으면 그 URL로 시작한다
 	// — webview는 dom-ready 전엔 loadURL()을 호출할 수 없어(Electron 제약) 첫 화면은 반드시 src
-	// 속성으로 줘야 한다. 이후에 오는 요청(이미 dom-ready 지난 뒤)만 아래 effect가 loadURL로 처리한다.
+	// 속성으로 줘야 한다(네이티브 pane 경로도 동일 제약은 없지만 일관되게 create() 시점 URL로 맞춘다).
+	// 이후에 오는 요청(이미 dom-ready 지난 뒤)만 아래 effect가 loadURL/navigate로 처리한다.
 	const initialPending = useBrowserNavStore.getState().pending
 	const startUrl = initialPending?.nodeId === taskId ? initialPending.url : configuredDevUrl || 'http://localhost:3000'
 	const initialUrlRef = useRef(startUrl)
@@ -162,16 +164,24 @@ export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string;
 	const [sending, setSending] = useState(false)
 	const [copied, setCopied] = useState(false)
 
+	// 두 경로(webview.executeJavaScript ↔ openrmBrowserPane.evaluateJavaScript) 모두 "이 탭 안에서
+	// JS 하나 실행하고 결과 받기"라는 같은 모양이라, 피커 스크립트를 부르는 쪽은 이 헬퍼 하나로 통일.
+	const evalInPane = useCallback(
+		async (script: string): Promise<unknown> => {
+			if (useNativePane) return window.openrmBrowserPane!.evaluateJavaScript(taskId, script)
+			return tag()?.executeJavaScript(script)
+		},
+		[useNativePane, taskId]
+	)
+
 	async function onTogglePicker() {
 		if (picking) {
-			await tag()
-				?.executeJavaScript('window.__openTaskCancelPicker && window.__openTaskCancelPicker()')
-				.catch(() => {})
+			await evalInPane('window.__openTaskCancelPicker && window.__openTaskCancelPicker()').catch(() => {})
 			return
 		}
 		setPicking(true)
 		try {
-			const result = await tag()?.executeJavaScript(PICKER_SCRIPT)
+			const result = await evalInPane(PICKER_SCRIPT)
 			if (result) setPickedElement(result as PickedElement)
 		} catch {
 			// 페이지가 피킹 도중 이동했을 수 있음 — 조용히 무시.
@@ -208,7 +218,9 @@ export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string;
 		}
 	}
 
+	// ── Electron <webview> 경로 — 기존 로직 그대로(네이티브 pane 경로에선 이 effect들은 아무 것도 안 함).
 	useEffect(() => {
+		if (useNativePane) return
 		const wv = tag()
 		if (!wv) return
 		const syncNav = () => {
@@ -246,18 +258,79 @@ export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string;
 			wv.removeEventListener('did-navigate-in-page', onNavigate)
 			wv.removeEventListener('did-fail-load', onFail)
 		}
-	}, [])
+	}, [useNativePane])
 
 	// "링크누르면 앱내 브라우저로 이동" — 마운트 시점의 요청은 위 startUrl(src)로 이미 처리했다. 탭이
 	// 열려 있는 동안 또 다른 링크를 클릭하는 경우만 여기서 loadURL로 반영한다(dom-ready 지난 뒤라 안전).
 	useEffect(() => {
+		if (useNativePane) return
 		return useBrowserNavStore.subscribe((s) => {
 			if (s.pending?.nodeId === taskId && s.pending.nonce !== consumedNonceRef.current) {
 				consumedNonceRef.current = s.pending.nonce
 				tag()?.loadURL(s.pending.url)
 			}
 		})
-	}, [taskId])
+	}, [taskId, useNativePane])
+
+	// ── 네이티브 pane 경로 — 마운트 시 생성, 이벤트 구독(§BrowserPaneBridge.swift state/fail 이벤트).
+	useEffect(() => {
+		if (!useNativePane) return
+		const bridge = window.openrmBrowserPane!
+		bridge.create(taskId, initialUrlRef.current)
+		setLoading(true)
+		const unsubscribe = bridge.onEvent(taskId, (evt) => {
+			if (evt.type === 'state') {
+				setUrl(evt.url)
+				setLoading(evt.loading)
+				setCanGoBack(evt.canGoBack)
+				setCanGoForward(evt.canGoForward)
+				if (evt.loading) setError(null)
+			} else if (evt.type === 'fail') {
+				setLoading(false)
+				setError(tp('로드 실패: {detail}', { detail: evt.errorDescription || evt.errorCode }))
+			}
+		})
+		return () => {
+			unsubscribe()
+			bridge.close(taskId)
+		}
+		// taskId가 바뀌는 일은 없다(탭마다 고정 prop) — 마운트/언마운트에만 반응.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [useNativePane])
+
+	useEffect(() => {
+		if (!useNativePane) return
+		return useBrowserNavStore.subscribe((s) => {
+			if (s.pending?.nodeId === taskId && s.pending.nonce !== consumedNonceRef.current) {
+				consumedNonceRef.current = s.pending.nonce
+				window.openrmBrowserPane!.navigate(taskId, s.pending.url)
+			}
+		})
+	}, [taskId, useNativePane])
+
+	// placeholder <div>의 화면 좌표를 네이티브에 계속 흘려보낸다 — 네이티브는 그 rect에 진짜 WKWebView를
+	// 겹쳐 그린다(§BrowserPaneManager.setRect, CSS→AppKit 좌표계 변환은 네이티브 쪽에서 처리).
+	useEffect(() => {
+		if (!useNativePane) return
+		const el = placeholderRef.current
+		if (!el) return
+		const bridge = window.openrmBrowserPane!
+		const report = () => {
+			const rect = el.getBoundingClientRect()
+			bridge.setRect(taskId, { x: rect.left, y: rect.top, width: rect.width, height: rect.height })
+		}
+		report()
+		const ro = new ResizeObserver(report)
+		ro.observe(el)
+		window.addEventListener('scroll', report, true)
+		window.addEventListener('resize', report)
+		return () => {
+			ro.disconnect()
+			window.removeEventListener('scroll', report, true)
+			window.removeEventListener('resize', report)
+			bridge.setRect(taskId, null)
+		}
+	}, [useNativePane, taskId, device])
 
 	return (
 		<div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
@@ -270,11 +343,15 @@ export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string;
 				device={device}
 				cwd={cwd}
 				pickerActive={picking}
-				onBack={() => tag()?.goBack()}
-				onForward={() => tag()?.goForward()}
-				onReload={() => tag()?.reload()}
-				onNavigate={(v) => tag()?.loadURL(normalizeUrl(v))}
-				onOpenDevtools={() => tag()?.openDevTools()}
+				onBack={() => (useNativePane ? window.openrmBrowserPane!.goBack(taskId) : tag()?.goBack())}
+				onForward={() => (useNativePane ? window.openrmBrowserPane!.goForward(taskId) : tag()?.goForward())}
+				onReload={() => (useNativePane ? window.openrmBrowserPane!.reload(taskId) : tag()?.reload())}
+				onNavigate={(v) => {
+					const next = normalizeUrl(v)
+					if (useNativePane) window.openrmBrowserPane!.navigate(taskId, next)
+					else tag()?.loadURL(next)
+				}}
+				onOpenDevtools={() => (useNativePane ? window.openrmBrowserPane!.openDevTools(taskId) : tag()?.openDevTools())}
 				onDeviceChange={setDevice}
 				onTogglePicker={onTogglePicker}
 			/>
@@ -291,13 +368,18 @@ export default function BrowserPane({ taskId, cwd, folderId }: { taskId: string;
 					background: device === 'mobile' ? '#15181d' : 'var(--bg)',
 				}}
 			>
-				<webview
-					ref={webviewRef}
-					src={initialUrlRef.current}
-					partition={PARTITION}
-					allowpopups
-					style={{ width: device === 'mobile' ? 390 : '100%', height: '100%', border: 'none', borderRadius: device === 'mobile' ? 12 : 0 }}
-				/>
+				{useNativePane ? (
+					// 실제 렌더링은 네이티브 WKWebView가 이 자리 위에 겹쳐 그린다 — 이 div는 좌표 기준점일 뿐.
+					<div ref={placeholderRef} style={{ width: device === 'mobile' ? 390 : '100%', height: '100%', borderRadius: device === 'mobile' ? 12 : 0 }} />
+				) : (
+					<webview
+						ref={webviewRef}
+						src={initialUrlRef.current}
+						partition={PARTITION}
+						allowpopups
+						style={{ width: device === 'mobile' ? 390 : '100%', height: '100%', border: 'none', borderRadius: device === 'mobile' ? 12 : 0 }}
+					/>
+				)}
 			</div>
 			{/* "동일하게 카피 기능이 있으며 우리는 현재 메인태스크에 보낼 수 있도록해줘 — 즉시 전송이
 			    아니라 명령을 함께" — 요소를 집으면 뜨는 칩+컴포저. ControlPane의 떠 있는 pill 컴포저와
