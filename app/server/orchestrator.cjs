@@ -607,6 +607,22 @@ const Cockpit = require('./cockpit.cjs')
 //     없다"는 뜻. branch/pr도 그 워크트리의 실제 git 상태(§ cockpit byPath)에서.
 //   · lastDone: 가장 최근 완료된(report_html이 남은) 서브태스크 — "완료된 것까지 같이 보여줘서 빈
 //     칸을 줄이자"(둘 다 보여줘) — 완료 리포트는 항상 있어 진행 중인 것보다 빈 칸이 적다.
+// "미리보기 필요"(§ db.cjs v29 ui_blocks_json) — 현황판 카드는 정보 과밀을 막으려 체크리스트
+// 블록만 "3/5" 진행률 한 줄로 압축해서 보여준다(표/key-value는 상세 드로어에서만). 체크리스트
+// 블록이 여러 개면 전부 합산.
+function checklistProgress(uiBlocks) {
+	if (!Array.isArray(uiBlocks) || !uiBlocks.length) return null
+	let done = 0
+	let total = 0
+	for (const b of uiBlocks) {
+		if (b && b.type === 'checklist' && Array.isArray(b.items)) {
+			total += b.items.length
+			done += b.items.filter((it) => it.checked).length
+		}
+	}
+	return total > 0 ? { done, total } : null
+}
+
 // 둘 다 없는 태스크(아직 아무 세션도 안 띄운 것)는 현황판에 안 보여준다 — 볼 게 없다.
 async function getBoardStatus() {
 	const [live, cockpitData] = await Promise.all([Term.list().catch(() => []), Cockpit.cockpit().catch(() => null)])
@@ -630,6 +646,9 @@ async function getBoardStatus() {
 		const folderVerify = folderState.verify || {}
 		const folderTaskVerify = folderState.taskVerify || {}
 		for (const task of StoreTasks.listByFolder(folder.id)) {
+			if (task.completed_at) continue // "완료 처리한 태스크는 트리에서 사라진다"와 같은 원칙 — 현황판도
+			// completed_at을 안 보고 마지막 세션의 살아있음/정체 여부만 봐서, 완료 처리해도 HOLDING에
+			// 계속 남아있던 버그(§ 사이드바 visibleFolders는 이미 걸러내고 있었음).
 			const subtasks = StoreSubtasks.listByTask(task.id)
 			let active = null
 			let lastDone = null
@@ -648,6 +667,7 @@ async function getBoardStatus() {
 						tmuxSession: session.tmux_session,
 						verifyItems,
 						devUrl: detected[0] ? `http://localhost:${detected[0].port}` : null,
+						checklistProgress: checklistProgress(st.ui_blocks),
 						...gitInfoFor(session.worktree_path),
 					}
 				}

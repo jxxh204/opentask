@@ -82,6 +82,16 @@ export interface BlockedPeriod {
 // "태스크 하나에 개발, 개발자테스트, QA, 배포 이런식으로 나뉠 수 있거든" — 태스크 설명과 별개의
 // 자기 설명 + 독립적인 예정일/기간(캘린더에서 태스크처럼 자유롭게 옮길 수 있음). 색은 없다 —
 // 캘린더가 부모 태스크의 color로 통일해서 그린다(§ CalendarPane).
+// "하이브마인드가 서브태스크에 원한다면 ui를 추가할 수 있으면 좋겠어. json형태로 mapping" — 닫힌
+// 블록 타입 화이트리스트(§ server/mcpControl.cjs UiBlockSchema와 반드시 같은 모양). report_html(§ v25)
+// 처럼 webview로 격리해서 여는 게 아니라 SubtaskDetailPanel 안에 직접 렌더되는 자리라 HTML/JS는
+// 안 받는다 — button도 "하이브마인드에게 prompt로 재질문" 하나로 고정.
+export type UiBlock =
+	| { type: 'checklist'; title?: string; items: { id: string; label: string; checked: boolean }[] }
+	| { type: 'table'; title?: string; headers: string[]; rows: string[][] }
+	| { type: 'kv'; title?: string; pairs: { key: string; value: string }[] }
+	| { type: 'button'; label: string; prompt: string }
+
 export interface Subtask {
 	id: string
 	// "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — null이면 어느 태스크에도
@@ -100,6 +110,9 @@ export interface Subtask {
 	completed_at: number | null
 	created_at: number
 	updated_at: number
+	// raw 컬럼(디버깅·직렬화용) — 실제로 렌더링에 쓰는 건 아래 파싱된 ui_blocks.
+	ui_blocks_json: string | null
+	ui_blocks: UiBlock[]
 }
 
 export interface Task {

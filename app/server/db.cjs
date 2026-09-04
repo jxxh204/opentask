@@ -486,6 +486,15 @@ const MIGRATIONS = [
 			CREATE UNIQUE INDEX idx_code_briefs_subtask_stage ON code_briefs(subtask_id, stage);
 		`)
 	},
+	// v29 — "하이브마인드가 서브태스크에 원한다면 ui를 추가할 수 있으면 좋겠어. json형태로 mapping하고
+	// 하이브마인드가 json을 건드리면... 새로운 저장할게 생겨도 문제없이 저장가능해보여." 체크리스트/표/
+	// key-value/버튼처럼 정해진 블록 타입(§ mcpControl.cjs UiBlock)의 배열을 그대로 문자열로 저장 —
+	// link_briefs.data_json과 같은 캡슐 패턴이지만 상태(pending/ok/error)는 없다(비동기 생성이 아니라
+	// 하이브마인드가 update_subtask로 즉석에서 통째로 덮어쓰는 값이라). 새 블록 타입이 늘어나도 이
+	// 컬럼/마이그레이션은 그대로 — 프론트 렌더러(SubtaskUiBlocks.tsx)의 화이트리스트만 늘리면 된다.
+	(db) => {
+		db.exec(`ALTER TABLE subtasks ADD COLUMN ui_blocks_json TEXT;`)
+	},
 ]
 
 function migrate() {

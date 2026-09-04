@@ -235,6 +235,12 @@
 	gap: 8px;
 	min-width: 0;
 }
+.subtaskRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
 .subtaskText {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -243,6 +249,23 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+/* "미리보기 필요" — 현황판 카드의 체크리스트 진행률 배지(§ SubtaskUiBlocks.tsx, TaskDetailModal.module.css
+   .sessionBadge*와 같은 톤). */
+.checklistBadge {
+	flex: none;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--card2);
+	color: var(--t3);
+	border: 1px solid var(--line2);
+}
+.checklistBadgeDone {
+	background: var(--gtint);
+	color: var(--green);
+	border-color: var(--green);
 }
 .hint {
 	font-size: 11px;

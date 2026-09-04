@@ -28,7 +28,6 @@ fn row_to_json(row: &rusqlite::Row) -> rusqlite::Result<Value> {
 	}))
 }
 
-#[allow(dead_code)]
 pub fn list(pool: &Pool) -> anyhow::Result<Vec<Value>> {
 	let conn = pool.get()?;
 	let mut stmt = conn.prepare(&format!("SELECT {SELECT_COLS} FROM folders WHERE archived = 0 ORDER BY order_idx ASC, created_at ASC"))?;
@@ -36,7 +35,6 @@ pub fn list(pool: &Pool) -> anyhow::Result<Vec<Value>> {
 	Ok(rows)
 }
 
-#[allow(dead_code)]
 pub fn list_archived(pool: &Pool) -> anyhow::Result<Vec<Value>> {
 	let conn = pool.get()?;
 	let mut stmt = conn.prepare(&format!("SELECT {SELECT_COLS} FROM folders WHERE archived = 1 ORDER BY archived_at DESC"))?;

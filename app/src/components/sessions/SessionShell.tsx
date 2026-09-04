@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSessionsStore, openTaskOrFolderDetail } from '../../store/useSessionsStore'
 import { useReviewStore } from '../../store/useReviewStore'
-import { useTabsStore, CRONJOBS_NODE_ID, CALENDAR_NODE_ID } from '../../store/useTabsStore'
+import { useTabsStore, TAB_LABEL, CRONJOBS_NODE_ID, CALENDAR_NODE_ID } from '../../store/useTabsStore'
+import type { TabKind } from '../../store/useTabsStore'
 import { useGlobalTabsStore } from '../../store/useGlobalTabsStore'
 import type { GlobalBrowserTab } from '../../store/useGlobalTabsStore'
 import BrowserPane from './BrowserPane'
@@ -12,7 +13,8 @@ import { useUpdateCheck } from '../../utils/useUpdateCheck'
 import { useT, useTp, localeFor } from '../../utils/i18n'
 import { timeAgo } from '../../utils/timeAgo'
 import FolderCard from './FolderCard'
-import TabWorkspace from './TabWorkspace'
+import TabWorkspace, { ADDABLE_TASK_TABS, ADDABLE_FOLDER_TABS } from './TabWorkspace'
+import { TAB_ICON } from './tabIcons'
 import ControlPane, { HivemindStatusDot } from './ControlPane'
 import PrReviewModal from './PrReviewModal'
 import TaskDetailModal from './TaskDetailModal'
@@ -24,6 +26,7 @@ import Modal from '../common/Modal'
 import RepoTable from './RepoTable'
 import AddRepoModal from './AddRepoModal'
 import NewTaskModal from './NewTaskModal'
+import CommandPalette from './CommandPalette'
 import overmindIcon from '../../assets/overmind-icon.png'
 import styles from './SessionShell.module.css'
 
@@ -228,8 +231,29 @@ export default function SessionShell() {
 	const activeGlobalTabId = useGlobalTabsStore((s) => s.activeId)
 	const collapsedGlobalGroups = useGlobalTabsStore((s) => s.collapsedGroups)
 	const activeGlobalTab = globalTabs.find((t) => t.id === activeGlobalTabId) ?? null
+	// "여기 터미널을 열수 있는 +버튼.. 기존의 +버튼처럼 메뉴가 나와야해" — 전역 탭 스트립("메인 화면"
+	// 옆)에서도 TabWorkspace의 "+"(§ ADDABLE_TASK_TABS/ADDABLE_FOLDER_TABS)와 똑같은 종류 목록을
+	// 고를 수 있게 한다. 브라우저 탭을 보고 있어 TabWorkspace 자체의 + 버튼에 손이 안 닿을 때도(그
+	// 컴포넌트는 display:none으로 숨어있을 뿐 계속 마운트돼 있음, § workspaceLayer) 지금 활성 노드에
+	// 곧장 탭을 추가할 수 있다.
+	const [globalAddOpen, setGlobalAddOpen] = useState(false)
+	const activeNodeKind = activeNodeId
+		? folders.some((f) => f.id === activeNodeId)
+			? ('folder' as const)
+			: inbox.some((t) => t.id === activeNodeId) || folders.some((f) => f.tasks.some((t) => t.id === activeNodeId))
+				? ('task' as const)
+				: null
+		: null
+	const globalAddableTabs = activeNodeKind === 'folder' ? ADDABLE_FOLDER_TABS : ADDABLE_TASK_TABS
+	function openGlobalAddTab(kind: TabKind) {
+		if (!activeNodeId) return
+		useTabsStore.getState().openTab(activeNodeId, kind)
+		useGlobalTabsStore.getState().setActive(null)
+		setGlobalAddOpen(false)
+	}
 	const [repoPickerOpen, setRepoPickerOpen] = useState(false)
 	const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
+	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 	const [sidebarQuery, setSidebarQuery] = useState('')
 	const [treeCollapsed, setTreeCollapsed] = useState(false)
 	const [archiveView, setArchiveView] = useState(false)
@@ -243,11 +267,16 @@ export default function SessionShell() {
 	// "일감 생성 버튼과 모달이 불편해" — 예전엔 사이드바의 작은 + 아이콘을 직접 찾아 눌러야만 열렸다
 	// (Linear의 전역 C, Things 3의 전역 퀵엔트리 참고 — 어디서든 한 번에 캡처). Cmd/Ctrl+N은 이 앱
 	// 메뉴 어디에도 안 쓰이고 있어(§electron/main.cjs buildAppMenu) 충돌 없이 그대로 쓴다.
+	// "명령팔레트 (Cmd+K)" — VSCode/Linear 관례로 어디서든 태스크/서브태스크/메모를 검색해 바로 이동
+	// (§ CommandPalette.tsx). Cmd+K도 이 앱 메뉴에 없는 조합이라 충돌 없음.
 	useEffect(() => {
 		function onKey(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
 				e.preventDefault()
 				setNewTaskModalOpen(true)
+			} else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+				e.preventDefault()
+				setCommandPaletteOpen(true)
 			}
 		}
 		window.addEventListener('keydown', onKey)
@@ -730,6 +759,36 @@ export default function SessionShell() {
 									</div>
 								)
 							})}
+							{/* "여기 터미널을 열수 있는 +버튼.. 기존의 +버튼처럼 메뉴가 나와야해" — TabWorkspace의
+							    "+"(§ cmdkAnchor)와 같은 종류 목록·아이콘·라벨을 그대로 쓴다. 선택하면 지금 활성
+							    노드(사이드바에서 고른 태스크/폴더)에 탭을 추가하고 "메인 화면"으로 바로 전환해
+							    바로 보여준다 — 지금 보고 있던 게 다른 브라우저 탭이라 TabWorkspace 자체는
+							    display:none으로 숨어 있어도 상관없다. */}
+							<div className={styles.globalTabAddAnchor}>
+								<button
+									type="button"
+									className={styles.globalTabAddBtn}
+									title={t('탭 추가')}
+									// "메뉴뜨는데 터미널 안나와" — 캘린더/하이브마인드 등 고정 뷰(§ CRONJOBS_NODE_ID 등
+									// pseudo-node, TabWorkspace.tsx 496행)가 활성 노드일 땐 TabWorkspace가 탭 목록
+									// 자체를 건너뛰고 무조건 그 고정 화면만 그린다 — 여기서 탭을 추가해도 상태만
+									// 바뀔 뿐 화면엔 영영 안 뜬다. 진짜 태스크/폴더가 선택돼 있을 때만 버튼을 켠다.
+									disabled={!activeNodeKind}
+									onClick={() => setGlobalAddOpen((v) => !v)}
+								>
+									+
+								</button>
+								{globalAddOpen && activeNodeKind && (
+									<div className={styles.globalTabAddPanel} onMouseLeave={() => setGlobalAddOpen(false)}>
+										{globalAddableTabs.map((kind) => (
+											<div key={kind} className={styles.globalTabAddItem} onClick={() => openGlobalAddTab(kind)}>
+												{TAB_ICON[kind] && <span className={styles.tabIcon}>{TAB_ICON[kind]}</span>}
+												<span>{t(TAB_LABEL[kind])}</span>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
 						</div>
 					{/* "브라우저가 동기화되어있어 두개는 완전 분리되어야해. 모바일, PC보는것도 마찬가지 각각" —
 					    예전엔 activeGlobalTab 하나만 조건부로 그려서, 탭을 바꿔도 React가 같은 BrowserPane
@@ -845,6 +904,7 @@ export default function SessionShell() {
 			</Modal>
 			<AddRepoModal open={addRepoOpen} onClose={() => setAddRepoOpen(false)} onManage={() => setReposModalOpen(true)} />
 			<NewTaskModal open={newTaskModalOpen} onClose={() => setNewTaskModalOpen(false)} />
+			<CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
 		</div>
 	)
 }

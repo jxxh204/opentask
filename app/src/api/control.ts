@@ -43,6 +43,10 @@ export function interruptControl() {
 export function askControl(text: string) {
 	return api.post<ControlState & { ok: boolean; already?: boolean; error?: string }>('/api/control/ask', { text })
 }
+// "하이브마인드도 알아야함" — 사람이 서브태스크 체크리스트를 직접 토글했을 때(§ SubtaskUiBlocks.tsx)
+// askControl로 찔러 넣는 알림 앞에 붙이는 마커. server/transcript.cjs의 UI_BLOCK_EDIT_MARKER와 반드시
+// 같은 문자열이어야 한다 — 그 파일의 OPS_TICK_MARKER 주석과 같은 이유로 상수 공유 대신 복제.
+export const UI_BLOCK_EDIT_MARKER = '[서브태스크 UI 변경]'
 
 // "대화형으로 가자" — raw 터미널 대신 claude CLI 자신의 jsonl 대화 기록을 파싱한 채팅 턴(§ ControlPane.tsx).
 export type ChatPart = { kind: 'text'; text: string } | { kind: 'tool'; name: string; input: unknown; result: string | null }

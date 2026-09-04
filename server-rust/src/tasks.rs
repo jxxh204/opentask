@@ -1,9 +1,6 @@
-// tasks.rs — app/server/store/tasks.cjs 이식. 지금 포팅 범위: get/listByFolder/create/update/
-// move/remove(순수 tasks 테이블 CRUD). composeTask/board는 branches.cjs/reviews.cjs/subtasks.cjs/
-// agentJobs.cjs에 의존하는데 그것들은 아직 미포팅이라, compose_task()는 그 관계 필드를 빈 배열/null로
-// 채운 "부분 스텁"이다 — 태스크 자체 필드는 정확하지만 branches/reviews/subtasks는 실제 데이터가
-// 아니다(§ main.rs create_task/update_task 핸들러, 반드시 이 사실을 인지하고 쓸 것).
+// tasks.rs — app/server/store/tasks.cjs 이식.
 use crate::db::Pool;
+use crate::{agent_jobs, branches, reviews, subtasks};
 use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -151,12 +148,121 @@ pub fn remove(pool: &Pool, id: &str) -> anyhow::Result<Value> {
 	Ok(json!({"ok": true}))
 }
 
-/// 부분 스텁 — branches/reviews/review/subtasks는 아직 미포팅이라 항상 빈 배열/null(§ 파일 상단 주석).
-pub fn compose_task(row: Value) -> Value {
+const DAY_MS: i64 = 86_400_000;
+
+fn is_weekend(ms: i64) -> bool {
+	use chrono::{Datelike, TimeZone, Utc, Weekday};
+	let dt = Utc.timestamp_millis_opt(ms).single().unwrap_or_else(|| Utc.timestamp_millis_opt(0).unwrap());
+	matches!(dt.weekday(), Weekday::Sat | Weekday::Sun)
+}
+
+fn add_business_days(start_ms: i64, duration_days: i64) -> i64 {
+	if duration_days <= 1 {
+		return start_ms;
+	}
+	let mut ms = start_ms;
+	let mut remaining = duration_days - 1;
+	while remaining > 0 {
+		ms += DAY_MS;
+		if !is_weekend(ms) {
+			remaining -= 1;
+		}
+	}
+	ms
+}
+
+fn business_days_between(start_ms: i64, end_ms: i64) -> i64 {
+	if end_ms <= start_ms {
+		return 1;
+	}
+	let mut count = 1;
+	let mut ms = start_ms;
+	while ms < end_ms {
+		ms += DAY_MS;
+		if !is_weekend(ms) {
+			count += 1;
+		}
+	}
+	count
+}
+
+// "메인 태스크의 기간은... 모든 일정을 더하기해서 자동으로 적용되게 해줘" — 서브태스크 전체 범위
+// (가장 이른 시작 ~ 가장 늦은 종료)로 태스크 자신의 due_date/duration_days를 다시 계산해 저장한다.
+pub fn recompute_from_subtasks(pool: &Pool, task_id: &str) -> anyhow::Result<()> {
+	let subs: Vec<Value> = subtasks::list_by_task(pool, task_id)?.into_iter().filter(|s| s["due_date"].is_i64()).collect();
+	if subs.is_empty() {
+		return Ok(());
+	}
+	let mut min_start = i64::MAX;
+	let mut max_end = i64::MIN;
+	for s in &subs {
+		let start = s["due_date"].as_i64().unwrap();
+		let duration = s["duration_days"].as_i64().unwrap_or(1);
+		let end = add_business_days(start, duration);
+		min_start = min_start.min(start);
+		max_end = max_end.max(end);
+	}
+	update(pool, task_id, &json!({"dueDate": min_start, "durationDays": business_days_between(min_start, max_end)}))?;
+	Ok(())
+}
+
+// "검토한 일감은... 사라지면안돼" — agent_jobs에 영구 저장된 완료 검토 결과를 taskId로 다시 찾는다.
+// kind 문자열('estimate-duration')은 durationEstimate.cjs의 JOB_KIND와 반드시 같아야 한다(§원본 주석).
+pub fn latest_review_for(pool: &Pool, task_id: &str) -> anyhow::Result<Value> {
+	match agent_jobs::latest_done(pool, "estimate-duration", "task", task_id)? {
+		None => Ok(Value::Null),
+		Some(j) => {
+			let envelope = j.get("result").cloned().unwrap_or(Value::Null);
+			let result = envelope.get("result").cloned().unwrap_or(Value::Null);
+			Ok(json!({"jobId": j["id"], "result": result, "doneAt": j["done_at"]}))
+		}
+	}
+}
+
+pub fn compose_task(pool: &Pool, row: Value) -> anyhow::Result<Value> {
+	let task_id = row["id"].as_str().unwrap_or_default().to_string();
+	let raw_branches = branches::list_by_task(pool, &task_id)?;
+	let mut branches_out = Vec::with_capacity(raw_branches.len());
+	let mut reviews_out = Vec::new();
+	for b in raw_branches {
+		let bid = b["id"].as_str().unwrap_or_default().to_string();
+		let mut bb = b;
+		bb["links"] = json!(branches::links(pool, &bid)?);
+		reviews_out.extend(reviews::list_by_branch(pool, &bid)?);
+		branches_out.push(bb);
+	}
+	let review = latest_review_for(pool, &task_id)?;
+	let subtasks_out = subtasks::list_by_task(pool, &task_id)?;
+
 	let mut out = row;
-	out["branches"] = json!([]);
-	out["reviews"] = json!([]);
-	out["review"] = Value::Null;
-	out["subtasks"] = json!([]);
-	out
+	out["branches"] = json!(branches_out);
+	out["reviews"] = json!(reviews_out);
+	out["review"] = review;
+	out["subtasks"] = json!(subtasks_out);
+	Ok(out)
+}
+
+// GET /api/sessions/board — 사이드바가 실제로 부르는 메인 조회. folders는 이미 조회된 목록(활성/보관함
+// 둘 다 이 함수로 넘어올 수 있음, § index.cjs 541/574)을 받아 그대로 태스크를 얹는다.
+pub fn board(pool: &Pool, folders_list: Vec<Value>) -> anyhow::Result<Value> {
+	let inbox_raw = list_by_folder(pool, None)?;
+	let mut inbox = Vec::with_capacity(inbox_raw.len());
+	for t in inbox_raw {
+		inbox.push(compose_task(pool, t)?);
+	}
+
+	let mut folders_out = Vec::with_capacity(folders_list.len());
+	for f in folders_list {
+		let fid = f["id"].as_str().unwrap_or_default().to_string();
+		let tasks_raw = list_by_folder(pool, Some(&fid))?;
+		let mut tasks_composed = Vec::with_capacity(tasks_raw.len());
+		for t in tasks_raw {
+			tasks_composed.push(compose_task(pool, t)?);
+		}
+		let mut fo = f;
+		fo["tasks"] = json!(tasks_composed);
+		folders_out.push(fo);
+	}
+	let notes = subtasks::list_orphans(pool)?;
+	Ok(json!({"folders": folders_out, "inbox": inbox, "notes": notes}))
 }

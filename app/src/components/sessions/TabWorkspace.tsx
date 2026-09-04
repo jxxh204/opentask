@@ -28,14 +28,26 @@ import styles from './TabWorkspace.module.css'
 // "태스크내에서 비서로 화면 바뀌는게 불편해서 그냥 탭에서 사용할 수 있게" — 'control'을 두 목록 다에
 // 추가. ControlPane은 노드 스코프가 없는 전역 비서라 어느 태스크/서브태스크 탭에서 열어도 항상 같은
 // 세션(CONTROL_NODE_ID에서 보던 것과 동일)을 이어서 보여준다.
-const ADDABLE_TASK_TABS: TabKind[] = ['terminal', 'server', 'browser', 'claude', 'control']
+// SessionShell.tsx의 전역 탭 스트립 "+" 버튼(§ globalAddOpen)도 이 목록을 그대로 재사용한다 —
+// "지금 활성 노드에 탭을 하나 더 연다"는 동작 자체가 여기 + 버튼과 완전히 같아서다.
+export const ADDABLE_TASK_TABS: TabKind[] = ['terminal', 'server', 'browser', 'claude', 'control']
 // "팀 규칙 탭이 어딧어? 추가도 안되고" — 설정 모달에만 진입점을 두니(모델 배정과 같은 패턴) 못 찾는다.
 // 팀 규칙은 레포 단위지만 사람은 "이 폴더 작업하다가 그 레포 규칙을 보고 싶다"는 맥락에서 찾으니,
 // 여기 폴더 전용 "+" 메뉴에도 넣는다 — 열면 그 폴더의 레포로 미리 스코프된다(§ TeamRulesPane initialRepoId).
 // "로컬서버는 제거해줘" — 메인 태스크(폴더)는 이제 자기 워크트리를 안 갖고 오케스트레이션만 하므로(§
 // orchestrator.cjs start 주석) 여기서 "로컬 서버"는 가리킬 대상이 없다. 서브태스크 탭(ADDABLE_TASK_TABS)
 // 에만 남긴다 — 실제 워크트리·dev 서버는 거기서 돈다.
-const ADDABLE_FOLDER_TABS: TabKind[] = ['detail', 'orchestrator', 'diagram', 'terminal', 'browser', 'claude', 'teamRules', 'control']
+export const ADDABLE_FOLDER_TABS: TabKind[] = ['detail', 'orchestrator', 'diagram', 'terminal', 'browser', 'claude', 'teamRules', 'control']
+
+// "Ctrl+W가 텍스트 입력 중 단어 삭제 대신 탭을 닫아버린다" — input/textarea/contenteditable에 포커스가
+//있는지 판별. 전역 탭 단축키(§ 아래 keydown 핸들러)가 이 판별로 Ctrl+W를 텍스트 편집 중엔 건드리지
+// 않게 한다.
+function isEditableTarget(target: EventTarget | null): boolean {
+	const el = target as HTMLElement | null
+	if (!el) return false
+	const tag = el.tagName
+	return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
+}
 
 // VSCode의 "새 터미널"처럼 탭을 열면 버튼 없이 곧바로 세션이 뜬다 — 탭 인스턴스당 한 번만
 // 시작하도록 startedRef로 막는다(StrictMode 이중 마운트·재렌더 대비).
@@ -398,17 +410,24 @@ export default function TabWorkspace() {
 	const activeRightTabId = activeNodeId ? (activeRightTabByNode[activeNodeId] ?? rightTabs[0]?.id) : undefined
 
 	// 탭 단축키 — Orca/VSCode 기본값을 따른다: Cmd/Ctrl+W 닫기, Cmd/Ctrl+Shift+T 마지막으로 닫은 탭
-	// 되살리기, Ctrl+Tab(+Shift로 역방향) 탭 순환. Electron 쪽은 기본 메뉴의 Cmd+W(창 닫기) accelerator를
-	// 없애서(electron/main.cjs) 여기서 preventDefault한 게 실제로 먹히게 해뒀다.
+	// 되살리기, Ctrl+Tab(+Shift로 역방향) 탭 순환, Cmd/Ctrl+1~9로 왼쪽 탭 바로 이동(크롬 관례).
+	// Electron 쪽은 기본 메뉴의 Cmd+W(창 닫기) accelerator를 없애서(electron/main.cjs) 여기서
+	// preventDefault한 게 실제로 먹히게 해뒀다.
+	// "단축키가 동작 안 하고 제대로 적용 안 된 것도 많다" — Ctrl+W를 Cmd+W와 묶어 "탭 닫기"로 썼더니,
+	// macOS 텍스트 필드/터미널의 기본 관례(Ctrl+W=단어 삭제, emacs 바인딩)와 부딪혀 하이브마인드
+	// 채팅창 등에서 단어를 지우려다 탭이 통째로 닫혔다. Cmd+W는 텍스트 편집 중에도 안전(어떤 필드도
+	// Cmd+W를 안 씀 — 크롬도 주소창에서 눌러도 탭이 닫힘)하니 그대로 두고, Ctrl+W만 입력 필드 밖에서만
+	// 탭 닫기로 인정한다.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!activeNodeId) return
-			const mod = e.metaKey || e.ctrlKey
-			if (mod && !e.shiftKey && e.key.toLowerCase() === 'w') {
+			const editable = isEditableTarget(e.target)
+			const closeCombo = (e.metaKey || (e.ctrlKey && !editable)) && !e.shiftKey && e.key.toLowerCase() === 'w'
+			if (closeCombo) {
 				if (!activeTabId) return
 				e.preventDefault()
 				closeTab(activeNodeId, activeTabId)
-			} else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
+			} else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
 				e.preventDefault()
 				reopenLastClosed(activeNodeId)
 			} else if (e.ctrlKey && e.key === 'Tab') {
@@ -417,11 +436,16 @@ export default function TabWorkspace() {
 			} else if (e.metaKey && e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
 				e.preventDefault()
 				cycleTab(activeNodeId, e.key === 'ArrowRight' ? 1 : -1)
+			} else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+				const idx = Number(e.key) - 1
+				if (idx >= leftTabs.length) return
+				e.preventDefault()
+				setActiveTab(activeNodeId, leftTabs[idx].id)
 			}
 		}
 		window.addEventListener('keydown', onKeyDown)
 		return () => window.removeEventListener('keydown', onKeyDown)
-	}, [activeNodeId, activeTabId, closeTab, reopenLastClosed, cycleTab])
+	}, [activeNodeId, activeTabId, closeTab, reopenLastClosed, cycleTab, leftTabs, setActiveTab])
 
 	// "일반적인 cli 툴처럼 키 지정을 해줄수있어?" — "+" 탭 추가 패널이 열려 있을 때만 숫자키 1-9로
 	// 목록 순서대로 바로 선택(fzf/lazygit류 넘버 힌트 관례). 렌더에 쓰는 addableTabs(아래, found 기반

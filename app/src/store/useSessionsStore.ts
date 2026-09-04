@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Folder, Task, Repo, BlockedPeriod, Subtask } from './types'
+import type { Folder, Task, Repo, BlockedPeriod, Subtask, UiBlock } from './types'
 import * as SessionsApi from '../api/sessions'
 import type { OrchestrationState, GitStatusEntry, CockpitSummary, SubtaskWorkStatus, DevServerEntry } from '../api/sessions'
 import { detectLink, LINK_LABEL } from '../utils/linkDetect'
@@ -172,6 +172,8 @@ export interface SessionsState {
 	updateSubtaskDueDate(id: string, dueDate: number | null): Promise<void>
 	updateSubtaskDuration(id: string, durationDays: number | null): Promise<void>
 	updateSubtaskRepo(id: string, repoId: string | null): Promise<void>
+	// "하이브마인드가 서브태스크에 원한다면 ui를 추가" — 배열 전체를 통째로 덮어쓴다(§ SubtaskUiBlocks.tsx).
+	updateSubtaskUiBlocks(id: string, uiBlocks: UiBlock[]): Promise<void>
 	// "서브태스크 완료 버튼 필요" — Task.setTaskDone과 같은 패턴(레코드는 안 지우고 completed_at만).
 	setSubtaskDone(id: string, done: boolean): Promise<void>
 	removeSubtask(id: string): Promise<void>
@@ -744,6 +746,22 @@ export const useSessionsStore = create<SessionsState>()((set, get) => ({
 		}))
 		try {
 			await SessionsApi.updateSubtask(id, { repoId })
+		} catch (e) {
+			set({ error: e instanceof Error ? e.message : String(e) })
+			await get().loadBoard()
+		}
+	},
+	// "하이브마인드가 서브태스크에 원한다면 ui를 추가할 수 있으면 좋겠어" — 하이브마인드(update_subtask MCP
+	// 툴)와 사람(SubtaskUiBlocks.tsx 체크박스)이 같은 액션·같은 엔드포인트를 쓴다. 배열 전체를 통째로
+	// 덮어쓰므로 호출부가 항상 "다음 전체 상태"를 만들어 넘긴다.
+	updateSubtaskUiBlocks: async (id, uiBlocks) => {
+		set((s) => ({
+			inbox: mapSubtaskInTasks(s.inbox, id, (st) => ({ ...st, ui_blocks: uiBlocks })),
+			folders: s.folders.map((f) => ({ ...f, tasks: mapSubtaskInTasks(f.tasks, id, (st) => ({ ...st, ui_blocks: uiBlocks })) })),
+			notes: mapSubtaskInNotes(s.notes, id, (st) => ({ ...st, ui_blocks: uiBlocks })),
+		}))
+		try {
+			await SessionsApi.updateSubtask(id, { uiBlocks })
 		} catch (e) {
 			set({ error: e instanceof Error ? e.message : String(e) })
 			await get().loadBoard()

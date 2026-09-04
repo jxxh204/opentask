@@ -1048,6 +1048,65 @@
 	background: color-mix(in srgb, var(--group-color, var(--t3)) 18%, var(--card));
 }
 
+/* "여기 터미널을 열수 있는 +버튼.. 기존의 +버튼처럼 메뉴가 나와야해" — TabWorkspace.module.css의
+   .cmdkAnchor/.cmdkBtn/.cmdkPanel/.cmdkItem을 그대로 옮겨왔다(같은 토큰, 같은 크기) — 전역 탭
+   스트립에서도 똑같이 생긴 "+" 메뉴로 보이게. */
+.globalTabAddAnchor {
+	position: relative;
+	align-self: center;
+	margin-left: 4px;
+}
+.globalTabAddBtn {
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	background: transparent;
+	border: none;
+	color: var(--t3);
+	font-size: 15px;
+	line-height: 1;
+	cursor: pointer;
+}
+.globalTabAddBtn:hover:not(:disabled) {
+	color: var(--ink);
+	background: var(--card-hover);
+}
+.globalTabAddBtn:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.globalTabAddPanel {
+	position: absolute;
+	top: 32px;
+	left: 0;
+	z-index: 30;
+	width: 200px;
+	background: var(--card2);
+	border: 1px solid var(--line2);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-popover);
+	padding: 6px;
+}
+.globalTabAddItem {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 9px;
+	border-radius: var(--radius-chip);
+	font-size: 12px;
+	color: var(--ink);
+	cursor: pointer;
+}
+.globalTabAddItem:hover {
+	background: var(--card-hover);
+}
+.tabIcon {
+	flex: none;
+	display: flex;
+	align-items: center;
+	opacity: 0.85;
+}
+
 /* "도킹패널" — 지금 폴더/태스크 워크스페이스는 그대로 두고 옆에 얹는 하이브마인드 패널
    (§ useTabsStore controlDockOpen, SessionShell.tsx). transition이 아니라 animation을 쓰는 이유:
    조건부 마운트라 "이전 값"이 없어 width 전이만으론 애니메이션이 안 걸린다. */

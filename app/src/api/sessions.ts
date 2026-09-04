@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { SessionsBoard, Folder, Task, Branch, BranchLink, Review, Repo, DurationEstimateResult, BlockedPeriod, Subtask } from '../store/types'
+import type { SessionsBoard, Folder, Task, Branch, BranchLink, Review, Repo, DurationEstimateResult, BlockedPeriod, Subtask, UiBlock } from '../store/types'
 
 export function getBoard() {
 	return api.get<SessionsBoard>('/api/sessions/board')
@@ -55,7 +55,7 @@ export function removeTask(id: string) {
 export function createSubtask(taskId: string, input: { name: string; desc?: string; dueDate?: number | null; durationDays?: number | null }) {
 	return api.post<Subtask>(`/api/tasks/${taskId}/subtasks`, input)
 }
-export function updateSubtask(id: string, patch: Partial<{ name: string; desc: string; dueDate: number | null; durationDays: number | null; repoId: string | null; completedAt: number | null }>) {
+export function updateSubtask(id: string, patch: Partial<{ name: string; desc: string; dueDate: number | null; durationDays: number | null; repoId: string | null; completedAt: number | null; uiBlocks: UiBlock[] }>) {
 	return api.patch<Subtask>(`/api/subtasks/${id}`, patch)
 }
 export function removeSubtask(id: string) {
@@ -145,6 +145,8 @@ export interface BoardStatusItem {
 		tmuxSession: string
 		verifyItems: VerifyItem[]
 		devUrl: string | null
+		// "미리보기 필요"(§ types.ts UiBlock) — 체크리스트 블록들 진행률 합산, 없으면 null.
+		checklistProgress: { done: number; total: number } | null
 		branch: string | null
 		pr: BoardStatusPr | null
 	} | null

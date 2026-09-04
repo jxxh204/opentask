@@ -8,6 +8,7 @@ import { extractLinks } from '../../utils/extractLinks'
 import { useT, useTp } from '../../utils/i18n'
 import LinkBriefSection from './LinkBriefSection'
 import CodeBriefSection from './CodeBriefSection'
+import SubtaskUiBlocks from './SubtaskUiBlocks'
 import styles from './TaskDetailModal.module.css'
 
 function pad(n: number) {
@@ -287,6 +288,8 @@ export default function SubtaskDetailPanel({ subtaskId, parentTaskId, onClose }:
 								{t('설명')}
 							</div>
 							<textarea className={styles.descInput} value={subtask.desc} onChange={(e) => updateSubtaskDesc(subtask.id, e.target.value)} placeholder={t('이 서브태스크에 대해 설명해 주세요')} />
+
+							<SubtaskUiBlocks subtaskId={subtask.id} subtaskName={subtask.name} blocks={subtask.ui_blocks} />
 
 							<LinkBriefSection ownerType="subtask" ownerId={subtask.id} links={descLinks} groupName={parentTask.name} groupColor={parentTask.color} />
 							<CodeBriefSection subtaskId={subtask.id} started={!!work?.started} ended={!!work?.started && !work?.alive} />

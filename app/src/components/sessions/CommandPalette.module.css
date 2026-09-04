@@ -1,0 +1,60 @@
+.wrap {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.input {
+	flex: none;
+	border: none;
+	border-bottom: 1px solid var(--line2);
+	background: transparent;
+	color: var(--ink);
+	font-size: 15px;
+	padding: 16px 18px;
+	outline: none;
+}
+.input::placeholder {
+	color: var(--t3);
+}
+.list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 6px;
+}
+.empty {
+	padding: 18px;
+	text-align: center;
+	font-size: 12px;
+	color: var(--t3);
+}
+.item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 10px;
+	border-radius: var(--radius-control);
+	cursor: pointer;
+}
+.itemActive {
+	background: var(--card-hover);
+}
+.itemSub {
+	flex: none;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: var(--t3);
+	max-width: 140px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.itemLabel {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 12.5px;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

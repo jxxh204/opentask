@@ -5,18 +5,31 @@
 const { randomUUID } = require('crypto')
 const { db } = require('../db.cjs')
 
+// "json형태로 mapping하고 하이브마인드가 json을 건드리면..." — link_briefs.data와 같은 패턴, raw
+// ui_blocks_json은 그대로 두고 파싱된 ui_blocks를 얹어서 돌려준다(프론트는 이 필드만 씀).
+function withUiBlocks(row) {
+	if (!row) return row
+	let uiBlocks = []
+	try {
+		uiBlocks = row.ui_blocks_json ? JSON.parse(row.ui_blocks_json) : []
+	} catch (_) {
+		uiBlocks = []
+	}
+	return { ...row, ui_blocks: uiBlocks }
+}
+
 function get(id) {
-	return db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id)
+	return withUiBlocks(db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id))
 }
 
 function listByTask(taskId) {
-	return db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_idx ASC, created_at ASC').all(taskId)
+	return db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_idx ASC, created_at ASC').all(taskId).map(withUiBlocks)
 }
 
 // "메인태스크 없는 서브태스크도 만들 수 있으면 좋겠어. 메모정도로 사용하게" — task_id가 없는(§ db.cjs
 // v20) 독립 서브태스크들. tasks.listByFolder(null)의 "미분류" 태스크와 같은 패턴.
 function listOrphans() {
-	return db.prepare('SELECT * FROM subtasks WHERE task_id IS NULL ORDER BY order_idx ASC, created_at ASC').all()
+	return db.prepare('SELECT * FROM subtasks WHERE task_id IS NULL ORDER BY order_idx ASC, created_at ASC').all().map(withUiBlocks)
 }
 
 function create({ taskId, name, desc, dueDate, durationDays }) {
@@ -52,7 +65,20 @@ function update(id, patch) {
 	const repoId = 'repoId' in patch ? patch.repoId || null : cur.repo_id
 	// "서브태스크 완료 버튼 필요"(§ db.cjs v21) — tasks.completed_at과 같은 패턴, 레코드는 지우지 않는다.
 	const completedAt = 'completedAt' in patch ? patch.completedAt || null : cur.completed_at
-	db.prepare('UPDATE subtasks SET name = ?, desc = ?, due_date = ?, duration_days = ?, repo_id = ?, completed_at = ?, updated_at = ? WHERE id = ?').run(name, desc, dueDate, durationDays, repoId, completedAt, Date.now(), id)
+	// "하이브마인드가 json을 건드리면" — 부분 patch가 아니라 배열 전체를 통째로 덮어쓴다(단순함 우선).
+	// 사람이 체크리스트 하나 토글할 때도 프론트가 전체 배열을 다시 보내는 방식(§ SubtaskUiBlocks.tsx).
+	const uiBlocksJson = 'uiBlocks' in patch ? JSON.stringify(patch.uiBlocks ?? []) : cur.ui_blocks_json
+	db.prepare('UPDATE subtasks SET name = ?, desc = ?, due_date = ?, duration_days = ?, repo_id = ?, completed_at = ?, ui_blocks_json = ?, updated_at = ? WHERE id = ?').run(
+		name,
+		desc,
+		dueDate,
+		durationDays,
+		repoId,
+		completedAt,
+		uiBlocksJson,
+		Date.now(),
+		id,
+	)
 	return get(id)
 }
 

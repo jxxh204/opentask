@@ -242,9 +242,18 @@ function Card({ entry }: { entry: BoardEntry }) {
 				</div>
 
 				{item?.active && (
-					<span className={styles.subtaskText} title={item.active.subtaskName}>
-						{item.active.subtaskName}
-					</span>
+					<div className={styles.subtaskRow}>
+						<span className={styles.subtaskText} title={item.active.subtaskName}>
+							{item.active.subtaskName}
+						</span>
+						{/* "미리보기 필요"(§ types.ts UiBlock) — 표/key-value는 정보 과밀을 막으려 카드에선
+						    생략하고 체크리스트 진행률만 압축해서 보여준다(상세는 드로어에서). */}
+						{item.active.checklistProgress && (
+							<span className={`${styles.checklistBadge} ${item.active.checklistProgress.done === item.active.checklistProgress.total ? styles.checklistBadgeDone : ''}`}>
+								✓ {item.active.checklistProgress.done}/{item.active.checklistProgress.total}
+							</span>
+						)}
+					</div>
 				)}
 
 				{primaryVerify ? (

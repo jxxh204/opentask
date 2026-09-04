@@ -71,3 +71,68 @@ pub fn save(patch: &Value) -> Value {
 	let _ = std::fs::write(file_path(), value.to_string());
 	value
 }
+
+/// modelFor(action) — 액션별 모델 배분. fableLock이 켜져 있으면 fable 계열을 opus로 강제 스왑(비용 차단).
+pub fn model_for(action: &str) -> String {
+	let s = load();
+	let policy = s.get("modelPolicy").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+	let defaults = model_policy();
+	let mut m = policy
+		.get(action)
+		.and_then(|v| v.as_str())
+		.map(str::to_string)
+		.or_else(|| defaults.as_object().and_then(|d| d.get(action)).and_then(|v| v.as_str()).map(str::to_string));
+	let fable_lock = s.get("fableLock").and_then(Value::as_bool).unwrap_or(false);
+	if fable_lock {
+		if let Some(model) = &m {
+			if model.contains("fable") {
+				m = Some("claude-opus-5".to_string());
+			}
+		}
+	}
+	m.unwrap_or_default()
+}
+
+/// operatorName() — 운영자 이름 게터. 빈 값이면 기본값으로 안전하게 폴백(프롬프트 문법 깨짐 방지).
+pub fn operator_name() -> String {
+	let s = load();
+	let n = s.get("operatorName").and_then(Value::as_str).unwrap_or_default().trim().to_string();
+	if n.is_empty() {
+		"운영자".to_string()
+	} else {
+		n
+	}
+}
+
+/// modelLabelFor(action) — fableLock 때문에 정책과 실제 배정이 달라진 경우 "(비용 잠금)"을 붙인다.
+pub fn model_label_for(action: &str) -> String {
+	let s = load();
+	let policy = s.get("modelPolicy").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+	let defaults = model_policy();
+	let wanted = policy.get(action).and_then(Value::as_str).map(str::to_string).or_else(|| defaults.get(action).and_then(Value::as_str).map(str::to_string));
+	let actual = model_for(action);
+	let fable_lock = s.get("fableLock").and_then(Value::as_bool).unwrap_or(false);
+	let locked = fable_lock && wanted.as_deref().map(|w| w.contains("fable")).unwrap_or(false) && wanted.as_deref() != Some(actual.as_str());
+	format!("{}{}", model_label(&actual), if locked { " (비용 잠금)" } else { "" })
+}
+
+/// modelLabel(id) — 'claude-opus-5' → 'Opus 5' 같은 표시용 라벨.
+pub fn model_label(id: &str) -> String {
+	if id.is_empty() {
+		return String::new();
+	}
+	static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"^claude-(opus|sonnet|haiku|fable)-(.+)$").unwrap());
+	match RE.captures(id) {
+		Some(caps) => {
+			let tier = &caps[1];
+			let version = caps[2].replace('-', ".");
+			let mut chars = tier.chars();
+			let tier_cap = match chars.next() {
+				Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+				None => tier.to_string(),
+			};
+			format!("{tier_cap} {version}")
+		}
+		None => id.trim_start_matches("claude-").to_string(),
+	}
+}

@@ -10,6 +10,7 @@ const { execFileSync } = require('child_process')
 const Term = require('./term.cjs')
 const Settings = require('./settings.cjs')
 const Notify = require('./notify.cjs')
+const Transcript = require('./transcript.cjs') // projectDirFor — claude CLI의 대화 기록 위치(§ hasResumableConversation)
 
 const CLAUDE_CONFIG_PATH = process.env.OPENRM_CLAUDE_CONFIG || path.join(os.homedir(), '.claude.json')
 // "비서 껏다키면 이전에 명령한것 지워져" — CONTROL_CWD가 앱 루트 자체였던 시절엔, 이 코드베이스에서
@@ -75,6 +76,16 @@ function controlSeed(extra) {
 	const port = process.env.OPENRM_PORT || 8770
 	const operator = Settings.operatorName()
 	return `[역할: OpenTask 하이브마인드] 너는 특정 태스크가 아니라 OpenTask 앱 전체를 대화로 조작하는 하이브마인드야. ${operator}가 너와 직접 대화한다. 바로 실행하지 말고 계획부터 보고하고 승인받아.
+
+■ 코드는 네가 직접 안 건드린다 — 하이브마인드=설계, 메인태스크(지휘자)=명령, 서브태스크=업무. 이 3단
+구조가 무너지면 안 된다. Bash로 조사하는 것(grep/read/git log, 스크린샷으로 화면 확인 등)은 괜찮지만,
+Edit/Write로 레포 파일을 고치거나 git commit/push를 하는 건 네 역할이 아니다 — ${operator}가 이미지
+붙여서 "이것도 저거처럼 고쳐줘"처럼 바로 손대고 싶은 요청을 해도 마찬가지다. 코드 작업이 필요하면:
+- 그 태스크가 이미 시작돼 지휘자가 살아있으면 dispatch_to_task로 구체적으로 지시해라.
+- 아직 시작 안 됐거나(일감함) 서브태스크가 전부 완료돼 지휘자가 없으면, create_subtask로 뭘 해야
+  하는지 명확히 적은 서브태스크를 만들고, ${operator}에게 "서브태스크 만들어뒀습니다 — 상세페이지에서
+  개발 시작을 눌러주세요"라고 안내해라. 네가 대신 실제 워크트리+클로드 세션을 못 띄운다(§ 아래
+  create_subtask 설명) — 이건 제약이지 우회할 방법을 찾으라는 뜻이 아니다.
 
 ■ 언어: ${operator}가 쓰는 언어에 맞춰 답변해라 — 영어로 물으면 영어로, 한국어로 물으면 한국어로. 대화
 도중 상대가 언어를 바꾸면 너도 바로 그 언어로 전환한다.
@@ -156,20 +167,63 @@ async function checkStalled() {
 // 지휘자 세션과 같은 복원 경로(claude --continue + continueFallbackSeed)를 그대로 따른다 — CONTROL_CWD가
 // 비서 전용 고정 디렉토리라 --continue가 정확히 이 비서의 마지막 대화를 이어받고, 이어받을 대화가
 // 없을 때만(최초 시작 등, term.cjs watchContinueFallback) 이 seed로 새로 시작한다.
+// "무조건 이렇게 동작하도록 할 수 있을까?" — 프롬프트(§ controlSeed "코드는 네가 직접 안 건드린다")만으론
+// 강제가 아니라 요청일 뿐이다(에이전트가 무시할 수 있다 — 실제로 그랬다, § GBIZ-30781 사고). Claude
+// Code CLI의 --disallowedTools로 세션 시작 시점에 아예 도구 자체를 막는다 — 이건 권한 프롬프트(허용/거부
+// 다이얼로그)가 아니라 무조건 차단이라 하이브마인드가 뭐라고 판단하든 우회할 수 없다(§scheduler.cjs
+// runInstruction의 --allowedTools와 같은 발상, 여기선 화이트리스트가 아니라 블랙리스트 — 하이브마인드는
+// Slack 등 다른 MCP 툴도 정당하게 쓰므로 전체 허용목록을 여기서 다시 나열하면 깨지기 쉽다). Edit/Write/
+// NotebookEdit(파일 직접 수정)과 git commit/add/push(Bash로 우회해도 최종적으로 커밋은 못 함)만 막고,
+// grep/read/git log 같은 조사용 Bash는 그대로 둔다(§ 운영 모드 상태 점검에 필요).
+const CONTROL_DISALLOWED_TOOLS = "'Edit,Write,NotebookEdit,Bash(git commit:*),Bash(git add:*),Bash(git push:*)'"
+
+// 하이브마인드를 띄우는 명령 한 줄 — start()/reset()이 각자 조립하던 걸 합친다(모델·차단 도구·tmux
+// 래핑은 항상 같아야 하고, 다른 건 --continue 하나뿐이다).
+// tmux 있으면 claude를 직접 타이핑해 넣는 대신 `tmux new-session -A`(있으면 붙고, 없으면 만듦)로
+// 감싼다 — 서버가 재시작돼도 tmux 데몬 밑의 claude 프로세스는 안 죽으니 다음 start() 호출이 즉시
+// 그 세션에 재부착된다("계속 유지" 요청).
+//
+// --model을 여기서 직접 박는 이유: Term.create의 모델 자동 주입은 명령이 `claude`로 시작할 때만
+// 걸리는데(§term.cjs create의 정규식), tmux로 감싸면 claude가 따옴표 안쪽에 들어가 그 규칙에 안
+// 걸린다. 그래서 헤더엔 "Opus 5 (비용 잠금)"이 떠 있는데 실제 프로세스엔 --model이 없는 상태로
+// 오래 돌고 있었다(`ps`로 확인) — 라벨이 거짓말을 하지 않게 실제로 고정한다.
+function buildCommand(model, { resume }) {
+	const inner = `claude --model ${model}${resume ? ' --continue' : ''} --disallowedTools ${CONTROL_DISALLOWED_TOOLS}`
+	return Term.hasTmux() ? `tmux new-session -A -s ${TMUX_SESSION} -c "${CONTROL_CWD}" "${inner}"` : inner
+}
+
+// --continue는 이 cwd에 이어받을 대화가 실제로 있을 때만 의미가 있다. 없으면 claude가 즉시
+// "No conversation found to continue"를 내고 죽는데, tmux로 감싸면 그 화면이 통째로 걷혀버려서
+// term.cjs의 폴백 감시가 제때 못 잡는다(§term.cjs watchContinueFallback의 대체 화면 주석 — 그 결과
+// 하이브마인드가 맨 zsh 프롬프트에 방치되고 사람이 보낸 말이 전부 셸 명령으로 들어갔다, 2026-09-04).
+// 게다가 CONTROL_CWD는 포트별로 갈리므로(위 주석) "기록이 아예 없는" 상태는 예외가 아니라 아주 흔한
+// 정상 케이스다(dev는 8770, 패키징 앱은 18771 — 실행 방식만 바꿔도 빈 cwd가 된다). 폴백 감시를
+// 안전망으로만 남겨두고, 처음부터 맞는 명령으로 띄운다.
+function hasResumableConversation(cwd) {
+	try {
+		return fs.readdirSync(Transcript.projectDirFor(cwd)).some((f) => f.endsWith('.jsonl'))
+	} catch (_) {
+		return false
+	}
+}
+
 async function start(extra) {
 	const live = await Term.list().catch(() => [])
 	if (state && isLive(live, state.session)) return { ok: true, already: true, ...state }
 	registerControlMcp(CONTROL_CWD)
 	const model = Settings.modelFor('control')
-	// tmux 있으면 claude를 직접 타이핑해 넣는 대신 `tmux new-session -A`(있으면 붙고, 없으면 만듦)로
-	// 감싼다 — 서버가 재시작돼도 tmux 데몬 밑의 claude 프로세스는 안 죽으니 다음 start() 호출이
-	// 즉시 그 세션에 재부착된다("계속 유지" 요청). watchContinueFallback은 화면을 그대로 패스스루로
-	// 보므로 최초 생성 때는 지금처럼 동작하고, 재부착 때는 이미 붙어있는 화면이라 두 감지 조건 다
-	// 안 걸려 60초 뒤 조용히 끝난다(무해함).
-	const command = Term.hasTmux()
-		? `tmux new-session -A -s ${TMUX_SESSION} -c "${CONTROL_CWD}" "claude --continue"`
-		: 'claude --continue'
-	const t = await Term.create({ cwd: CONTROL_CWD, command, label: 'control', model, continueFallbackSeed: controlSeed(extra) })
+	const resume = hasResumableConversation(CONTROL_CWD)
+	const command = buildCommand(model, { resume })
+	// 이어받을 게 있으면 예전대로 --continue + 폴백 시드(이어받기 실패 시에만 씀), 없으면 처음부터
+	// 새 대화이므로 reset()과 같은 경로 — seed를 바로 주입한다.
+	const seedText = controlSeed(extra)
+	const t = await Term.create({
+		cwd: CONTROL_CWD,
+		command,
+		label: 'control',
+		model,
+		...(resume ? { continueFallbackSeed: seedText } : { seed: seedText }),
+	})
 	if (!t.ok) return { ok: false, error: t.error }
 	const modelLabel = Settings.modelLabelFor('control')
 	state = { session: t.name, model, modelLabel, startedAt: Date.now(), cwd: CONTROL_CWD }
@@ -205,7 +259,7 @@ async function reset(extra) {
 	state = null
 	registerControlMcp(CONTROL_CWD)
 	const model = Settings.modelFor('control')
-	const command = Term.hasTmux() ? `tmux new-session -A -s ${TMUX_SESSION} -c "${CONTROL_CWD}" "claude"` : 'claude'
+	const command = buildCommand(model, { resume: false })
 	const t = await Term.create({ cwd: CONTROL_CWD, command, label: 'control', model, seed: controlSeed(extra) })
 	if (!t.ok) return { ok: false, error: t.error }
 	const modelLabel = Settings.modelLabelFor('control')
@@ -228,7 +282,7 @@ async function ask(text) {
 	if (!text || !String(text).trim()) return { ok: false, error: 'text 필수' }
 	const live = await Term.list().catch(() => [])
 	if (state && isLive(live, state.session)) {
-		const oneLine = String(text).replace(/[\r\n]+/g, ' ').slice(0, 2000)
+		const oneLine = Term.toOneLine(text)
 		await Term.injectSeed(state.session, oneLine).catch(() => {})
 		return { ok: true, already: true, ...state }
 	}

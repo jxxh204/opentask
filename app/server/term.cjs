@@ -424,8 +424,21 @@ async function exists(name) {
 function containsIgnoringWhitespace(screen, needle) {
   return screen.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''))
 }
+// 주입 문자열 상한 — 예전엔 호출부마다 `.slice(0, 2000)`이 하드코딩돼 있었는데, 하이브마인드 역할
+// 시드가 2,573자로 자라면서 뒤 573자(크론잡·설정 툴 설명, curl 폴백, "■ 원칙", 그리고 ask()로 함께
+// 실어 보낸 사람의 실제 질문 "■ 지금 바로 이걸 도와줘")가 통째로 잘려 나가고 있었다 — 조용히 잘리니
+// 아무도 몰랐다(2026-09-04 확인). 200열 pty에서 4,000자는 20줄 남짓이라 입력창에 그대로 들어간다.
+const INJECT_MAX_CHARS = 4000
+function toOneLine(text) {
+  return String(text).replace(/[\r\n]+/g, ' ').slice(0, INJECT_MAX_CHARS)
+}
 async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 } = {}) {
-  const marker = oneLine.slice(0, 12)
+  // 긴 지시문은 붙여넣는 순간 입력창이 여러 줄로 불어나 앞부분이 화면 밖으로 밀릴 수 있다 — 앞 12자
+  // 하나만 보면 그때 "안 꽂혔다"로 오판해 60초 내내 재시도만 하다 끝난다. 앞/뒤 어느 쪽이든 보이면
+  // 꽂힌 것으로 본다.
+  const head = oneLine.slice(0, 12)
+  const tail = oneLine.slice(-24)
+  const onScreen = (s) => containsIgnoringWhitespace(s, head) || containsIgnoringWhitespace(s, tail)
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     const entry = sessions.get(name)
@@ -434,7 +447,7 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
     entry.proc.write(oneLine)
     await new Promise((res) => setTimeout(res, 400))
     const screen = capturePane(name) || ''
-    if (containsIgnoringWhitespace(screen, marker)) {
+    if (onScreen(screen)) {
       // 텍스트가 화면에 꽂힌 것과 그 순간 Enter를 "제출"로 처리할 준비가 된 것은 다르다(claude
       // TUI 버전에 따라 렌더링↔입력 처리 타이밍이 어긋날 수 있음 — 실측: Enter 한 번으로도, 600ms
       // 후 재확인+한 번 더로도 씹혀서 프롬프트에 텍스트만 남고 제출 안 된 채 멈추는 케이스 확인됨,
@@ -444,7 +457,7 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
         entry.proc.write('\r')
         await new Promise((res) => setTimeout(res, 1200))
         const after = capturePane(name) || ''
-        if (!containsIgnoringWhitespace(after, marker)) break // marker가 화면에서 사라짐 = 제출됨
+        if (!onScreen(after)) break // 화면에서 사라짐 = 제출됨
       }
       return true
     }
@@ -477,10 +490,41 @@ const RESUME_PROMPT_RE = /Resuming the full session will consume|Resume from sum
 // 아래 있던 경우). `claude --continue`가 "No conversation found to continue"를 내고 그냥 셸
 // 프롬프트로 떨어지면, 세션 이름/자리는 그대로 둔 채 같은 세션 안에서 이어받기 없이 새로 켠다 —
 // 사람이 매번 죽은 세션을 보고 수동으로 재시작할 필요 없게.
+//
+// ⚠️ tmux로 감싼 명령(§ control.cjs의 하이브마인드, 아래 create()의 terminalTmux 자동 래핑)에선 이
+// "화면을 보고 판단한다"가 통째로 무너진다 — tmux는 붙는 순간 대체 화면(alternate screen)으로
+// 넘어가고, 안쪽 claude가 죽으면 세션째 끝나면서 그 화면을 통째로 되돌린다. 실측(2026-09-04, 하이브
+// 마인드 전면 먹통 사고)으로 확인된 연쇄: ① "No conversation found..."는 이미 사라지는 중인 tmux
+// 화면에서만 잠깐 보이고, ② 그걸 보고 쏜 폴백 명령은 바깥 셸이 아니라 죽어가는 tmux로 들어가 통째로
+// 유실되고, ③ 대체 화면이 걷히면 그 문자열이 화면에 없는 게 당연하니 아래 성공 판정이 무조건 참이 돼
+// "새로 켜졌다"고 오인하고, ④ 그 상태로 seed까지 주입해 맨 zsh 프롬프트에 역할 지시문이 타이핑된다
+// (`zsh: bad pattern: [역할:`). 그 뒤로는 사람이 보낸 말도 전부 셸 명령이 된다(`command not found:
+// 전체`) — 세션 자체는 살아있으니 UI는 영원히 "생성 중"으로 돈다. 그래서 tmux 래핑이면 실패 감지도
+// 성공 판정도 화면이 아니라 tmux 자신에게 묻는다(has-session).
+function tmuxSessionOf(cmd) {
+  const m = String(cmd)
+    .trim()
+    .match(/^tmux\s+new-session\b.*?\s-s\s+(\S+)/)
+  return m ? m[1] : null
+}
+function tmuxAlive(session) {
+  if (!session) return false
+  try {
+    execFileSync('tmux', ['has-session', '-t', session], { stdio: 'ignore' })
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
 async function watchContinueFallback(name, cmd, fallbackSeed) {
   if (!/--continue\b/.test(String(cmd))) return
+  const fallback = String(cmd).replace(/\s*--continue\b/, '').trim()
+  if (!fallback) return
+  const tmuxName = tmuxSessionOf(cmd)
   const start = Date.now()
   let resumeConfirmed = false
+  let deadPolls = 0
   // "처음엔 컨티뉴가없는데 명령하니까 문제가 생기는거였네" — 8초 안에 못 잡으면 이 워처는 그냥
   // 조용히 포기하고, "No conversation found..." 에러만 화면에 남은 채 아무도 새로 안 켜준다.
   // claude CLI 콜드스타트가 8초를 넘기는 경우가 실측됐다(병렬 세션 많을 때 특히) — 같은 이유로
@@ -495,33 +539,48 @@ async function watchContinueFallback(name, cmd, fallbackSeed) {
       resumeConfirmed = true
       continue
     }
-    if (/No conversation found to continue/i.test(screen)) {
-      const fallback = String(cmd).replace(/\s*--continue\b/, '').trim()
-      if (!fallback) return
-      // 셸이 "No conversation found..." 에러를 아직 다 그리는 중일 때 바로 다음 명령을 흘려보내면
-      // 프롬프트에 씹혀 타이핑만 되고 제출이 안 된 채 남는 경우가 실측됐다(injectSeed가 겪은 것과
-      // 같은 종류의 렌더링↔입력 타이밍 문제) — Ctrl-U로 잔여 입력을 지우고 재시도하며, 화면에서
-      // 이 명령 문자열 그대로가 사라지거나(=클로드 스플래시가 그 자리를 덮음) claude TUI 신호가
-      // 뜨는 걸로 실제 제출을 확인한다.
-      for (let i = 0; i < 5; i++) {
-        entry.proc.write('\x15')
-        entry.proc.write(fallback + '\r')
-        await new Promise((res) => setTimeout(res, 1500))
+    if (tmuxName) {
+      // tmux 세션이 살아있으면 정상 — 죽었으면(=안쪽 claude가 즉시 끝났으면) 이유가 뭐든 폴백 대상이다.
+      // 셸/tmux 콜드스타트를 감안해 8초는 봐주고, 그 뒤 두 번 연속 없을 때만 실패로 확정한다. 화면의
+      // "No conversation found..."를 못 보고 지나쳐도(위 대체 화면 문제) 여기서 잡힌다.
+      if (Date.now() - start < 8000 || tmuxAlive(tmuxName)) {
+        deadPolls = 0
+        continue
+      }
+      if (++deadPolls < 2) continue
+    } else if (!/No conversation found to continue/i.test(screen)) {
+      continue
+    }
+    // 셸이 "No conversation found..." 에러를 아직 다 그리는 중일 때 바로 다음 명령을 흘려보내면
+    // 프롬프트에 씹혀 타이핑만 되고 제출이 안 된 채 남는 경우가 실측됐다(injectSeed가 겪은 것과
+    // 같은 종류의 렌더링↔입력 타이밍 문제) — Ctrl-U로 잔여 입력을 지우고 재시도하며, 실제로 새
+    // 세션이 떴는지 확인될 때까지 최대 4초 기다린 뒤에만 다음 시도로 넘어간다(1.5초 한 번만 보고
+    // 재시도하면, 늦게 뜬 세션 안으로 같은 명령을 한 번 더 타이핑해 넣게 된다).
+    for (let i = 0; i < 5; i++) {
+      const e = sessions.get(name)
+      if (!e || e.exited) return
+      e.proc.write('\x15')
+      e.proc.write(fallback + '\r')
+      let relaunched = false
+      for (let j = 0; j < 8 && !relaunched; j++) {
+        await new Promise((res) => setTimeout(res, 500))
         const after = capturePane(name) || ''
-        if (!after.includes(fallback) || /esc to interrupt|for agents|Claude Code/i.test(after)) {
-          // "태스크 매니저가 직접 개발했어" — --continue가 실패해 이어받을 대화 없이 맨몸으로 새로
-          // 켜진 세션이다. 최초 생성 때만 주는 역할 지시(seed)를 여기서도 넣어주지 않으면 자기가
-          // 지휘자인지도 모른 채 평범한 코딩 에이전트처럼 직접 다 구현해버린다.
-          const seedText = fallbackSeed && String(fallbackSeed).trim()
-          if (seedText) {
-            const oneLine = seedText.replace(/[\r\n]+/g, ' ').slice(0, 2000)
-            injectSeed(name, oneLine).catch(() => {})
-          }
-          return
-        }
+        // tmux면 세션 존재가 유일하게 믿을 수 있는 신호다. 아니면 예전대로 화면에서 이 명령 문자열이
+        // 사라지거나(=클로드 스플래시가 그 자리를 덮음) claude TUI 신호가 뜨는 걸로 제출을 확인한다.
+        relaunched = tmuxName ? tmuxAlive(tmuxName) : !after.includes(fallback) || /esc to interrupt|for agents|Claude Code/i.test(after)
+      }
+      if (!relaunched) continue
+      // "태스크 매니저가 직접 개발했어" — --continue가 실패해 이어받을 대화 없이 맨몸으로 새로
+      // 켜진 세션이다. 최초 생성 때만 주는 역할 지시(seed)를 여기서도 넣어주지 않으면 자기가
+      // 지휘자인지도 모른 채 평범한 코딩 에이전트처럼 직접 다 구현해버린다.
+      const seedText = fallbackSeed && String(fallbackSeed).trim()
+      if (seedText) {
+        const oneLine = toOneLine(seedText)
+        injectSeed(name, oneLine).catch(() => {})
       }
       return
     }
+    return
   }
 }
 
@@ -578,7 +637,7 @@ async function create({ cwd, command, label, seed, model, mcpFolderId, continueF
   }
   const seedText = seed && String(seed).trim()
   if (seedText) {
-    const oneLine = seedText.replace(/[\r\n]+/g, ' ').slice(0, 2000)
+    const oneLine = toOneLine(seedText)
     injectSeed(name, oneLine).catch(() => {})
   }
   recordSession(name, cwd, entry.label, command, model)
@@ -933,6 +992,7 @@ module.exports = {
   // 렌더링 중이면 씹혀 유실될 수 있다. injectSeed는 원래 새 세션 최초 지시 전용이었지만 화면에
   // 실제로 찍혔는지 확인하고 제출까지 재시도하는 유일한 함수라 control.cjs의 ask()도 그대로 재사용한다.
   injectSeed,
+  toOneLine, // injectSeed에 넣기 전 정규화(개행 제거 + 상한) — 호출부마다 다른 숫자를 쓰지 않게.
   startDevServer,
   stopDevServer,
   devSessionForPort,

@@ -99,6 +99,11 @@ function stripAnsi(s) {
 // 한다(모듈 의존 방향을 지키려고 상수 import 대신 문자열을 그대로 복제 — transcript.cjs는 순수 파싱
 // 유틸이라 control.cjs를 require하지 않는다).
 const OPS_TICK_MARKER = '[운영 모드 자동 점검]'
+// "하이브마인드도 알아야함" — 사람이 서브태스크 체크리스트를 직접 토글했을 때 프론트가 askControl로
+// 찔러 넣는 알림(§ SubtaskUiBlocks.tsx)도 같은 이유로 사람 말풍선과 구분해야 한다. 같은
+// 문자열 그대로 복제 원칙(위 주석)을 그대로 따른다.
+const UI_BLOCK_EDIT_MARKER = '[서브태스크 UI 변경]'
+const AUTO_MARKERS = [OPS_TICK_MARKER, UI_BLOCK_EDIT_MARKER]
 
 // jsonl 한 줄(entry)들 → 채팅 턴 배열. 각 줄이 이미 claude 자신의 턴 경계라 그대로 1턴=1버블로
 // 쓴다(여러 줄을 하나로 합치는 휴리스틱은 오히려 실제 순서·타이밍을 왜곡할 위험이 있어 안 씀).
@@ -149,9 +154,9 @@ function parseTranscript(filePath, { skipFirstUser = true, maxTurns = 60 } = {})
 				seenFirstUser = true
 				if (skipFirstUser) continue
 			}
-			const isOpsTick = content.startsWith(OPS_TICK_MARKER)
-			const text = stripAnsi(isOpsTick ? content.slice(OPS_TICK_MARKER.length).trim() : content)
-			turns.push({ id: r.uuid, role: 'user', ts: r.timestamp, auto: isOpsTick || undefined, parts: [{ kind: 'text', text }] })
+			const marker = AUTO_MARKERS.find((m) => content.startsWith(m))
+			const text = stripAnsi(marker ? content.slice(marker.length).trim() : content)
+			turns.push({ id: r.uuid, role: 'user', ts: r.timestamp, auto: !!marker || undefined, parts: [{ kind: 'text', text }] })
 			continue
 		}
 		if (r.type === 'assistant') {

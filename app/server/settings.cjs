@@ -4,34 +4,41 @@ const path = require('path')
 const FILE = process.env.OPENRM_SETTINGS_FILE || path.join(__dirname, '..', '.openrm-settings.json')
 // 액션별 모델 자동 배분 — 작업 난이도↔티어(비용). 티어: Fable(설계·지휘, 최고가) > Opus(제품코드) > Sonnet(표준) > Haiku(추출·기계).
 // Fable-5는 굉장히 비싸므로 '설계/고복잡도'에만. 나머지는 검증된 저비용 티어로.
+// 2026-09 세대 갱신 — Fable 5→5.1, Opus 4.8→5, Sonnet 4.6→5(가격도 동일하거나 더 저렴: Opus 5는
+// 4.8과 같은 $5/$25, Sonnet 5는 4.6의 $3/$15보다 싼 $2/$10 — 같은 티어 구조를 그대로 최신 세대로
+// 옮기기만 하면 비용은 안 늘고 성능만 오른다). Haiku 4.5는 아직 그 티어의 최신이라 그대로 둔다.
+// "fable은 하이브마인드만 쓰고 다쓰면 opus로 대체하도록" — 컨덕터(orchestrator)가 여러 개 동시에
+// 뜨면(폴더마다 하나) fable 주간 한도를 순식간에 나눠 쓰고 전부 멈춘 사고가 있었다(2026-09-04).
+// fable은 이제 하이브마인드(control, 항상 하나만 뜸) 전용 — design/orchestrator는 기본이 opus다.
+// 그래도 control이 언젠가 fable 한도를 다 쓰면 fableLock(아래 modelFor)이 opus로 대체한다.
 const MODEL_POLICY = {
-	design: 'claude-fable-5', // 설계·아키텍처 (고복잡도, 비싼 만큼 여기만)
-	orchestrator: 'claude-fable-5', // 그룹 지휘/교차검증 (복잡도 최상)
-	control: 'claude-fable-5', // 관제 에이전트(앱 전체: 캘린더/크론잡/설정 조작) — 지휘자와 동급 복잡도
-	dev: 'claude-opus-4-8', // ▶진행 제품 코딩
-	qa: 'claude-sonnet-4-6', // QA TC 생성
-	verify: 'claude-sonnet-4-6', // TC 검증(playwright)
-	monitor: 'claude-sonnet-4-6', // 운영/PR 모니터 루프
-	debug: 'claude-sonnet-4-6', // 디버깅 요소 명령
-	backlog: 'claude-sonnet-4-6', // 백로그 생성 — Notion MCP + 구조화라 haiku는 부족(안전)
-	enrich: 'claude-sonnet-4-6', // 스레드 정리 — Slack/Notion MCP + 추출(안전)
+	design: 'claude-opus-5', // 설계·아키텍처
+	orchestrator: 'claude-opus-5', // 그룹 지휘/교차검증
+	control: 'claude-fable-5-1', // 관제 에이전트(하이브마인드, 앱 전체) — fable을 쓰는 유일한 역할
+	dev: 'claude-opus-5', // ▶진행 제품 코딩
+	qa: 'claude-sonnet-5', // QA TC 생성
+	verify: 'claude-sonnet-5', // TC 검증(playwright)
+	monitor: 'claude-sonnet-5', // 운영/PR 모니터 루프
+	debug: 'claude-sonnet-5', // 디버깅 요소 명령
+	backlog: 'claude-sonnet-5', // 백로그 생성 — Notion MCP + 구조화라 haiku는 부족(안전)
+	enrich: 'claude-sonnet-5', // 스레드 정리 — Slack/Notion MCP + 추출(안전)
 	classify: 'claude-haiku-4-5', // 업무 코드/비개발 판정 — 제목·요약만 보는 경량 분류(초경량 haiku)
-	ops: 'claude-sonnet-4-6', // 비개발 업무 자동수행 — Notion 쓰기+구조화+리서치(MCP), haiku 부족(안전)
-	review: 'claude-opus-4-8', // PR 코드 리뷰(diff 분석·이슈 도출) — dev/improve와 동급. 검증자가 실행자(opus)보다 약하면 안 됨(하네스 원칙)
-	improve: 'claude-opus-4-8', // 리뷰대로 코드 개선(제품 코드 수정·커밋·푸시)
-	link: 'claude-sonnet-4-6', // 배포 백로그 연결 — Notion relation 읽고 병합(안전)
+	ops: 'claude-sonnet-5', // 비개발 업무 자동수행 — Notion 쓰기+구조화+리서치(MCP), haiku 부족(안전)
+	review: 'claude-opus-5', // PR 코드 리뷰(diff 분석·이슈 도출) — dev/improve와 동급. 검증자가 실행자(opus)보다 약하면 안 됨(하네스 원칙)
+	improve: 'claude-opus-5', // 리뷰대로 코드 개선(제품 코드 수정·커밋·푸시)
+	link: 'claude-sonnet-5', // 배포 백로그 연결 — Notion relation 읽고 병합(안전)
 	translate: 'claude-haiku-4-5', // 브랜치명 번역(초경량 — haiku 적합)
-	ppt: 'claude-sonnet-4-6', // PPT 제작 — 발표 덱 초안 생성(구조화 JSON, 품질 필요 → sonnet)
+	ppt: 'claude-sonnet-5', // PPT 제작 — 발표 덱 초안 생성(구조화 JSON, 품질 필요 → sonnet)
 	// 태스크 기간 추정 — "탐색은 단순 모델, 판단은 무거운 모델" 2단계 분리(사용자 제안).
 	// grep/read는 패턴 매칭 수준이라 haiku로 충분하고, 반복되는 탐색 턴마다 무거운 모델을 쓰는 게
 	// 그동안의 시간·토큰 낭비의 핵심이었다 — 판단(추론)은 단 한 번만 무거운 모델을 태운다.
 	estimateExplore: 'claude-haiku-4-5', // 1단계 — 코드 탐색(grep/read/bash), 속도 우선
-	estimateJudge: 'claude-opus-4-8', // 2단계 — 조사 결과로 실제 일정 판단, review와 동급 추론력 필요
+	estimateJudge: 'claude-opus-5', // 2단계 — 조사 결과로 실제 일정 판단, review와 동급 추론력 필요
 	// "태스크 상세에 너무 정보가 없어... 이것만 보면 개발할 수 있다 정도 요약정보" — 노션/피그마
 	// 링크 텍스트 요약(link.brief.*)과 코드 근거 조사(code.brief.*, grep/read + file:line 근거 요구라
 	// enrich/estimateExplore와 동급 신뢰도 필요) 둘 다 구조화 JSON + MCP/도구 사용이라 haiku는 부족.
-	linkBrief: 'claude-sonnet-4-6',
-	codeBrief: 'claude-sonnet-4-6',
+	linkBrief: 'claude-sonnet-5',
+	codeBrief: 'claude-sonnet-5',
 }
 // operatorName — 이 인스턴스의 운영자(리뷰어) 이름. 오픈소스 배포라 특정인에 하드코딩 금지 → 설정으로 노출.
 // 기본값 '운영자'는 프롬프트/피드에 그대로 넣어도 조사(가/에게)가 자연스럽게 붙는 일반 명사.
@@ -45,7 +52,7 @@ function modelFor(action) {
 	const p = s.modelPolicy || {}
 	let m = p[action] || MODEL_POLICY[action] || null
 	// Fable 잠금 — 켜지면 fable로 배분될 작업을 opus로 스왑(비용 차단). 지휘·설계도 opus로.
-	if (s.fableLock && m && /fable/.test(m)) m = 'claude-opus-4-8'
+	if (s.fableLock && m && /fable/.test(m)) m = 'claude-opus-5'
 	return m
 }
 // 모델 id → 표시용 라벨 — 가족 이름 + 버전(예: 'claude-opus-4-8' → 'Opus 4.8'). 예전엔 가족만

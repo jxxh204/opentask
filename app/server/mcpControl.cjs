@@ -48,6 +48,18 @@ function ok(data) {
 	return { content: [{ type: 'text', text: JSON.stringify(data) }], isError: data && data.ok === false }
 }
 
+// "하이브마인드가 서브태스크에 원한다면 ui를 추가할 수 있으면 좋겠어. json형태로 mapping" — 서브태스크
+// 상세 패널(§ SubtaskUiBlocks.tsx)에 직접 렌더되는 자리라 report_html(§ db.cjs v25, 항상 webview/외부
+// 브라우저로만 격리해서 여는 자리)과 달리 raw HTML/JS는 안 받는다 — 닫힌 블록 타입 화이트리스트만.
+// button의 액션도 "하이브마인드에게 prompt로 재질문" 하나로 고정(임의 URL 열기·명령 실행 등 위험한
+// 액션은 처음부터 어휘에 없음).
+const UiBlockSchema = z.discriminatedUnion('type', [
+	z.object({ type: z.literal('checklist'), title: z.string().optional(), items: z.array(z.object({ id: z.string(), label: z.string(), checked: z.boolean() })) }),
+	z.object({ type: z.literal('table'), title: z.string().optional(), headers: z.array(z.string()), rows: z.array(z.array(z.string())) }),
+	z.object({ type: z.literal('kv'), title: z.string().optional(), pairs: z.array(z.object({ key: z.string(), value: z.string() })) }),
+	z.object({ type: z.literal('button'), label: z.string(), prompt: z.string() }),
+])
+
 const server = new McpServer({ name: 'opentask-control', version: '1.0.0' })
 
 server.registerTool(
@@ -184,13 +196,15 @@ server.registerTool(
 	'update_subtask',
 	{
 		title: '서브태스크 수정',
-		description: '서브태스크의 이름/설명/예정일/기간을 수정한다.',
+		description:
+			'서브태스크의 이름/설명/예정일/기간/UI 블록을 수정한다. uiBlocks는 사람이 볼 구조화된 정보(체크리스트/표/key-value/재질문 버튼)를 서브태스크에 직접 붙일 때 쓴다 — 채팅에 표로 길게 쓰는 대신 이걸로 남겨라(title로 이름 붙여라, 예: "테스트 종류별 아이디 매트릭스"). 배열 전체를 항상 통째로 덮어쓴다(부분 추가 아님) — 기존 블록을 유지하려면 현재 서브태스크 조회 결과(list_tasks)의 ui_blocks를 먼저 확인하고 합쳐서 보내라.',
 		inputSchema: {
 			subtaskId: z.string(),
 			name: z.string().optional(),
 			desc: z.string().optional(),
 			dueDate: z.union([z.string(), z.number(), z.null()]).optional(),
 			durationDays: z.number().nullable().optional(),
+			uiBlocks: z.array(UiBlockSchema).optional(),
 		},
 	},
 	async ({ subtaskId, dueDate, ...patch }) => {
