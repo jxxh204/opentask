@@ -1935,7 +1935,7 @@ const server = http.createServer((req, res) => {
           : b && b.seed
         // 모델: 카드에서 지정(b.model)이 있으면 그걸(잠금 시 fable→opus), 없으면 정책 기본(dev/debug)
         const chosen = (b && b.model) || Settings.modelFor(/^dbg-/i.test(String(label)) ? 'debug' : 'dev')
-        const model = Settings.get('fableLock') && /fable/.test(String(chosen)) ? 'claude-opus-4-8' : chosen
+        const model = Settings.get('fableLock') && /fable/.test(String(chosen)) ? 'claude-opus-5' : chosen
         const t = await Term.create({ cwd, command, label, seed, model })
         if (!t.ok) return sendJSON(res, 400, { ok: false, stage: 'term', error: t.error, worktree: wt })
         sendJSON(res, 200, { ok: true, worktree: wt, resumed, ...t })
@@ -1977,7 +1977,7 @@ const server = http.createServer((req, res) => {
         Tasks.build({ force: true }).catch(() => {}) // 보드 갱신
         if (!wt.ok) return sendJSON(res, 200, { ok: true, recreated: false, removed, errors: [...errors, '재생성 실패: ' + wt.error] })
         const chosen = (b && b.model) || Settings.modelFor('dev')
-        const model = Settings.get('fableLock') && /fable/.test(String(chosen)) ? 'claude-opus-4-8' : chosen
+        const model = Settings.get('fableLock') && /fable/.test(String(chosen)) ? 'claude-opus-5' : chosen
         const term = await Term.create({ cwd: wt.path, command: 'claude', label: wt.branch || ticket || wt.dir, seed: b && b.seed, model })
         if (!term.ok) return sendJSON(res, 200, { ok: true, recreated: false, removed, worktree: wt, errors: [...errors, '터미널 시작 실패: ' + term.error] })
         sendJSON(res, 200, { ok: true, recreated: true, removed, worktree: wt, name: term.name, errors })

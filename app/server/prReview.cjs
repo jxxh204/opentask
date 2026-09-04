@@ -206,8 +206,15 @@ async function postDisputeReply({ repo, prNumber, commentId, body }) {
 }
 
 // 재요청 에스컬레이션 사다리(§12) — 3회째부터는 같은 세션에 갇힌 컨텍스트에서 벗어나야 한다는 설계.
-// 모델 티어를 한 단계만 올린다(이미 최상위 fable이면 유지 — 더 올릴 데가 없음).
-const ESCALATE_MODEL = { 'claude-haiku-4-5': 'claude-sonnet-4-6', 'claude-sonnet-4-6': 'claude-opus-4-8', 'claude-opus-4-8': 'claude-fable-5' }
+// 모델 티어를 한 단계만 올린다(이미 최상위 fable이면 유지 — 더 올릴 데가 없음). 구세대 키도 남겨둔다
+// — 이 정책 갱신 전에 이미 배정된 태스크가 구세대 모델 문자열을 그대로 들고 있을 수 있어서다.
+const ESCALATE_MODEL = {
+	'claude-haiku-4-5': 'claude-sonnet-5',
+	'claude-sonnet-5': 'claude-opus-5',
+	'claude-opus-5': 'claude-fable-5-1',
+	'claude-sonnet-4-6': 'claude-opus-4-8',
+	'claude-opus-4-8': 'claude-fable-5',
+}
 
 // apply — 리뷰 → 브랜치 → 태스크의 라이브 워크트리 세션에 "리뷰 반영" 지시를 디스패치(orchestrator와 동일
 // Actuator 경로). 이미 'applied'였던 리뷰를 다시 요청하면 재요청으로 보고 attempts를 올린다 — 1~2회차는

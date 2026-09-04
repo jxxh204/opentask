@@ -25,9 +25,15 @@ const MODEL_ACTIONS: { id: string; label: string }[] = [
 	{ id: 'translate', label: '브랜치명 번역' },
 	{ id: 'ppt', label: 'PPT 제작' },
 ]
+// 2026-09 세대 갱신 — Fable 5.1/Opus 5/Sonnet 5를 새로 추가했다. 기존 항목(Fable 5/Opus 4.8/
+// Sonnet 4.6)은 그대로 남겨둔다 — 이미 그 문자열로 저장된 operator 설정이 있으면 드롭다운이
+// "선택 안 됨"처럼 빈 값으로 보이는 걸 막기 위해서다.
 const MODEL_OPTS = [
+	{ id: 'claude-fable-5-1', label: 'Fable 5.1' },
 	{ id: 'claude-fable-5', label: 'Fable 5' },
+	{ id: 'claude-opus-5', label: 'Opus 5' },
 	{ id: 'claude-opus-4-8', label: 'Opus 4.8' },
+	{ id: 'claude-sonnet-5', label: 'Sonnet 5' },
 	{ id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
 	{ id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ]
