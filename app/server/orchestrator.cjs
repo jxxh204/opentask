@@ -630,6 +630,9 @@ async function getBoardStatus() {
 		const folderVerify = folderState.verify || {}
 		const folderTaskVerify = folderState.taskVerify || {}
 		for (const task of StoreTasks.listByFolder(folder.id)) {
+			if (task.completed_at) continue // "완료 처리한 태스크는 트리에서 사라진다"와 같은 원칙 — 현황판도
+			// completed_at을 안 보고 마지막 세션의 살아있음/정체 여부만 봐서, 완료 처리해도 HOLDING에
+			// 계속 남아있던 버그(§ 사이드바 visibleFolders는 이미 걸러내고 있었음).
 			const subtasks = StoreSubtasks.listByTask(task.id)
 			let active = null
 			let lastDone = null
