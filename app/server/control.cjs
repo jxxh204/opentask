@@ -279,6 +279,12 @@ async function runOpsModeTick() {
 // **클릭 하나 = 지금 화면에 보이는 것 그대로 키 하나**로 좁혔다 — 그 편이 옵션 인덱스가 화면과
 // 어긋날 위험이 아예 없다(항상 방금 파싱한 실제 화면 기준으로만 키를 계산).
 const ASK_TRIGGER_RE = /Type something/
+// 권한 확인류(Bash 실행/파일 수정/ExitPlanMode 승인) — 화면 구조(❯ N. 라벨 목록)는 AskUserQuestion과
+// 똑같은데 자유 입력 슬롯("Type something")이 없어서 위 트리거만으론 못 잡혔다("가끔 터미널창을 그냥
+// 준다" — 실측 재현: Bash/Edit/Write 승인, ExitPlanMode 승인 전부 raw 폴백으로 떨어짐). 이 계열은 전부
+// "Do you want to ...?"/"Would you like to proceed?" 헤더로 시작하는 게 실측 공통점이라(§ term.cjs
+// status() waiting 판정과 같은 근거) 이걸 두 번째 트리거로 추가 — 아래 옵션 파싱 로직은 그대로 재사용.
+const CONFIRM_TRIGGER_RE = /Do you want to\b|Would you like to proceed\?/i
 function parseLivePrompt(text) {
 	if (!text) return null
 	// Review 화면 — 여러 질문에 다 답한 뒤 최종 확인. "1. Submit answers"가 항상 첫 항목이라 옵션
@@ -287,7 +293,7 @@ function parseLivePrompt(text) {
 		const m = text.match(/Review your answers\s*\n([\s\S]*?)\n\s*Ready to submit your answers\?/)
 		return { kind: 'review', summary: (m ? m[1] : '').trim() }
 	}
-	if (!ASK_TRIGGER_RE.test(text)) return null
+	if (!ASK_TRIGGER_RE.test(text) && !CONFIRM_TRIGGER_RE.test(text)) return null
 	const lines = text.split('\n')
 	// "❯ 1. Red" / "  2. [ ] Cheese" 형태 — 체크박스는 멀티선택일 때만 붙는다.
 	const optionRe = /^\s*❯?\s*(\d+)\.\s*(\[[ x✔]\]\s*)?(.+?)\s*$/
