@@ -2,7 +2,7 @@
 // 지금 포팅된 범위: /api/health, /api/settings(GET/POST), /api/blocked-periods(GET/POST/DELETE),
 // 정적 프론트(app/dist) 서빙. 나머지 라우트는 아직 없음 — index.cjs와 나란히 두고 커버리지를
 // 넓혀가는 중(§PORT_STATUS.md 없음, 진행상황은 대화/커밋 로그 참고).
-use opentask_server::{blocked_periods, branches, cockpit, control, cron_jobs, db, decisions, env_vars, folders, github_connect, link_brief, link_briefs, notify, orchestrator, repo_add, repos, scheduler, settings, setup, subtask_sessions, subtasks, tasks, term, transcript, worktrees};
+use opentask_server::{blocked_periods, branches, cockpit, control, cron_jobs, db, decisions, env_vars, folders, github_connect, holidays, link_brief, link_briefs, notify, orchestrator, repo_add, repos, scheduler, settings, setup, subtask_sessions, subtasks, tasks, term, transcript, worktrees};
 
 use axum::{
 	extract::{
@@ -128,6 +128,8 @@ async fn main() -> anyhow::Result<()> {
 		.route("/api/setup/github/oauth/start", axum::routing::post(post_setup_github_oauth_start))
 		.route("/api/setup/github/oauth/poll", axum::routing::post(post_setup_github_oauth_poll))
 		.route("/api/localip", get(get_localip))
+		.route("/api/holidays/countries", get(get_holidays_countries))
+		.route("/api/holidays", get(get_holidays))
 		.route("/api/dev/upload-image", axum::routing::post(post_dev_upload_image))
 		.route("/api/branches", axum::routing::post(create_branch))
 		.route("/api/branches/:id", axum::routing::patch(update_branch).delete(delete_branch))
@@ -1030,6 +1032,31 @@ async fn post_dev_upload_image(body: Option<Json<UploadImageInput>>) -> impl Int
 fn rand_u16() -> u16 {
 	use std::time::{SystemTime, UNIX_EPOCH};
 	(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().subsec_nanos() % 10000) as u16
+}
+
+async fn get_holidays_countries() -> impl IntoResponse {
+	match holidays::list_countries().await {
+		Ok(countries) => (StatusCode::OK, Json(json!({"ok": true, "countries": countries}))).into_response(),
+		Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"ok": false, "error": e}))).into_response(),
+	}
+}
+
+#[derive(serde::Deserialize, Default)]
+struct HolidaysQuery {
+	country: Option<String>,
+	years: Option<String>,
+}
+
+async fn get_holidays(Query(q): Query<HolidaysQuery>) -> impl IntoResponse {
+	let country = q.country.unwrap_or_else(|| "KR".to_string()).to_uppercase();
+	let years: Vec<i32> = q.years.unwrap_or_default().split(',').filter_map(|y| y.trim().parse::<i32>().ok()).filter(|y| *y > 1900 && *y < 2200).collect();
+	if years.is_empty() {
+		return (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "error": "years 필수 (예: years=2025,2026)"}))).into_response();
+	}
+	match holidays::get_holidays(&country, &years).await {
+		Ok(list) => (StatusCode::OK, Json(json!({"ok": true, "country": country, "holidays": list}))).into_response(),
+		Err(_) => (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "error": format!("알 수 없는 국가 코드: {country}")}))).into_response(),
+	}
 }
 
 async fn get_cockpit(State(state): State<Arc<AppState>>) -> impl IntoResponse {

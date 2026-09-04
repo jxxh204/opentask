@@ -14,6 +14,7 @@ pub mod decisions;
 pub mod env_vars;
 pub mod folders;
 pub mod github_connect;
+pub mod holidays;
 pub mod link_brief;
 pub mod link_briefs;
 pub mod notify;
