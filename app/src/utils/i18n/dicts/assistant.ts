@@ -14,6 +14,19 @@ const dict: Record<string, string> = {
 	'하이브마인드에게 메시지… (이미지 붙여넣기 가능)': 'Message the Hivemind… (you can paste images)',
 	'보내기 (Enter)': 'Send (Enter)',
 	'하이브마인드 세션 시작 중…': 'Starting Hivemind session…',
+	// "처음쓰는사람이 쓰자마자 무한로딩이 걸렸어" — 세션 화면에서 잡아낸 사고 안내(§ ControlPane.tsx TROUBLE_TEXT).
+	'이 모델의 사용 한도에 도달해 다른 모델로 자동 전환하는 중입니다 — 잠시 뒤 방금 보낸 말을 다시 보내주세요.':
+		"This model's usage limit was reached, so the Hivemind is switching models — send your message again in a moment.",
+	'claude 명령을 찾을 수 없습니다 — Claude Code CLI를 설치하고 터미널에서 한 번 로그인한 뒤 "재시작"을 누르세요.':
+		'The claude command was not found — install the Claude Code CLI, log in once in a terminal, then press "Restart".',
+	'Claude Code 로그인이 필요합니다 — 아래 터미널에서 로그인을 마친 뒤 "재시작"을 누르세요.':
+		'Claude Code needs you to log in — finish logging in in the terminal below, then press "Restart".',
+	'설정된 모델을 쓸 수 없습니다 — 설정에서 하이브마인드 모델을 다른 것으로 바꾸세요.':
+		'The configured model is unavailable — pick a different Hivemind model in Settings.',
+	'이전 대화를 이어받지 못했습니다 — "초기화"를 눌러 새 대화로 시작하세요.':
+		'Could not resume the previous conversation — press "Reset" to start a fresh one.',
+	'하이브마인드가 응답하지 않습니다 — 아래 터미널에서 실제 화면을 확인하거나 "재시작"을 눌러보세요.':
+		"The Hivemind isn't responding — check the live screen in the terminal below, or press \"Restart\".",
 
 	// ServerPane.tsx
 	'✓ 저장 완료 · {target} 재시작됨': '✓ Saved · {target} restarted',

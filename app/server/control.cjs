@@ -50,7 +50,9 @@ function isLive(live, name) {
 function registerControlMcp(cwd) {
 	try {
 		const key = Term.gitRoot(cwd)
-		const cfg = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
+		// 첫 실행 사용자는 ~/.claude.json이 아직 없다 — 없으면 빈 설정에서 새로 만든다(§term.cjs
+		// readClaudeConfig). 예전엔 여기서 던지고 아래 catch가 삼켜 MCP 등록이 통째로 건너뛰어졌다.
+		const cfg = Term.readClaudeConfig()
 		cfg.projects = cfg.projects || {}
 		const existing = cfg.projects[key] || {}
 		const mcpServers = { ...(existing.mcpServers || {}) }
@@ -123,15 +125,19 @@ const TMUX_SESSION = `opentask-control-${process.env.OPENRM_PORT || 8770}`
 // 않고도 한눈에 알 수 있게, 마지막으로 점검이 실행된 시각을 getState에 얹는다(헤더에 "마지막 점검:
 // HH:MM"으로 표시 — § ControlPane.tsx). opsMode 자체는 설정(Settings.opsMode)이 단일 진실 소스.
 let lastOpsTickAt = null
+// state는 await 사이에 다른 경로가 비울 수 있다(stop/reset, 그리고 자동 모델 폴백 §maybeFallbackModel
+// — 실측: 폴백이 세션을 갈아끼우는 중에 들어온 폴링이 state.session을 읽다 TypeError로 터졌다).
+// 진입 시점의 값을 지역 변수로 붙잡아 쓰고, 전역은 "지금도 그대로인가"를 확인할 때만 본다.
 async function getState() {
 	const opsMode = !!Settings.get('opsMode')
-	if (!state) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux(), opsMode, lastOpsTickAt }
+	const cur = state
+	if (!cur) return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux(), opsMode, lastOpsTickAt }
 	const live = await Term.list().catch(() => [])
-	if (!isLive(live, state.session)) {
-		state = null
+	if (!isLive(live, cur.session)) {
+		if (state === cur) state = null // 그 사이 새 세션이 들어섰으면 남의 것을 지우면 안 된다
 		return { running: false, session: null, cwd: CONTROL_CWD, modelLabel: null, persistent: Term.hasTmux(), opsMode, lastOpsTickAt }
 	}
-	return { running: true, stalled: !!controlStalled, persistent: Term.hasTmux(), opsMode, lastOpsTickAt, ...state }
+	return { running: true, stalled: !!controlStalled, persistent: Term.hasTmux(), opsMode, lastOpsTickAt, ...cur }
 }
 
 // "멈춘상황을 어떻게 인지할 수 있을까? 지금은 인지가 어려워" — orchestrator.cjs checkStalledSubtasks의
@@ -140,21 +146,28 @@ async function getState() {
 const STALLED_THRESHOLD_MS = 3 * 60 * 1000
 let controlStalled = false
 async function checkStalled() {
-	if (!state) {
+	const cur = state
+	if (!cur) {
 		controlStalled = false
 		return
 	}
 	const live = await Term.list().catch(() => [])
-	if (!isLive(live, state.session)) {
+	if (!isLive(live, cur.session)) {
 		controlStalled = false
 		return
 	}
-	const status = await Term.status(state.session).catch(() => null)
+	// 채팅 패널을 안 열어두면 아래 getLivePrompt 폴링이 안 도니, 한도 감지도 여기서 같이 한다 —
+	// 60초 주기(§ index.cjs loop)라 패널을 보고 있을 때보다 느릴 뿐 결과는 같다.
+	if (troubleFrom(Term.capturePane(cur.session) || '', cur.model) === 'limit') {
+		await maybeFallbackModel()
+		return
+	}
+	const status = await Term.status(cur.session).catch(() => null)
 	if (!status || status.working || status.waiting || status.needsAuth) {
 		controlStalled = false
 		return
 	}
-	const last = status.lastWorkingAt || state.startedAt
+	const last = status.lastWorkingAt || cur.startedAt
 	if (Date.now() - last < STALLED_THRESHOLD_MS || controlStalled) return
 	controlStalled = true
 	const mins = Math.round((Date.now() - last) / 60000)
@@ -231,8 +244,10 @@ async function start(extra) {
 }
 
 async function stop() {
-	if (!state) return { ok: true }
-	await Term.kill(state.session).catch(() => {})
+	const cur = state
+	if (!cur) return { ok: true }
+	state = null // 먼저 비운다 — kill을 기다리는 동안 들어온 폴링이 죽는 중인 세션을 붙잡지 않게
+	await Term.kill(cur.session).catch(() => {})
 	// "정지"는 뷰어만 끊는 게 아니라 진짜 정지 — tmux 모드면 데몬 쪽 세션도 같이 죽인다(안 그러면
 	// tmux 세션이 백그라운드에 영영 남아 다음 start()가 죽은 게 아니라 그 낡은 세션에 재부착됨).
 	if (Term.hasTmux()) {
@@ -240,7 +255,6 @@ async function stop() {
 			execFileSync('tmux', ['kill-session', '-t', TMUX_SESSION], { stdio: 'ignore' })
 		} catch (_) {}
 	}
-	state = null
 	return { ok: true }
 }
 
@@ -265,6 +279,28 @@ async function reset(extra) {
 	const modelLabel = Settings.modelLabelFor('control')
 	state = { session: t.name, model, modelLabel, startedAt: Date.now(), cwd: CONTROL_CWD }
 	return { ok: true, ...state }
+}
+
+// "한도 걸리면 자동 폴백" — 하이브마인드 기본 모델은 fable이다(§settings.cjs MODEL_POLICY.control).
+// 주간 한도를 다 쓰면 claude는 세션을 죽이지 않고 "You've reached your Fable limit"만 남긴 채 아무
+// 응답도 못 한다 — 사람 눈엔 그냥 멈춤이고, 실제로 첫 사용자가 이걸 무한로딩으로 겪었다(2026-09-04
+// 빈 cwd 콜드스타트 재현에서 그대로 실측). 이미 있던 킬스위치(Settings.fableLock — 켜면 fable 배정이
+// 전부 opus로 스왑된다, §settings.cjs modelFor)를 사람이 눌러주길 기다리는 대신 여기서 자동으로 켜고
+// 세션을 다시 띄운다. 대화는 --continue로 그대로 이어진다(§ start의 hasResumableConversation).
+//
+// 한 프로세스에서 한 번만 — 폴백한 opus까지 막힌 경우 무한 재시작으로 번지면 안 된다. fableLock은
+// 설정 파일에 남으니 다음 실행부터는 처음부터 opus로 뜨고, 사람이 설정에서 되돌릴 수 있다.
+let modelFallbackDone = false
+async function maybeFallbackModel() {
+	const cur = state
+	if (modelFallbackDone || !cur || !/fable/.test(cur.model || '')) return false
+	modelFallbackDone = true // await 앞에서 세운다 — 1초 폴링이 겹쳐 두 번 재시작하는 걸 막는다.
+	const before = cur.modelLabel
+	Settings.save({ fableLock: true })
+	await stop()
+	const r = await start()
+	Notify.notifyEscalation('🔁 하이브마인드 모델 전환', `${before} 사용 한도에 걸려 ${Settings.modelLabelFor('control')}(으)로 바꿔 다시 띄웠습니다.`)
+	return r.ok
 }
 
 // "중간에 대화 정지 기능도 있어야함" — 세션은 안 죽인다(stop과 다름), 지금 생성 중인 응답만 ESC로 끊는다.
@@ -302,9 +338,10 @@ async function ask(text) {
 const OPS_TICK_MARKER = '[운영 모드 자동 점검]'
 async function runOpsModeTick() {
 	if (!Settings.get('opsMode')) return { ok: true, skipped: 'off' }
-	if (!state) return { ok: true, skipped: 'not-running' }
+	const cur = state
+	if (!cur) return { ok: true, skipped: 'not-running' }
 	const live = await Term.list().catch(() => [])
-	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
+	const match = live.find((x) => x.name === cur.session || Term.baseName(x.name) === Term.baseName(cur.session))
 	if (!match) return { ok: true, skipped: 'no-session' }
 	// 바쁘면(생성 중이거나 다른 질문 대기 중) 끼어들지 않고 다음 15분 tick에 다시 시도한다 — injectSeed가
 	// 지금 타이핑 중인 걸 덮어쓰거나 응답 도중에 새 지시가 섞여 들어가는 걸 막는다.
@@ -404,17 +441,55 @@ function parseLivePrompt(text) {
 // 있다는 뜻이라 그 자체로 "생성 중"의 더 일반적인 증거다. 세션당 마지막 스냅샷만 들고 있으면 충분
 // (다음 폴링 tick의 비교 대상).
 const lastCaptureBySession = new Map()
+// "처음쓰는사람이 쓰자마자 무한로딩이 걸렸어" — 세션(pty)이 살아있기만 하면 UI는 계속 "생성 중"만
+// 그렸다. 정작 무슨 일이 벌어졌는지(모델 한도, claude 미설치, 로그인 안 됨, 이어받기 실패)는 그
+// 화면에 텍스트로 다 찍혀 있는데 채팅 UI가 화면을 안 보여주니 사람은 알 길이 없었다(2026-09-04
+// 첫 사용자 제보). 이미 매초 읽고 있는 그 화면에서 치명적 신호만 골라 함께 돌려준다 — 새 폴링
+// 경로를 만들지 않고 기존 live-prompt에 얹는다. 오탐이 나면 멀쩡한 대화에 빨간 띠가 뜨므로,
+// 추측성 휴리스틱은 넣지 않고 실제로 관측된 문구만 좁게 잡는다.
+const TROUBLE_PATTERNS = [
+	{ key: 'noCli', re: /command not found:?\s*claude|claude:?\s*command not found/i },
+	{ key: 'login', re: /Select login method|Please run \/login|Invalid API key/i },
+	{ key: 'badModel', re: /(?:invalid|unknown|unsupported) model|model [^\n]{0,24}(?:not found|not available|does not exist)/i },
+	{ key: 'noConvo', re: /No conversation found to continue/i },
+]
+// "You've reached your Fable limit." — 어느 모델의 한도인지가 문구 안에 들어있다. 이걸 지금 쓰는
+// 모델과 대조하는 게 중요하다: 폴백으로 모델을 바꿔 다시 띄우면 --continue가 지난 대화를 화면에
+// 그대로 다시 그려서 옛 한도 문구가 계속 남는다(2026-09-04 실측) — 그냥 두면 이미 해결된 사고가
+// 영원히 경고로 뜨고 maybeFallbackModel도 계속 다시 불린다.
+const LIMIT_RE = /reached your ([A-Za-z][\w.-]*) limit/i
+function troubleFrom(text, model) {
+	const hit = String(text || '').match(LIMIT_RE)
+	if (hit && new RegExp(hit[1], 'i').test(String(model || ''))) return 'limit'
+	// status()의 working/waiting 판정과 달리 마지막 24줄로 좁히면 안 된다 — 그 판정들이 보는 신호는
+	// 항상 화면 맨 아래 상태줄에 있지만, 사고 문구는 대화 영역 한가운데에 찍힌다(실측: "You've reached
+	// your Fable limit"이 입력창보다 훨씬 위에 남아 24줄 컷에 안 걸렸다). capturePane은 스크롤백이
+	// 아니라 지금 보이는 화면만 주므로, 화면에서 밀려나면 자연히 사라진다.
+	for (const p of TROUBLE_PATTERNS) if (p.re.test(String(text || ''))) return p.key
+	return null
+}
 async function getLivePrompt() {
-	if (!state) return { ok: true, waiting: false, working: false, prompt: null }
+	const cur = state
+	if (!cur) return { ok: true, waiting: false, working: false, prompt: null, trouble: null }
 	const live = await Term.list().catch(() => [])
-	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
-	if (!match) return { ok: true, waiting: false, working: false, prompt: null }
+	const match = live.find((x) => x.name === cur.session || Term.baseName(x.name) === Term.baseName(cur.session))
+	if (!match) return { ok: true, waiting: false, working: false, prompt: null, trouble: null }
 	const [status, text] = await Promise.all([Term.status(match.name).catch(() => null), Promise.resolve(Term.capturePane(match.name) || '')])
 	const prompt = parseLivePrompt(text)
+	const trouble = troubleFrom(text, cur.model)
+	// 패널을 보고 있는 동안은 이 폴링이 1초마다 도니, 60초짜리 안전망(§ checkStalled)보다 여기서 먼저
+	// 잡힌다. 재시작은 오래 걸리므로 응답을 붙잡지 않고 던져만 둔다 — 이미 뜬 화면은 다음 tick에 바뀐다.
+	if (trouble === 'limit') maybeFallbackModel().catch(() => {})
 	const prevText = lastCaptureBySession.get(match.name)
 	lastCaptureBySession.set(match.name, text)
 	const changedSinceLastPoll = prevText !== undefined && prevText !== text
-	return { ok: true, waiting: !!(prompt || (status && status.waiting)), working: !!((status && status.working) || changedSinceLastPoll), prompt }
+	return {
+		ok: true,
+		waiting: !!(prompt || (status && status.waiting)),
+		working: !!((status && status.working) || changedSinceLastPoll),
+		prompt,
+		trouble,
+	}
 }
 
 // action: { type: 'select'|'toggle', index: number } | { type: 'next' } | { type: 'submit' } | { type: 'cancel' }
@@ -431,11 +506,12 @@ function keyForAction(action) {
 	return null
 }
 async function sendLiveAction(action) {
-	if (!state) return { ok: false, error: '하이브마인드 세션이 없습니다.' }
+	const cur = state
+	if (!cur) return { ok: false, error: '하이브마인드 세션이 없습니다.' }
 	const key = keyForAction(action)
 	if (key == null) return { ok: false, error: '알 수 없는 동작' }
 	const live = await Term.list().catch(() => [])
-	const match = live.find((x) => x.name === state.session || Term.baseName(x.name) === Term.baseName(state.session))
+	const match = live.find((x) => x.name === cur.session || Term.baseName(x.name) === Term.baseName(cur.session))
 	if (!match) return { ok: false, error: '하이브마인드 세션이 살아있지 않습니다.' }
 	Term.write(match.name, key)
 	return { ok: true }

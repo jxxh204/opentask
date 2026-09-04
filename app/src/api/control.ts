@@ -72,8 +72,12 @@ export type LivePrompt =
 // "멈추기도 동작안하고 채팅창도 꺠져" — working은 실제 pty의 "생성 중" 신호(§ server/control.cjs
 // getLivePrompt 주석) — /compact 같은 로컬 명령 뒤엔 응답이 영영 안 와서 대화 기록만으로는 "생성
 // 중"을 오판했다. ControlPane.tsx가 이걸 진짜 기준으로 쓴다.
+// "처음쓰는사람이 쓰자마자 무한로딩이 걸렸어" — 세션은 살아있는데 그 안의 claude가 아무것도 못 하는
+// 상태(모델 한도, CLI 미설치, 로그인 필요, 이어받기 실패)를 pty 화면에서 골라낸 신호(§ server/control.cjs
+// TROUBLE_PATTERNS). ControlPane.tsx가 점 3개 대신 이걸 사람이 읽을 문장으로 바꿔 보여준다.
+export type ControlTrouble = 'limit' | 'noCli' | 'login' | 'badModel' | 'noConvo'
 export function getControlLivePrompt() {
-	return api.get<{ ok: boolean; waiting: boolean; working: boolean; prompt: LivePrompt | null }>('/api/control/live-prompt')
+	return api.get<{ ok: boolean; waiting: boolean; working: boolean; prompt: LivePrompt | null; trouble: ControlTrouble | null }>('/api/control/live-prompt')
 }
 // 지금 화면 기준으로 고른 옵션(혹은 next/submit/cancel)을 그대로 키 하나로 옮겨 pty에 타이핑한다.
 export type LiveAction = { type: 'select' | 'toggle'; index: number } | { type: 'next' | 'submit' | 'cancel' }

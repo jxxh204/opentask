@@ -66,10 +66,20 @@ function ensureOwnGitRoot(dir) {
 // mcpServers에 등록해 curl-in-prompt 대신 구조화된 MCP 툴(dispatch_subtask/log_event/set_subtask_kind)을
 // 쓸 수 있게 한다. 사람 개입 없이 자동 — trustFolder()가 이미 하고 있던 "신뢰 다이얼로그 미리 우회"와
 // 같은 자리, 같은 방식.
+// 첫 실행 사용자에겐 이 파일이 아예 없다 — 이 계정으로 claude CLI를 한 번도 안 띄웠으면 만들어지지
+// 않는다. 예전엔 readFileSync가 던지고 아래 catch가 통째로 삼켜서, 신뢰 등록도 MCP 등록도 조용히
+// 건너뛴 채 claude가 "이 폴더를 신뢰합니까?" 다이얼로그를 띄웠다 — 그러면 주입한 seed가 그 다이얼로그
+// 위에 얹혀 유실되고, 사람 눈엔 "아무 반응 없는 하이브마인드"로만 보인다(§control.cjs
+// registerControlMcp도 같은 경로). 없으면 빈 설정에서 시작해 새로 만든다. "있는데 깨진" 파일은 그대로
+// 던져서 호출부가 포기하게 둔다 — 사용자가 직접 쓴 설정을 우리가 덮어써 날리는 게 더 나쁘다.
+function readClaudeConfig() {
+  if (!fs.existsSync(CLAUDE_CONFIG_PATH)) return {}
+  return JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
+}
 function trustFolder(cwd, mcpFolderId) {
   try {
     const key = gitRoot(cwd)
-    const cfg = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
+    const cfg = readClaudeConfig()
     cfg.projects = cfg.projects || {}
     const existing = cfg.projects[key] || {}
     const alreadyTrusted = !!existing.hasTrustDialogAccepted
@@ -432,7 +442,41 @@ const INJECT_MAX_CHARS = 4000
 function toOneLine(text) {
   return String(text).replace(/[\r\n]+/g, ' ').slice(0, INJECT_MAX_CHARS)
 }
+// 갓 뜬 claude는 스플래시를 그리는 동안 들어온 입력 바이트를 그냥 삼킨다 — 그 타이밍에 쏘면 절반만
+// 들어가고(실측 2026-09-04 첫 실행 재현: 역할 시드가 "…고쳐줘"에서 잘렸다), 재시도분이 그 뒤에 통째로
+// 이어 붙어 같은 지시문이 두 번 담긴 프롬프트가 그대로 제출된다. TUI 하단 상태줄/모드줄이 그려질
+// 때까지(=입력을 받을 준비가 된 시점) 기다렸다 타이핑한다. 준비 신호를 못 봐도 이만큼만 기다리고
+// 예전처럼 진행한다 — best-effort지, 여기서 세션을 포기하면 안 된다.
+const TUI_READY_RE = /⏵⏵|for agents|esc to interrupt|to manage/i
+// pty의 입력 큐는 한 번에 다 못 받는다 — macOS 실측(2026-09-04): 2,900자짜리 역할 시드를 proc.write로
+// 통째로 쓰면 1,024바이트에서 잘려 나가고 그 뒤는 통째로 유실된다. 게다가 잘린 뒤 재시도분이 그
+// 뒤에 이어 붙어, claude가 실제로 받은 첫 지시는 "앞부분만 두 번 담긴 476자"였다(그 세션의 jsonl을
+// 직접 열어 확인 — 화면만 봐서는 시드가 잘 들어간 것처럼 보였다). 즉 하이브마인드는 지금까지 자기
+// 역할 설명의 앞 1KB만 받고 시작하고 있었다(MCP 툴 목록·원칙은 통째로 유실). 사람이 타이핑하듯 작게
+// 나눠 보내면 그 사이 TUI가 큐를 비워 전량이 들어간다.
+const WRITE_CHUNK_CHARS = 80 // 한글(UTF-8 3바이트)이라도 한 조각 240바이트 — 큐 한계의 1/4 안쪽.
+const WRITE_CHUNK_DELAY_MS = 25
+async function writeChunked(entry, text) {
+  const str = String(text)
+  for (let i = 0; i < str.length; i += WRITE_CHUNK_CHARS) {
+    if (!entry || entry.exited) return false
+    entry.proc.write(str.slice(i, i + WRITE_CHUNK_CHARS))
+    await new Promise((res) => setTimeout(res, WRITE_CHUNK_DELAY_MS))
+  }
+  return true
+}
+async function waitForTui(name, timeoutMs = 20000) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const entry = sessions.get(name)
+    if (!entry || entry.exited) return false
+    if (TUI_READY_RE.test(capturePane(name) || '')) return true
+    await new Promise((res) => setTimeout(res, 500))
+  }
+  return false
+}
 async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 } = {}) {
+  await waitForTui(name)
   // 긴 지시문은 붙여넣는 순간 입력창이 여러 줄로 불어나 앞부분이 화면 밖으로 밀릴 수 있다 — 앞 12자
   // 하나만 보면 그때 "안 꽂혔다"로 오판해 60초 내내 재시도만 하다 끝난다. 앞/뒤 어느 쪽이든 보이면
   // 꽂힌 것으로 본다.
@@ -443,9 +487,15 @@ async function injectSeed(name, oneLine, { timeoutMs = 60000, intervalMs = 2000 
   while (Date.now() - start < timeoutMs) {
     const entry = sessions.get(name)
     if (!entry || entry.exited) return false
-    entry.proc.write('\x15') // Ctrl-U — 라인 지우기
-    entry.proc.write(oneLine)
-    await new Promise((res) => setTimeout(res, 400))
+    // 지난 시도가 늦게 렌더된 것뿐일 수도 있다 — 이미 화면에 있으면 다시 타이핑하지 않는다. Ctrl-U는
+    // 여러 줄로 불어난 입력을 다 못 지워서, 확인 없이 또 쓰면 같은 지시문이 두 번 이어 붙은 채로
+    // 제출된다(2026-09-04 첫 실행 재현에서 역할 시드가 통째로 두 번 들어간 프롬프트를 실측 — claude
+    // 콜드스타트가 아래 400ms보다 느려서 첫 확인만 놓친 경우였다).
+    if (!onScreen(capturePane(name) || '')) {
+      entry.proc.write('\x15') // Ctrl-U — 라인 지우기
+      await writeChunked(entry, oneLine) // 통째로 쓰면 1KB에서 잘린다(§ writeChunked)
+      await new Promise((res) => setTimeout(res, 400))
+    }
     const screen = capturePane(name) || ''
     if (onScreen(screen)) {
       // 텍스트가 화면에 꽂힌 것과 그 순간 Enter를 "제출"로 처리할 준비가 된 것은 다르다(claude
@@ -974,7 +1024,9 @@ async function send({ name, message, enter = true }) {
   if (!name || !name.startsWith(PREFIX) || !message) return { ok: false, error: 'name·message 필수' }
   const entry = sessions.get(name)
   if (!entry || entry.exited) return { ok: false, error: '세션 없음' }
-  entry.proc.write(message)
+  // 지휘자→서브태스크 지시문(§ actuator.cjs dispatch)은 수천 자다 — 통째로 쓰면 pty 입력 큐가
+  // 1KB에서 잘라먹고 나머지는 조용히 사라진다(§ writeChunked의 실측). injectSeed와 같은 규칙으로 보낸다.
+  await writeChunked(entry, message)
   if (enter) entry.proc.write('\r')
   return { ok: true, sent: true }
 }
@@ -1005,6 +1057,7 @@ module.exports = {
   PREFIX,
   checkAvailable,
   trustFolder,
+  readClaudeConfig, // ~/.claude.json 읽기(없으면 빈 설정) — control.cjs의 MCP 등록도 같은 규칙을 쓴다.
   gitRoot,
   ensureOwnGitRoot,
   hasTmux,

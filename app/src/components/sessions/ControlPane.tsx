@@ -12,7 +12,7 @@ import {
 	getControlLivePrompt,
 	sendControlLiveAction,
 } from '../../api/control'
-import type { ControlState, ChatTurn, ChatPart, LivePrompt, LiveAction } from '../../api/control'
+import type { ControlState, ChatTurn, ChatPart, LivePrompt, LiveAction, ControlTrouble } from '../../api/control'
 import { updateOperatorSettings } from '../../api/setup'
 import { openTermExternal } from '../../api/term'
 import { useSessionsStore } from '../../store/useSessionsStore'
@@ -45,6 +45,19 @@ const CONTROL_AVATAR_ICON = <img src={overmindIcon} alt="" className={styles.ava
 // "멈춘상황을 어떻게 인지할 수 있을까?" — 3분 무응답이면 정체로 본다(§ control.cjs checkStalled와
 // 같은 임계값, 여긴 폴링 지연 없이 즉시 반영하려고 프론트도 계산).
 export const CONTROL_STALLED_THRESHOLD_MS = 3 * 60 * 1000
+// 보낸 메시지가 대화 기록에도 안 나타나고 pty도 조용한 채로 이만큼 지나면 "생성 중"을 멈춘다(§ 아래
+// pendingStalled). claude 콜드스타트+첫 토큰까지 실측 10초 안팎이라 정상 응답을 잘라먹지 않는 여유값.
+const PENDING_STALL_MS = 25000
+// 채팅 UI는 pty 화면을 안 보여주니, 세션 안에서 실제로 벌어진 일(모델 한도·CLI 미설치·로그인 필요·
+// 이어받기 실패)이 사람에겐 그냥 "멈춤"으로만 보였다. 서버가 그 화면에서 골라낸 신호(§
+// server/control.cjs troubleFrom)를 사람이 바로 조치할 수 있는 문장으로 바꾼다.
+const TROUBLE_TEXT: Record<ControlTrouble, string> = {
+	limit: '이 모델의 사용 한도에 도달해 다른 모델로 자동 전환하는 중입니다 — 잠시 뒤 방금 보낸 말을 다시 보내주세요.',
+	noCli: 'claude 명령을 찾을 수 없습니다 — Claude Code CLI를 설치하고 터미널에서 한 번 로그인한 뒤 "재시작"을 누르세요.',
+	login: 'Claude Code 로그인이 필요합니다 — 아래 터미널에서 로그인을 마친 뒤 "재시작"을 누르세요.',
+	badModel: '설정된 모델을 쓸 수 없습니다 — 설정에서 하이브마인드 모델을 다른 것으로 바꾸세요.',
+	noConvo: '이전 대화를 이어받지 못했습니다 — "초기화"를 눌러 새 대화로 시작하세요.',
+}
 // "이거 확인해봐야하는데 여기저기서 다 다르게 보이면 헷갈려" — 하이브마인드는 사이드바 nav·전역 노드·
 // 태스크별 추가 탭 셋 다 완전히 같은 세션 하나를 가리킨다(§ 위 주석). 어디서 열든 같은 점을 보여줘
 // "이거 다른 대화 아니야?"라는 학습비용을 없앤다 — 세션이 아예 없으면(한 번도 시작 안 함) 아무것도
@@ -323,6 +336,9 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 	// 살아있음)도 계속 true라 정지 버튼이 눌러도 "여전히 생성 중"인 것처럼 보였다. 길이 대신 마지막
 	// 턴의 id(배열이 잘려도 각 턴 자체의 정체성은 안 바뀜)가 바뀌었는지로 판단한다.
 	const lastTurnIdAtSendRef = useRef<string | undefined>(undefined)
+	// 보낸 시각 — 아래 pendingStalled(무한 "생성 중" 차단)의 기준점. 렌더마다 값을 읽기만 하고 리렌더는
+	// 1초 폴링이 일으키므로 state가 아니라 ref로 충분하다.
+	const pendingAtRef = useRef<number | null>(null)
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -354,14 +370,37 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 	// "질문이 안왔는데?" — AskUserQuestion은 사람이 답하기 전까진 대화 기록(jsonl)에 안 나타난다(§
 	// server/control.cjs getLivePrompt 주석, 2026-09-01 실측) — 대화 기록(turns) 기반 감지는 원천적으로
 	// 불가능해서 별도 폴링(§ 아래 liveTick)으로 살아있는 pty 화면을 직접 읽는다.
-	const [live, setLive] = useState<{ waiting: boolean; working: boolean; prompt: LivePrompt | null }>({ waiting: false, working: false, prompt: null })
+	// at은 이 스냅샷을 받은 시각 — 아래 pendingStalled 판정이 "지금"을 알아야 하는데, 이 폴링이 1초마다
+	// 어차피 새 객체를 넣어 리렌더를 일으키므로 별도 타이머를 만들 필요가 없다.
+	const [live, setLive] = useState<{ waiting: boolean; working: boolean; prompt: LivePrompt | null; trouble: ControlTrouble | null; at: number }>({
+		waiting: false,
+		working: false,
+		prompt: null,
+		trouble: null,
+		at: Date.now(),
+	})
 	// "멈추기도 동작안하고 채팅창도 꺠져" — 예전엔 "마지막 턴이 user로 끝나 있으면 생성 중"으로
 	// 추측했는데, /compact 같은 로컬 명령 뒤엔 응답이 영영 안 온다(§ transcript.cjs
 	// isSyntheticUserContent 주석) — 그러면 이 추측이 영원히 true로 굳어 점 3개가 안 꺼지고, 정지
 	// 버튼(ESC 전송)도 이미 유휴인 CLI엔 먹힐 게 없다(2026-09-02 실측). live.working이 실제 pty
 	// 상태(§ getLivePrompt) 기준이라 이제 이걸로만 판단한다 — pendingUser는 보낸 직후 폴링이 한 번
 	// 돌기 전까지의 짧은 낙관적 표시.
-	const generating = !!pendingUser || live.working
+	// "처음쓰는사람이 쓰자마자 무한로딩이 걸렸어" — pendingUser는 "보냈는데 아직 대화 기록에 안 나타난
+	// 상태"의 낙관적 표시고, 아래 폴링이 새 턴을 보면 지운다. 그런데 하이브마인드가 실제로는 안 떠
+	// 있으면(claude 미설치·모델 한도·이어받기 실패로 셸 프롬프트만 남은 경우) jsonl 파일 자체가 안
+	// 생겨서 그 폴링의 "마지막 턴 id가 바뀌었나"가 undefined === undefined로 영원히 거짓이다 — 점
+	// 3개가 무한히 돈다(첫 사용자가 본 그 화면, 2026-09-04 제보). 실제 생성 신호(live.working)도 없이
+	// 이 시간이 지나면 점을 멈추고, 아래 trouble 띠로 지금 화면에서 무슨 일이 벌어졌는지 보여준다.
+	const pendingStalled = pendingAtRef.current !== null && !live.working && live.at - pendingAtRef.current > PENDING_STALL_MS
+	const generating = (!!pendingUser && !pendingStalled) || live.working
+	// 원인이 특정되면 그 문장을, 아니면(무응답만 확인된 상태) 일반 안내를 띄우고 — 둘 다 진짜 pty
+	// 화면을 함께 붙인다. "무한로딩"의 본질은 화면에 이미 답이 찍혀 있는데 사람이 그걸 볼 방법이
+	// 없었다는 것이라, 여기서만큼은 채팅 UI를 포기하고 터미널을 그대로 보여주는 게 맞다.
+	const troubleText = live.trouble
+		? t(TROUBLE_TEXT[live.trouble])
+		: pendingStalled
+			? t('하이브마인드가 응답하지 않습니다 — 아래 터미널에서 실제 화면을 확인하거나 "재시작"을 눌러보세요.')
+			: null
 	// "작은 변화도 채팅으로 알려줘서 진행중인 느낌을 줘야해" — 지금 뭘 하고 있는지 알 수 있으면(마지막
 	// 파트가 아직 진행 중인 tool 호출) 점 3개 대신 그 활동을 문장으로 보여준다.
 	const activeToolLabel = !pendingUser && lastTurn?.role === 'assistant' && lastPart?.kind === 'tool' ? toolLabel(lastPart.name, t) : null
@@ -382,7 +421,7 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 			getControlLivePrompt()
 				.then((r) => {
 					if (cancelled || !r.ok) return
-					setLive({ waiting: r.waiting, working: r.working, prompt: r.prompt })
+					setLive({ waiting: r.waiting, working: r.working, prompt: r.prompt, trouble: r.trouble ?? null, at: Date.now() })
 				})
 				.catch(() => {})
 				.finally(() => {
@@ -405,7 +444,10 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 					if (cancelled || !r.ok) return
 					setTurns(r.turns)
 					const newestId = r.turns[r.turns.length - 1]?.id
-					if (newestId !== undefined && newestId !== lastTurnIdAtSendRef.current) setPendingUser(null)
+					if (newestId !== undefined && newestId !== lastTurnIdAtSendRef.current) {
+						setPendingUser(null)
+						pendingAtRef.current = null
+					}
 				})
 				.catch(() => {})
 				.finally(() => {
@@ -534,6 +576,7 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 		setSending(true)
 		setDraft('')
 		setPendingUser(text)
+		pendingAtRef.current = Date.now()
 		lastTurnIdAtSendRef.current = turns[turns.length - 1]?.id
 		try {
 			const r = await askControl(text)
@@ -700,6 +743,17 @@ export default function ControlPane({ onClose }: { onClose?: () => void } = {}) 
 										<div className={styles.rawAnswerLabel}>
 											{t('하이브마인드가 방향키로 답해야 하는 질문을 띄웠습니다 — 여기서 직접 클릭·키보드로 답하세요.')}
 										</div>
+										<div className={styles.rawAnswerHost}>
+											<XTerm session={state.session} cwd={state.cwd} modelLabel={state.modelLabel} />
+										</div>
+									</div>
+								)}
+								{/* "처음쓰는사람이 쓰자마자 무한로딩이 걸렸어" — 점 3개만 돌던 자리에, 지금 세션 화면에서
+								    실제로 무슨 일이 벌어졌는지와 그 화면 자체를 붙인다(§ 위 troubleText). 질문이 떠 있는
+								    중이면 그 UI가 이미 같은 pty를 보여주고 있으니 중복해서 안 그린다. */}
+								{troubleText && state?.session && !live.waiting && (
+									<div className={styles.trouble}>
+										<div className={styles.troubleLabel}>⚠ {troubleText}</div>
 										<div className={styles.rawAnswerHost}>
 											<XTerm session={state.session} cwd={state.cwd} modelLabel={state.modelLabel} />
 										</div>
