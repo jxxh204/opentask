@@ -9,8 +9,9 @@ enum BackendLauncher {
 		let description: String
 	}
 
-	// electron/main.cjs의 FILE_ENV_DEFAULTS와 동일 — server/index.cjs가 요구하는 env var 목록.
-	// 프로토타입은 별도 데이터 디렉토리를 쓰므로 실제 앱의 데이터를 절대 건드리지 않는다.
+	// electron/main.cjs의 FILE_ENV_DEFAULTS와 동일 — Node server/index.cjs 시절 요구하던 env var 목록.
+	// Rust 백엔드는 이 중 OPENRM_SESSIONS_FILE만 실제로 읽고 나머진 무시하지만(해당 스토어 미이식),
+	// 무시되는 값이라 해가 없어 그대로 둔다 — 프로토타입은 별도 데이터 디렉토리를 쓰므로 실제 앱의 데이터를 절대 건드리지 않는다.
 	private static let fileEnvDefaults: [String: String] = [
 		"OPENRM_DEPLOYS_FILE": ".openrm-deploys.json",
 		"OPENRM_SESSIONS_FILE": ".openrm-sessions.json",
@@ -32,17 +33,20 @@ enum BackendLauncher {
 	private static var pidFileURL: URL { appSupportRoot.appendingPathComponent("backend.json") }
 	private static var logFileURL: URL { appSupportRoot.appendingPathComponent("backend.log") }
 
-	// serverEntry — 이 스위프트 패키지가 `<repo>/native`에 있으므로 server/index.cjs는 `../app/server/index.cjs`.
-	private static var serverEntryPath: String {
+	// backendExecutable — 이 스위프트 패키지가 `<repo>/native`에 있으므로 Rust 바이너리는
+	// `../server-rust/target/release/opentask_server`. Node(server/index.cjs)에서 Rust로 교체(2026-09-05) —
+	// 인터프리터 없이 바로 실행 가능한 네이티브 바이너리라 process.executableURL에 직접 지정한다.
+	private static var backendExecutablePath: String {
 		let repoRoot = URL(fileURLWithPath: #filePath)
 			.deletingLastPathComponent() // BackendLauncher.swift 제거 → OpenTaskShell/
 			.deletingLastPathComponent() // → Sources/
 			.deletingLastPathComponent() // → native/
 			.deletingLastPathComponent() // → <repo root>
 		return repoRoot
-			.appendingPathComponent("app")
-			.appendingPathComponent("server")
-			.appendingPathComponent("index.cjs")
+			.appendingPathComponent("server-rust")
+			.appendingPathComponent("target")
+			.appendingPathComponent("release")
+			.appendingPathComponent("opentask_server")
 			.path
 	}
 
@@ -111,10 +115,10 @@ enum BackendLauncher {
 			return url
 		}
 
-		// 2) 새로 스폰 — Node 프로세스는 detached child_process와 동일하게, 이 Swift 프로세스가 종료돼도
+		// 2) 새로 스폰 — 이 프로세스는 detached child_process와 동일하게, 이 Swift 프로세스가 종료돼도
 		//    (부모가 죽으면 POSIX 규칙상 launchd로 reparent됨) 살아남는다. 별도 detach 처리 불필요.
-		guard FileManager.default.fileExists(atPath: serverEntryPath) else {
-			throw LaunchError(description: "server/index.cjs를 찾을 수 없음: \(serverEntryPath)")
+		guard FileManager.default.fileExists(atPath: backendExecutablePath) else {
+			throw LaunchError(description: "Rust 백엔드 바이너리를 찾을 수 없음: \(backendExecutablePath) — server-rust에서 `cargo build --release` 먼저 실행 필요")
 		}
 		try? FileManager.default.createDirectory(at: appSupportRoot, withIntermediateDirectories: true)
 		if !FileManager.default.fileExists(atPath: logFileURL.path) {
@@ -125,12 +129,12 @@ enum BackendLauncher {
 		logHandle.seekToEndOfFile()
 
 		let process = Process()
-		process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-		process.arguments = ["node", serverEntryPath]
+		process.executableURL = URL(fileURLWithPath: backendExecutablePath)
 		process.environment = setDataEnv(port: port)
-		process.currentDirectoryURL = URL(fileURLWithPath: serverEntryPath)
-			.deletingLastPathComponent()
-			.deletingLastPathComponent()
+		process.currentDirectoryURL = URL(fileURLWithPath: backendExecutablePath)
+			.deletingLastPathComponent() // release/
+			.deletingLastPathComponent() // target/
+			.deletingLastPathComponent() // server-rust/
 		process.standardOutput = logHandle
 		process.standardError = logHandle
 
